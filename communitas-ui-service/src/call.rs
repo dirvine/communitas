@@ -300,7 +300,14 @@ pub struct CallService {
     tx: watch::Sender<CallSnapshot>,
     rx: watch::Receiver<CallSnapshot>,
     state: Arc<RwLock<CallServiceState>>,
-    device_enumerator: Arc<dyn DeviceEnumerator>,
+    /// Device enumerator wrapped in std::sync::RwLock for lazy initialization.
+    /// Starts with MockDeviceEnumerator and can be updated to a real
+    /// platform enumerator when the call UI is accessed.
+    /// Uses std::sync::RwLock (not tokio) because the set operation is sync.
+    device_enumerator: std::sync::RwLock<Arc<dyn DeviceEnumerator>>,
+    /// Tracks whether a real (non-mock) device enumerator has been set.
+    /// Used to avoid re-initializing the enumerator multiple times.
+    has_real_enumerator: std::sync::atomic::AtomicBool,
     screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
     /// Call history with persistence
     history: Arc<RwLock<CallHistory>>,
@@ -482,13 +489,53 @@ impl CallService {
             tx,
             rx,
             state,
-            device_enumerator,
+            device_enumerator: std::sync::RwLock::new(device_enumerator),
+            has_real_enumerator: std::sync::atomic::AtomicBool::new(false),
             screen_source_enumerator,
             history: history_arc,
             history_tx,
             missed_calls_tx,
             storage_path,
         }
+    }
+
+    /// Update the device enumerator for lazy initialization.
+    ///
+    /// Call this when the user navigates to the call UI to switch from
+    /// the mock enumerator to a real platform-specific enumerator.
+    /// This enables faster app startup by deferring device enumeration.
+    ///
+    /// # Arguments
+    ///
+    /// * `enumerator` - The platform-specific device enumerator to use
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // At app startup, CallService uses MockDeviceEnumerator
+    /// // When user opens call UI:
+    /// let real_enumerator = platform::create_device_enumerator();
+    /// call_service.set_device_enumerator(real_enumerator);
+    /// ```
+    pub fn set_device_enumerator(&self, enumerator: Arc<dyn DeviceEnumerator>) {
+        let mut guard = self
+            .device_enumerator
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        *guard = enumerator;
+        self.has_real_enumerator
+            .store(true, std::sync::atomic::Ordering::Release);
+        tracing::info!("Device enumerator updated for lazy initialization");
+    }
+
+    /// Check if the device enumerator has been lazily initialized.
+    ///
+    /// Returns `true` if a real platform enumerator has been set,
+    /// `false` if still using the default mock enumerator.
+    #[must_use]
+    pub fn has_real_device_enumerator(&self) -> bool {
+        self.has_real_enumerator
+            .load(std::sync::atomic::Ordering::Acquire)
     }
 
     /// Build a missed calls snapshot from the current history.
@@ -756,8 +803,15 @@ impl CallService {
             return Err(CallError::NotAuthenticated);
         }
 
-        // Use the configured device enumerator
-        let devices = self.device_enumerator.enumerate_devices().await?;
+        // Use the configured device enumerator (read from RwLock for lazy init support)
+        let enumerator = {
+            let guard = self
+                .device_enumerator
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            guard.clone()
+        };
+        let devices = enumerator.enumerate_devices().await?;
 
         // Update available devices in state
         {
@@ -2500,8 +2554,17 @@ impl CallService {
     pub async fn on_devices_changed(&self) {
         debug!("Device change detected, refreshing device list");
 
+        // Get device enumerator from RwLock (supports lazy initialization)
+        let enumerator = {
+            let guard = self
+                .device_enumerator
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            guard.clone()
+        };
+
         // Try to enumerate devices, tolerating failures
-        let new_devices = match self.device_enumerator.enumerate_devices().await {
+        let new_devices = match enumerator.enumerate_devices().await {
             Ok(devices) => devices,
             Err(e) => {
                 error!(error = %e, "Failed to enumerate devices after device change");

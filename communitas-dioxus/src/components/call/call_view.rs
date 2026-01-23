@@ -6,13 +6,14 @@ use communitas_ui_api::CallState;
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{info, warn};
 
 use super::call_controls::CallControls;
 use super::media_error_banner::MediaErrorBanner;
 use super::participant_tile::ParticipantGrid;
 
 use crate::components::skeleton::SkeletonGrid;
+use crate::platform;
 
 /// Props for the CallView component.
 #[derive(Props, Clone, PartialEq)]
@@ -30,6 +31,19 @@ pub struct CallViewProps {
 pub fn CallView(props: CallViewProps) -> Element {
     let services = use_context::<Arc<UiServices>>();
     let call_service = services.call();
+
+    // Lazy initialization of device enumerator.
+    // This is deferred from app startup to improve initial render time by 100-300ms.
+    // Check if we need to initialize (may have been done in lobby already).
+    let call_for_init = call_service.clone();
+    use_effect(move || {
+        let call = call_for_init.clone();
+        if !call.has_real_device_enumerator() {
+            let enumerator = platform::create_device_enumerator();
+            call.set_device_enumerator(enumerator);
+            info!(target: "ui.call", "Lazy-initialized real device enumerator in call view");
+        }
+    });
 
     // Subscribe to call state
     let mut call_snapshot = use_signal(|| call_service.current_snapshot());

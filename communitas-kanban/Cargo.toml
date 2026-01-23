@@ -24,6 +24,9 @@ anyhow = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 
+# LRU cache for document eviction
+lru = "0.12"
+
 # Logging
 tracing = { workspace = true }
 

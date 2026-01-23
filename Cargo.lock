@@ -1471,6 +1471,7 @@ version = "0.1.60"
 dependencies = [
  "anyhow",
  "chrono",
+ "lru 0.12.5",
  "serde",
  "serde_json",
  "tempfile",

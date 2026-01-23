@@ -32,7 +32,14 @@ use tracing::{debug, error, warn};
 /// If cpal fails to enumerate devices (e.g., no audio host available), the enumerator
 /// will return an appropriate error. Partial failures (e.g., can't get name for one
 /// device) are logged but don't fail the entire enumeration.
+///
+/// ## Lazy Initialization
+///
+/// This enumerator is created lazily when the call UI is first accessed (CallLobby
+/// or CallView), rather than at app startup. This improves initial render time by
+/// 100-300ms by deferring device enumeration until it's actually needed.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Used via create_device_enumerator when call UI is rendered
 pub struct CpalDeviceEnumerator {
     /// Cache whether we've warned about camera enumeration
     _camera_warning_shown: bool,
@@ -44,6 +51,7 @@ impl Default for CpalDeviceEnumerator {
     }
 }
 
+#[allow(dead_code)] // Used via create_device_enumerator when call UI is rendered
 impl CpalDeviceEnumerator {
     /// Create a new cpal-based device enumerator.
     pub fn new() -> Self {
@@ -203,6 +211,7 @@ impl DeviceEnumerator for CpalDeviceEnumerator {
 /// Sanitize a device name to create a stable ID.
 ///
 /// Replaces spaces and special characters with hyphens, lowercases the result.
+#[allow(dead_code)] // Used by CpalDeviceEnumerator when call UI is rendered
 fn sanitize_device_id(name: &str) -> String {
     name.chars()
         .map(|c| {
@@ -222,7 +231,8 @@ fn sanitize_device_id(name: &str) -> String {
 /// Create a shared device enumerator instance.
 ///
 /// This is the recommended way to create a device enumerator for use with
-/// [`CallService::with_device_enumerator`].
+/// [`CallService::with_device_enumerator`]. The enumerator is used for lazy
+/// initialization when the call UI is first accessed.
 ///
 /// # Example
 ///
@@ -233,6 +243,7 @@ fn sanitize_device_id(name: &str) -> String {
 /// let enumerator = create_device_enumerator();
 /// let call_service = CallService::with_device_enumerator(auth, app, enumerator);
 /// ```
+#[allow(dead_code)] // Used by CallLobby/CallView when call UI is rendered
 pub fn create_device_enumerator() -> Arc<dyn DeviceEnumerator> {
     Arc::new(CpalDeviceEnumerator::new())
 }

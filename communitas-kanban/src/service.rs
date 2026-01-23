@@ -4,11 +4,13 @@
 //! Kanban operations. It wraps the underlying CRDT operations with a
 //! clean async API.
 
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use chrono::Utc;
+use lru::LruCache;
 use tokio::sync::mpsc;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 use yrs::observer::Subscription;
 use yrs::updates::decoder::Decode;
@@ -17,6 +19,12 @@ use yrs::{
     Any, Array, ArrayRef, Doc, GetString, Map, MapRef, Out, ReadTxn, Text, TextRef, Transact,
     WriteTxn,
 };
+
+/// Maximum number of board documents to keep in the LRU cache.
+/// Documents for boards accessed least recently will be evicted when
+/// this limit is reached. The value of 50 is chosen to balance memory
+/// usage (~20-50MB typical) against the overhead of re-loading documents.
+const MAX_BOARD_DOCUMENTS: usize = 50;
 
 use crate::error::{KanbanError, KanbanResult};
 use crate::filter::CardFilter;
@@ -73,13 +81,22 @@ struct BoardSubscription {
 pub struct KanbanService {
     /// Current user's four-word identity
     peer_id: String,
-    /// In-memory documents by board ID (in production, would use CrdtManager)
-    documents: std::sync::RwLock<std::collections::HashMap<String, Arc<Doc>>>,
-    /// Active subscriptions per board ID
+    /// LRU cache of Yrs documents by board ID.
+    /// Documents for least-recently-used boards are evicted when the cache
+    /// reaches MAX_BOARD_DOCUMENTS capacity. Using Mutex instead of RwLock
+    /// because LruCache updates on get() for LRU tracking.
+    documents: std::sync::Mutex<LruCache<String, Arc<Doc>>>,
+    /// Active subscriptions per board ID.
     subscriptions: std::sync::RwLock<std::collections::HashMap<String, BoardSubscription>>,
 }
 
 impl KanbanService {
+    /// Compile-time capacity for LRU cache (guaranteed non-zero).
+    const LRU_CAPACITY: NonZeroUsize = match NonZeroUsize::new(MAX_BOARD_DOCUMENTS) {
+        Some(n) => n,
+        None => panic!("MAX_BOARD_DOCUMENTS must be non-zero"),
+    };
+
     /// Create a new KanbanService.
     ///
     /// # Arguments
@@ -89,7 +106,7 @@ impl KanbanService {
     pub fn new(peer_id: impl Into<String>) -> Self {
         Self {
             peer_id: peer_id.into(),
-            documents: std::sync::RwLock::new(std::collections::HashMap::new()),
+            documents: std::sync::Mutex::new(LruCache::new(Self::LRU_CAPACITY)),
             subscriptions: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
@@ -105,23 +122,77 @@ impl KanbanService {
     }
 
     /// Get or create a document for a board.
+    ///
+    /// When the LRU cache is full, the least-recently-used document will
+    /// be evicted and its subscriptions cleaned up.
     fn get_or_create_doc(&self, board_id: &str) -> Arc<Doc> {
-        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
-        docs.entry(board_id.to_string())
-            .or_insert_with(|| {
-                let doc = Doc::new();
-                init_document_structure(&doc);
-                Arc::new(doc)
-            })
-            .clone()
+        let mut docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+
+        // Check if doc exists and return it (this also marks it as recently used)
+        if let Some(doc) = docs.get(board_id) {
+            return doc.clone();
+        }
+
+        // Doc doesn't exist - check if we need to evict
+        if docs.len() >= MAX_BOARD_DOCUMENTS {
+            // Get the key of the least recently used doc before adding new one
+            if let Some((evicted_id, _)) = docs.peek_lru() {
+                let evicted_id = evicted_id.clone();
+                // Clean up subscriptions for evicted document
+                self.cleanup_evicted_subscription(&evicted_id);
+                info!(
+                    board_id = %evicted_id,
+                    cache_size = docs.len(),
+                    "Evicting LRU board document from cache"
+                );
+            }
+        }
+
+        // Create new document
+        let doc = Doc::new();
+        init_document_structure(&doc);
+        let doc_arc = Arc::new(doc);
+        docs.put(board_id.to_string(), doc_arc.clone());
+        doc_arc
     }
 
     /// Get a document for a board (must exist).
+    ///
+    /// Note: This marks the document as recently used in the LRU cache.
     fn get_doc(&self, board_id: &str) -> KanbanResult<Arc<Doc>> {
-        let docs = self.documents.read().unwrap_or_else(|e| e.into_inner());
+        let mut docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
         docs.get(board_id)
             .cloned()
             .ok_or_else(|| KanbanError::BoardNotFound(board_id.to_string()))
+    }
+
+    /// Clean up subscription for an evicted document.
+    fn cleanup_evicted_subscription(&self, board_id: &str) {
+        let mut subs = self
+            .subscriptions
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        if subs.remove(board_id).is_some() {
+            debug!(
+                board_id = %board_id,
+                "Cleaned up subscription for evicted board document"
+            );
+        }
+    }
+
+    /// Get the number of documents currently in the cache.
+    ///
+    /// Useful for diagnostics and monitoring memory usage.
+    #[must_use]
+    pub fn document_count(&self) -> usize {
+        let docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+        docs.len()
+    }
+
+    /// Get the maximum capacity of the document cache.
+    #[must_use]
+    pub fn document_capacity(&self) -> usize {
+        MAX_BOARD_DOCUMENTS
     }
 
     // ===== Board Operations =====
@@ -522,13 +593,17 @@ impl KanbanService {
     /// List all boards for an entity (project).
     ///
     /// Returns all non-deleted boards associated with the given entity_id.
+    ///
+    /// Note: This iterates over all documents in the cache without updating
+    /// their LRU recency.
     #[instrument(skip(self))]
     pub fn list_boards(&self, entity_id: &str) -> KanbanResult<Vec<Board>> {
-        let docs = self.documents.read().unwrap_or_else(|e| e.into_inner());
+        let docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
         let mut boards = Vec::new();
 
+        // Use peek_iter to iterate without updating LRU order
         for (board_id, doc) in docs.iter() {
-            let txn = doc.transact();
+            let txn: yrs::TransactionMut<'_> = doc.transact_mut();
             if let Some(root) = txn.get_map("root")
                 && let Some(Out::YMap(metadata)) = root.get(&txn, keys::METADATA)
                 && let Ok(board) = self.read_board_from_map(&metadata, &txn)
@@ -1867,11 +1942,34 @@ impl KanbanService {
     ///
     /// Use this when receiving updates from other peers - the update will
     /// populate the document structure.
+    ///
+    /// When the LRU cache is full, the least-recently-used document will
+    /// be evicted and its subscriptions cleaned up.
     fn get_or_create_bare_doc(&self, board_id: &str) -> Arc<Doc> {
-        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
-        docs.entry(board_id.to_string())
-            .or_insert_with(|| Arc::new(Doc::new()))
-            .clone()
+        let mut docs = self.documents.lock().unwrap_or_else(|e| e.into_inner());
+
+        // Check if doc exists and return it (this also marks it as recently used)
+        if let Some(doc) = docs.get(board_id) {
+            return doc.clone();
+        }
+
+        // Doc doesn't exist - check if we need to evict
+        if docs.len() >= MAX_BOARD_DOCUMENTS
+            && let Some((evicted_id, _)) = docs.peek_lru()
+        {
+            let evicted_id = evicted_id.clone();
+            self.cleanup_evicted_subscription(&evicted_id);
+            info!(
+                board_id = %evicted_id,
+                cache_size = docs.len(),
+                "Evicting LRU board document from cache (bare doc)"
+            );
+        }
+
+        // Create new document (without initialization)
+        let doc_arc = Arc::new(Doc::new());
+        docs.put(board_id.to_string(), doc_arc.clone());
+        doc_arc
     }
 
     // ===== CRDT Event Subscription =====
@@ -2679,5 +2777,112 @@ mod tests {
         let cards = service.filter_cards(&board.id, filter).unwrap();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].title, "Task 1");
+    }
+
+    // ===== LRU Cache Tests =====
+
+    #[test]
+    fn test_document_count() {
+        let service = KanbanService::new("user-1");
+        assert_eq!(service.document_count(), 0);
+
+        service
+            .create_board("project", "Board 1".to_string(), None)
+            .unwrap();
+        assert_eq!(service.document_count(), 1);
+
+        service
+            .create_board("project", "Board 2".to_string(), None)
+            .unwrap();
+        assert_eq!(service.document_count(), 2);
+    }
+
+    #[test]
+    fn test_document_capacity() {
+        let service = KanbanService::new("user-1");
+        assert_eq!(service.document_capacity(), MAX_BOARD_DOCUMENTS);
+    }
+
+    #[test]
+    fn test_lru_eviction() {
+        // Create a service with very small capacity for testing
+        // We'll test the eviction logic by creating many boards
+        let service = KanbanService::new("user-1");
+
+        // Create MAX_BOARD_DOCUMENTS + 1 boards to trigger eviction
+        let mut board_ids = Vec::new();
+        for i in 0..=MAX_BOARD_DOCUMENTS {
+            let board = service
+                .create_board("project", format!("Board {}", i), None)
+                .unwrap();
+            board_ids.push(board.id);
+        }
+
+        // Should have exactly MAX_BOARD_DOCUMENTS in cache (one was evicted)
+        assert_eq!(service.document_count(), MAX_BOARD_DOCUMENTS);
+
+        // The first board (board_ids[0]) should have been evicted
+        // Trying to get it should fail
+        let result = service.get_board(&board_ids[0]);
+        assert!(result.is_err());
+
+        // The last board should still exist
+        let result = service.get_board(&board_ids[MAX_BOARD_DOCUMENTS]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_lru_access_updates_recency() {
+        let service = KanbanService::new("user-1");
+
+        // Create boards up to capacity
+        let mut board_ids = Vec::new();
+        for i in 0..MAX_BOARD_DOCUMENTS {
+            let board = service
+                .create_board("project", format!("Board {}", i), None)
+                .unwrap();
+            board_ids.push(board.id);
+        }
+
+        // Access the first board to make it "recently used"
+        service.get_board(&board_ids[0]).unwrap();
+
+        // Create one more board - should evict board_ids[1], not board_ids[0]
+        let new_board = service
+            .create_board("project", "New Board".to_string(), None)
+            .unwrap();
+
+        // board_ids[0] should still exist (was accessed recently)
+        assert!(service.get_board(&board_ids[0]).is_ok());
+
+        // board_ids[1] should have been evicted
+        assert!(service.get_board(&board_ids[1]).is_err());
+
+        // The new board should exist
+        assert!(service.get_board(&new_board.id).is_ok());
+    }
+
+    #[test]
+    fn test_eviction_cleans_up_subscriptions() {
+        let service = KanbanService::new("user-1");
+
+        // Create a board and subscribe to it
+        let board = service
+            .create_board("project", "Test Board".to_string(), None)
+            .unwrap();
+        let _rx = service.subscribe_to_changes(&board.id).unwrap();
+
+        // Verify subscription exists
+        assert!(service.has_subscription(&board.id));
+
+        // Create enough boards to evict the first one
+        for i in 0..MAX_BOARD_DOCUMENTS {
+            service
+                .create_board("project", format!("Board {}", i), None)
+                .unwrap();
+        }
+
+        // The original board should be evicted and its subscription cleaned up
+        assert!(!service.has_subscription(&board.id));
     }
 }

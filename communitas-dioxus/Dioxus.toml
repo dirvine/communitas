@@ -59,6 +59,33 @@ entitlements = "entitlements.plist"
 # Exception domains for App Transport Security (if needed)
 # exception_domain = "localhost"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Auto-Updater Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+[bundle.updater]
+# Enable the auto-updater
+active = true
+
+# Update manifest endpoints (GitHub Releases)
+# The app will check these URLs for update.json manifest
+endpoints = [
+    "https://github.com/maidsafe/communitas/releases/latest/download/update.json"
+]
+
+# Public key for verifying update signatures
+# Generated with: tauri signer generate -w ~/.tauri/communitas.key
+# Set via TAURI_SIGNING_PUBLIC_KEY env var during build, or replace this placeholder
+pubkey = ""
+
+# Update dialog configuration
+# dialog = true  # Show native dialog for updates (default: true)
+
+# Windows-specific updater settings
+[bundle.updater.windows]
+# Install mode: basicUi, quiet, or passive
+install_mode = "passive"
+
 [web.app]
 
 # HTML title tag content

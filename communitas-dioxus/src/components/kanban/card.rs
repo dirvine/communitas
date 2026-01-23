@@ -7,6 +7,8 @@ use dioxus::prelude::*;
 use std::sync::Arc;
 use tracing::info;
 
+use super::{DragState, DraggingCard};
+
 /// Kanban card component that can be dragged between columns.
 #[derive(Props, Clone, PartialEq)]
 pub struct KanbanCardProps {
@@ -23,9 +25,10 @@ pub struct KanbanCardProps {
 #[component]
 pub fn KanbanCard(props: KanbanCardProps) -> Element {
     let services = use_context::<Arc<UiServices>>();
+    let mut drag_state = use_context::<Signal<DragState>>();
     let card = &props.card;
 
-    // Drag state
+    // Drag state (local)
     let mut is_dragging = use_signal(|| false);
 
     // Modal state
@@ -35,12 +38,15 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
     let mut is_moving = use_signal(|| false);
 
     let card_id = card.id.clone();
+    let card_title = card.title.clone();
     let card_id_for_drag_start = card_id.clone();
+    let card_title_for_drag = card_title.clone();
     let card_id_for_drag_end = card_id.clone();
     let card_id_for_keyboard = card_id.clone();
     let board_id = props.board_id.clone();
     let board_id_for_keyboard = board_id.clone();
     let column_id = props.column_id.clone();
+    let column_id_for_drag = column_id.clone();
     let card_position = card.position;
     let on_move_announce = props.on_move_announce;
 
@@ -93,11 +99,20 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
             // Drag handlers
             ondragstart: move |_evt| {
                 is_dragging.set(true);
+                // Set drag data in shared context for column drop handlers
+                drag_state.set(DragState {
+                    dragging_card: Some(DraggingCard {
+                        card_id: card_id_for_drag_start.clone(),
+                        source_column_id: column_id_for_drag.clone(),
+                        card_title: card_title_for_drag.clone(),
+                    }),
+                });
                 info!(target = "ui.kanban", event = "card_drag_start", card_id = %card_id_for_drag_start);
-                // TODO: Set drag data with card ID
             },
             ondragend: move |_| {
                 is_dragging.set(false);
+                // Clear drag data
+                drag_state.set(DragState::default());
                 info!(target = "ui.kanban", event = "card_drag_end", card_id = %card_id_for_drag_end);
             },
             // Click to open detail

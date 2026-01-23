@@ -6,6 +6,7 @@ use dioxus::prelude::*;
 use std::sync::Arc;
 use tracing::info;
 
+use super::DragState;
 use super::card::KanbanCard;
 use super::filters::BoardFilters;
 
@@ -26,6 +27,7 @@ pub struct KanbanColumnProps {
 #[component]
 pub fn KanbanColumn(props: KanbanColumnProps) -> Element {
     let services = use_context::<Arc<UiServices>>();
+    let mut drag_state = use_context::<Signal<DragState>>();
     let column = &props.column;
 
     // Column menu state
@@ -43,8 +45,10 @@ pub fn KanbanColumn(props: KanbanColumnProps) -> Element {
     let column_id_for_drop = column_id.clone();
     let column_id_for_add = column_id.clone();
     let board_id = props.board_id.clone();
+    let board_id_for_drop = board_id.clone();
     let board_id_for_add = board_id.clone();
     let card_count = column.cards.len();
+    let services_for_drop = services.clone();
 
     // WIP limit indicator
     let wip_exceeded = column
@@ -73,8 +77,44 @@ pub fn KanbanColumn(props: KanbanColumnProps) -> Element {
             },
             ondrop: move |_evt| {
                 is_drag_over.set(false);
-                // TODO: Handle card drop - get card ID from drag data
-                info!(target = "ui.kanban", event = "card_dropped", column_id = %column_id_for_drop);
+
+                // Read drag data from shared context
+                if let Some(dragging) = drag_state().dragging_card.clone() {
+                    // Only move if dropping to a different column
+                    if dragging.source_column_id != column_id_for_drop {
+                        let services = services_for_drop.clone();
+                        let board_id = board_id_for_drop.clone();
+                        let card_id = dragging.card_id.clone();
+                        let target_column = column_id_for_drop.clone();
+
+                        info!(
+                            target = "ui.kanban",
+                            event = "card_dropped",
+                            card_id = %card_id,
+                            from_column = %dragging.source_column_id,
+                            to_column = %target_column
+                        );
+
+                        // Move card to end of target column (position 0 means prepend)
+                        spawn(async move {
+                            if let Err(e) = services.kanban().move_card(
+                                &board_id,
+                                &card_id,
+                                &target_column,
+                                0, // Position at top of column
+                            ).await {
+                                tracing::error!(
+                                    target = "ui.kanban",
+                                    error = %e,
+                                    "Failed to move card"
+                                );
+                            }
+                        });
+                    }
+
+                    // Clear drag state
+                    drag_state.set(DragState::default());
+                }
             },
             // Column header
             div {

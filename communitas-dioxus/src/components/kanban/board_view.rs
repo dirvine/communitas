@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+use super::DragState;
 use super::filters::BoardFilters;
 
 /// Default fallback color for invalid/missing colors.
@@ -58,6 +59,10 @@ pub fn BoardView(props: BoardViewProps) -> Element {
 
     // Conflict banner state
     let mut show_conflict_banner = use_signal(|| false);
+
+    // Drag state for card drag-and-drop (shared via context)
+    let drag_state = use_signal(DragState::default);
+    use_context_provider(|| drag_state);
 
     // Swimlane mode state (synced with service)
     let mut swimlane_mode = use_signal(|| SwimlaneMode::None);

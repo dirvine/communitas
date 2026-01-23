@@ -123,8 +123,12 @@ pub fn BoardView(props: BoardViewProps) -> Element {
     // Aria-live announcement for screen readers
     let mut announcement = use_signal(String::new);
 
+    // Analytics dashboard state
+    let mut show_analytics = use_signal(|| false);
+
     let board_id_for_add = props.board_id.clone();
     let board_id_for_swimlane = props.board_id.clone();
+    let board_id_for_analytics = props.board_id.clone();
 
     rsx! {
         div {
@@ -170,6 +174,15 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                     description: board.description.clone(),
                     on_filter_toggle: move |_| show_filters.set(!show_filters()),
                     filter_active: show_filters(),
+                    on_analytics: move |_| show_analytics.set(true),
+                }
+                // Analytics dashboard (modal)
+                if show_analytics() {
+                    super::analytics::AnalyticsDashboard {
+                        board_id: board_id_for_analytics.clone(),
+                        board_name: board.name.clone(),
+                        on_close: move |_| show_analytics.set(false),
+                    }
                 }
                 // Filter panel (collapsible)
                 if show_filters() {
@@ -602,6 +615,7 @@ struct BoardHeaderProps {
     description: Option<String>,
     on_filter_toggle: EventHandler<()>,
     filter_active: bool,
+    on_analytics: EventHandler<()>,
 }
 
 #[component]
@@ -634,6 +648,11 @@ fn BoardHeader(props: BoardHeaderProps) -> Element {
                     ),
                     onclick: move |_| props.on_filter_toggle.call(()),
                     "Filters"
+                }
+                button {
+                    class: "rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition",
+                    onclick: move |_| props.on_analytics.call(()),
+                    "Analytics"
                 }
                 button {
                     class: "rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition",
@@ -818,6 +837,8 @@ mod tests {
             due_date: None,
             checklist_progress: None,
             position: 0,
+            linked_thread_id: None,
+            linked_thread_name: None,
         }
     }
 

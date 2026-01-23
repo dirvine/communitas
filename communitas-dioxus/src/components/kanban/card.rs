@@ -299,7 +299,7 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                             }
                         }
                     }
-                    // Right side: priority, due date and checklist progress
+                    // Right side: priority, due date, thread indicator, and checklist progress
                     div {
                         class: "flex items-center gap-2",
                         // Priority badge
@@ -311,6 +311,12 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                             span {
                                 class: format!("text-xs px-1.5 py-0.5 rounded {classes}"),
                                 "{label}"
+                            }
+                        }
+                        // Thread indicator
+                        if card.linked_thread_id.is_some() {
+                            ThreadIndicator {
+                                thread_name: card.linked_thread_name.clone(),
                             }
                         }
                         // Checklist progress
@@ -445,6 +451,30 @@ fn PriorityBadge(props: PriorityBadgeProps) -> Element {
             class: format!("text-xs px-1.5 py-0.5 rounded font-medium {bg_color} {text_color}"),
             title: format!("Priority: {}", label),
             "{label}"
+        }
+    }
+}
+
+/// Thread indicator badge showing card has linked discussion.
+#[derive(Props, Clone, PartialEq)]
+struct ThreadIndicatorProps {
+    /// Display name of the linked thread (optional).
+    thread_name: Option<String>,
+}
+
+#[component]
+fn ThreadIndicator(props: ThreadIndicatorProps) -> Element {
+    let title = props
+        .thread_name
+        .as_ref()
+        .map(|n| format!("Linked to: {}", n))
+        .unwrap_or_else(|| "Has linked discussion".to_string());
+
+    rsx! {
+        span {
+            class: "text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 flex items-center gap-1",
+            title: "{title}",
+            "💬"
         }
     }
 }

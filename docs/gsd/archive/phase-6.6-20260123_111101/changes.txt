@@ -1,0 +1,19 @@
+ communitas-bench/benches/core_flows.rs             |   4 +-
+ communitas-core/src/app.rs                         |   1 +
+ .../src/components/kanban/board_view.rs            | 123 ++++-
+ communitas-dioxus/src/components/kanban/card.rs    | 224 ++++++++-
+ .../src/components/kanban/card_detail_modal.rs     | 189 ++++++++
+ communitas-dioxus/src/components/kanban/filters.rs |   8 +
+ communitas-dioxus/src/components/kanban/mod.rs     |   4 +
+ communitas-kanban/src/filter.rs                    |   1 +
+ communitas-kanban/src/lib.rs                       |   5 +
+ communitas-kanban/src/service.rs                   | 432 +++++++++++++++++
+ communitas-kanban/src/types.rs                     |  19 +
+ communitas-ui-api/src/kanban.rs                    |  10 +
+ communitas-ui-service/src/kanban.rs                | 239 ++++++++++
+ communitas-ui-service/tests/kanban_integration.rs  | 512 ++++++++++++++++++++-
+ docs/gsd/STATE.json                                |  14 +-
+ .../gsd/reviews/phase-6.6-task7-review-20260123.md |  65 +++
+ .../gsd/reviews/phase-6.6-task8-review-20260123.md |  90 ++++
+ .../gsd/reviews/phase-6.6-task9-review-20260123.md | 126 +++++
+ 18 files changed, 2038 insertions(+), 28 deletions(-)

@@ -773,6 +773,7 @@ impl KanbanService {
             completed_at: None,
             assignee_ids: Vec::new(),
             tag_ids: Vec::new(),
+            linked_thread_id: None,
             deleted: false,
             deleted_at: None,
             deleted_by: None,
@@ -857,6 +858,7 @@ impl KanbanService {
             completed_at: get_optional_i64(card, txn, "completed_at"),
             assignee_ids,
             tag_ids,
+            linked_thread_id: get_optional_string(card, txn, "linked_thread_id"),
             deleted: get_bool(card, txn, "deleted").unwrap_or(false),
             deleted_at: get_optional_i64(card, txn, "deleted_at"),
             deleted_by: get_optional_string(card, txn, "deleted_by"),
@@ -915,6 +917,16 @@ impl KanbanService {
                     }
                     None => {
                         let _ = card.remove(&mut txn, "due_date");
+                    }
+                }
+            }
+            if let Some(linked_thread_id) = updates.linked_thread_id {
+                match linked_thread_id {
+                    Some(thread_id) => {
+                        card.insert(&mut txn, "linked_thread_id", Any::String(thread_id.into()));
+                    }
+                    None => {
+                        let _ = card.remove(&mut txn, "linked_thread_id");
                     }
                 }
             }
@@ -1961,6 +1973,426 @@ impl KanbanService {
     pub fn has_subscription(&self, board_id: &str) -> bool {
         let subs = self.subscriptions.read().unwrap_or_else(|e| e.into_inner());
         subs.contains_key(board_id)
+    }
+
+    // ===== Analytics Operations =====
+
+    /// Get analytics summary for a board.
+    ///
+    /// Calculates current state metrics including card counts per column,
+    /// completion rates, WIP, and cycle time averages.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to analyze
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the board doesn't exist.
+    #[instrument(skip(self))]
+    pub fn get_board_analytics(
+        &self,
+        board_id: &str,
+    ) -> KanbanResult<crate::analytics::BoardAnalytics> {
+        use std::collections::HashMap;
+
+        let doc = self.get_doc(board_id)?;
+        let txn = doc.transact();
+        let root = txn
+            .get_map("root")
+            .ok_or_else(|| KanbanError::InvalidData("Missing root map".to_string()))?;
+
+        let now = Self::now();
+        let week_ago = now - 7 * 86400;
+        let month_ago = now - 30 * 86400;
+        let week_ahead = now + 7 * 86400;
+
+        let cards_map = match root.get(&txn, keys::CARDS) {
+            Some(Out::YMap(m)) => m,
+            _ => return Err(KanbanError::InvalidData("Missing cards".to_string())),
+        };
+
+        let columns_map = match root.get(&txn, keys::COLUMNS) {
+            Some(Out::YMap(m)) => m,
+            _ => return Err(KanbanError::InvalidData("Missing columns".to_string())),
+        };
+
+        let mut column_card_counts: HashMap<String, usize> = HashMap::new();
+        let mut total_active_cards = 0usize;
+        let mut completed_this_week = 0usize;
+        let mut completed_this_month = 0usize;
+        let mut wip_count = 0usize;
+        let mut overdue_count = 0usize;
+        let mut due_soon_count = 0usize;
+        let mut cycle_times: Vec<i64> = Vec::new();
+
+        // Initialize column counts
+        for (col_id, _) in columns_map.iter(&txn) {
+            column_card_counts.insert(col_id.to_string(), 0);
+        }
+
+        // Analyze each card
+        for (_, value) in cards_map.iter(&txn) {
+            if let Out::YMap(card_map) = value
+                && let Ok(card) = self.read_card_from_map(&card_map, &txn)
+                && !card.deleted
+            {
+                total_active_cards += 1;
+
+                // Count per column
+                *column_card_counts
+                    .entry(card.column_id.clone())
+                    .or_insert(0) += 1;
+
+                // Count completed cards
+                if let Some(completed_at) = card.completed_at {
+                    if completed_at >= week_ago {
+                        completed_this_week += 1;
+                    }
+                    if completed_at >= month_ago {
+                        completed_this_month += 1;
+                    }
+
+                    // Calculate cycle time
+                    let cycle_time = completed_at - card.created_at;
+                    if cycle_time > 0 {
+                        cycle_times.push(cycle_time);
+                    }
+                }
+
+                // Count WIP (active cards)
+                if card.state.is_active() {
+                    wip_count += 1;
+                }
+
+                // Count overdue and due soon
+                if let Some(due_date) = card.due_date
+                    && card.state.is_active()
+                {
+                    if due_date < now {
+                        overdue_count += 1;
+                    } else if due_date <= week_ahead {
+                        due_soon_count += 1;
+                    }
+                }
+            }
+        }
+
+        // Calculate average cycle time
+        let avg_cycle_time_seconds = if cycle_times.is_empty() {
+            None
+        } else {
+            Some(cycle_times.iter().sum::<i64>() / cycle_times.len() as i64)
+        };
+
+        debug!(
+            board_id = %board_id,
+            total_active_cards = %total_active_cards,
+            completed_this_week = %completed_this_week,
+            "Calculated board analytics"
+        );
+
+        Ok(crate::analytics::BoardAnalytics {
+            board_id: board_id.to_string(),
+            calculated_at: now,
+            column_card_counts,
+            total_active_cards,
+            completed_this_week,
+            completed_this_month,
+            avg_cycle_time_seconds,
+            avg_time_per_column: HashMap::new(), // Would require transition tracking
+            wip_count,
+            overdue_count,
+            due_soon_count,
+        })
+    }
+
+    /// Calculate velocity metrics for a board.
+    ///
+    /// Velocity is measured as the number of cards completed per time period.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to analyze
+    /// * `time_range` - Time range to calculate velocity over
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the board doesn't exist.
+    #[instrument(skip(self))]
+    pub fn calculate_velocity(
+        &self,
+        board_id: &str,
+        time_range: crate::analytics::TimeRange,
+    ) -> KanbanResult<crate::analytics::VelocityMetric> {
+        use crate::analytics::{VelocityDataPoint, VelocityMetric};
+
+        let doc = self.get_doc(board_id)?;
+        let txn = doc.transact();
+        let root = txn
+            .get_map("root")
+            .ok_or_else(|| KanbanError::InvalidData("Missing root map".to_string()))?;
+
+        let now = Self::now();
+        let (start_time, end_time) = time_range.to_timestamps(now);
+        let period_duration = time_range.period_duration_seconds();
+
+        let cards_map = match root.get(&txn, keys::CARDS) {
+            Some(Out::YMap(m)) => m,
+            _ => return Err(KanbanError::InvalidData("Missing cards".to_string())),
+        };
+
+        // Collect completed cards with their completion times
+        let mut completions: Vec<i64> = Vec::new();
+        for (_, value) in cards_map.iter(&txn) {
+            if let Out::YMap(card_map) = value
+                && let Ok(card) = self.read_card_from_map(&card_map, &txn)
+                && !card.deleted
+                && let Some(completed_at) = card.completed_at
+                && completed_at >= start_time
+                && completed_at <= end_time
+            {
+                completions.push(completed_at);
+            }
+        }
+
+        // Sort completions by time
+        completions.sort_unstable();
+
+        // Build data points for each period
+        let mut data_points: Vec<VelocityDataPoint> = Vec::new();
+        let mut period_start = start_time;
+
+        while period_start < end_time {
+            let period_end = period_start + period_duration;
+            let cards_completed = completions
+                .iter()
+                .filter(|&&t| t >= period_start && t < period_end)
+                .count();
+
+            data_points.push(VelocityDataPoint {
+                period_start,
+                period_end,
+                cards_completed,
+            });
+
+            period_start = period_end;
+        }
+
+        debug!(
+            board_id = %board_id,
+            periods = %data_points.len(),
+            total_completed = %completions.len(),
+            "Calculated velocity"
+        );
+
+        Ok(VelocityMetric::from_data_points(
+            board_id.to_string(),
+            time_range,
+            data_points,
+        ))
+    }
+
+    /// Calculate burndown chart data for a board.
+    ///
+    /// Shows remaining work over time compared to an ideal burndown line.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to analyze
+    /// * `period_start` - Start timestamp for the burndown period
+    /// * `period_end` - End timestamp for the burndown period
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the board doesn't exist.
+    #[instrument(skip(self))]
+    pub fn calculate_burndown(
+        &self,
+        board_id: &str,
+        period_start: i64,
+        period_end: i64,
+    ) -> KanbanResult<crate::analytics::BurndownChart> {
+        use crate::analytics::{BurndownChart, BurndownDataPoint};
+
+        let doc = self.get_doc(board_id)?;
+        let txn = doc.transact();
+        let root = txn
+            .get_map("root")
+            .ok_or_else(|| KanbanError::InvalidData("Missing root map".to_string()))?;
+
+        let now = Self::now();
+
+        let cards_map = match root.get(&txn, keys::CARDS) {
+            Some(Out::YMap(m)) => m,
+            _ => return Err(KanbanError::InvalidData("Missing cards".to_string())),
+        };
+
+        // Collect card data
+        let mut initial_cards: Vec<(i64, Option<i64>)> = Vec::new(); // (created_at, completed_at)
+        let mut added_after_start = 0usize;
+
+        for (_, value) in cards_map.iter(&txn) {
+            if let Out::YMap(card_map) = value
+                && let Ok(card) = self.read_card_from_map(&card_map, &txn)
+                && !card.deleted
+            {
+                // Card existed at start if created before period_start
+                if card.created_at <= period_start {
+                    initial_cards.push((card.created_at, card.completed_at));
+                } else if card.created_at <= period_end {
+                    // Card added during period
+                    initial_cards.push((card.created_at, card.completed_at));
+                    added_after_start += 1;
+                }
+            }
+        }
+
+        let initial_card_count = initial_cards.len().saturating_sub(added_after_start);
+        let current_scope = initial_cards.len();
+
+        // Build ideal line (linear from initial count to 0)
+        let period_duration = period_end - period_start;
+        let day = 86400i64;
+        let mut ideal_line: Vec<(i64, f64)> = Vec::new();
+        let num_days = (period_duration / day).max(1) as usize;
+
+        for i in 0..=num_days {
+            let t = period_start + (i as i64 * day);
+            let remaining = if period_duration > 0 {
+                initial_card_count as f64
+                    * (1.0 - (t - period_start) as f64 / period_duration as f64)
+            } else {
+                0.0
+            };
+            ideal_line.push((t, remaining.max(0.0)));
+        }
+
+        // Build actual line (daily snapshots)
+        let mut actual_line: Vec<BurndownDataPoint> = Vec::new();
+        let effective_end = now.min(period_end);
+
+        for i in 0..=num_days {
+            let snapshot_time = period_start + (i as i64 * day);
+            if snapshot_time > effective_end {
+                break;
+            }
+
+            // Count cards at this snapshot
+            let mut remaining = 0usize;
+            let mut completed = 0usize;
+            let mut added = 0usize;
+
+            for &(created_at, completed_at) in &initial_cards {
+                // Card exists if created before snapshot
+                if created_at <= snapshot_time {
+                    if created_at > period_start {
+                        added += 1;
+                    }
+
+                    // Check if completed before snapshot
+                    if let Some(ct) = completed_at {
+                        if ct <= snapshot_time {
+                            completed += 1;
+                        } else {
+                            remaining += 1;
+                        }
+                    } else {
+                        remaining += 1;
+                    }
+                }
+            }
+
+            actual_line.push(BurndownDataPoint {
+                timestamp: snapshot_time,
+                remaining,
+                completed,
+                added,
+            });
+        }
+
+        let scope_change = added_after_start as i32;
+
+        debug!(
+            board_id = %board_id,
+            initial_card_count = %initial_card_count,
+            scope_change = %scope_change,
+            "Calculated burndown"
+        );
+
+        Ok(BurndownChart {
+            board_id: board_id.to_string(),
+            period_start,
+            period_end,
+            initial_card_count,
+            ideal_line,
+            actual_line,
+            current_scope,
+            scope_change,
+        })
+    }
+
+    /// Calculate cycle time distribution for a board.
+    ///
+    /// Shows how long cards typically take to complete.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to analyze
+    /// * `time_range` - Only include cards completed within this range
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the board doesn't exist.
+    #[instrument(skip(self))]
+    pub fn calculate_cycle_time_distribution(
+        &self,
+        board_id: &str,
+        time_range: crate::analytics::TimeRange,
+    ) -> KanbanResult<crate::analytics::CycleTimeDistribution> {
+        use crate::analytics::CycleTimeDistribution;
+
+        let doc = self.get_doc(board_id)?;
+        let txn = doc.transact();
+        let root = txn
+            .get_map("root")
+            .ok_or_else(|| KanbanError::InvalidData("Missing root map".to_string()))?;
+
+        let now = Self::now();
+        let (start_time, end_time) = time_range.to_timestamps(now);
+
+        let cards_map = match root.get(&txn, keys::CARDS) {
+            Some(Out::YMap(m)) => m,
+            _ => return Err(KanbanError::InvalidData("Missing cards".to_string())),
+        };
+
+        // Collect cycle times for completed cards
+        let mut cycle_times: Vec<i64> = Vec::new();
+        for (_, value) in cards_map.iter(&txn) {
+            if let Out::YMap(card_map) = value
+                && let Ok(card) = self.read_card_from_map(&card_map, &txn)
+                && !card.deleted
+                && let Some(completed_at) = card.completed_at
+                && completed_at >= start_time
+                && completed_at <= end_time
+            {
+                let cycle_time = completed_at - card.created_at;
+                if cycle_time > 0 {
+                    cycle_times.push(cycle_time);
+                }
+            }
+        }
+
+        debug!(
+            board_id = %board_id,
+            sample_size = %cycle_times.len(),
+            "Calculated cycle time distribution"
+        );
+
+        Ok(CycleTimeDistribution::from_cycle_times(
+            board_id.to_string(),
+            cycle_times,
+        ))
     }
 }
 

@@ -863,6 +863,8 @@ mod tests {
                 total: 0,
             }),
             priority: None,
+            linked_thread_id: None,
+            linked_thread_name: None,
         };
         // Empty filter matches all cards
         assert!(filters.matches_card(&card));
@@ -886,6 +888,8 @@ mod tests {
                 total: 0,
             }),
             priority: None,
+            linked_thread_id: None,
+            linked_thread_name: None,
         };
 
         // Match in title
@@ -928,6 +932,8 @@ mod tests {
                 total: 0,
             }),
             priority: None,
+            linked_thread_id: None,
+            linked_thread_name: None,
         };
 
         let card_without_date = CardView {
@@ -944,6 +950,8 @@ mod tests {
                 total: 0,
             }),
             priority: None,
+            linked_thread_id: None,
+            linked_thread_name: None,
         };
 
         // Filter for cards with no due date

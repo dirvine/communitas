@@ -6,7 +6,9 @@
 //! - Drag-and-drop card movement
 //! - Card detail modal for editing
 //! - Swimlane filters
+//! - Analytics dashboard with velocity, burndown, and cycle time charts
 
+mod analytics;
 mod board_list;
 mod board_view;
 pub(crate) mod card;
@@ -15,6 +17,8 @@ pub(crate) mod column;
 mod filters;
 
 // Public exports for use in routes
+#[allow(unused_imports)] // Will be used in routes when analytics view is wired up
+pub use analytics::AnalyticsDashboard;
 pub use board_list::BoardListPage;
 pub use board_view::BoardView;
 

@@ -280,6 +280,7 @@ mod tests {
             deleted: false,
             deleted_at: None,
             deleted_by: None,
+            linked_thread_id: None,
         }
     }
 

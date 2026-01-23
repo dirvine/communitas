@@ -9,6 +9,7 @@ use communitas_bench::communitas_core::app::CommunitasApp;
 use communitas_bench::communitas_ui_api::drive::DiskType;
 use communitas_bench::communitas_ui_service::auth::AuthController;
 use communitas_bench::communitas_ui_service::canvas::{CanvasService, TransformView};
+use communitas_bench::communitas_ui_service::directory::DirectoryService;
 use communitas_bench::communitas_ui_service::drive::DriveService;
 use communitas_bench::communitas_ui_service::kanban::KanbanService;
 use communitas_bench::communitas_ui_service::messaging::MessagingService;
@@ -87,7 +88,8 @@ async fn create_kanban_service(temp: &TempDir) -> KanbanService {
         .await
         .expect("bench: create app"),
     );
-    KanbanService::new(auth, app)
+    let directory = Arc::new(DirectoryService::new(auth.clone()));
+    KanbanService::new(auth, app, directory)
 }
 
 /// Create an authenticated canvas service for benchmarks.

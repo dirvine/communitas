@@ -78,6 +78,9 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let services_for_add_step = services.clone();
     let services_for_toggle_step = services.clone();
     let services_for_comments = services.clone();
+    let services_for_thread_link = services.clone();
+    let services_for_thread_unlink = services.clone();
+    let services_for_thread_open = services.clone();
 
     let board_id_for_title = props.board_id.clone();
     let board_id_for_desc = props.board_id.clone();
@@ -86,6 +89,8 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let board_id_for_add_step = props.board_id.clone();
     let board_id_for_toggle_step = props.board_id.clone();
     let board_id_for_comments = props.board_id.clone();
+    let board_id_for_thread_link = props.board_id.clone();
+    let board_id_for_thread_unlink = props.board_id.clone();
 
     let card_id_for_title = props.card_id.clone();
     let card_id_for_desc = props.card_id.clone();
@@ -94,6 +99,8 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let card_id_for_add_step = props.card_id.clone();
     let card_id_for_toggle_step = props.card_id.clone();
     let card_id_for_comments = props.card_id.clone();
+    let card_id_for_thread_link = props.card_id.clone();
+    let card_id_for_thread_unlink = props.card_id.clone();
 
     rsx! {
         div {
@@ -271,6 +278,54 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
                                         }
                                     }
                                 });
+                            },
+                        }
+                        // Discussion thread link section
+                        ThreadLinkSection {
+                            linked_thread_id: card.linked_thread_id.clone(),
+                            linked_thread_name: card.linked_thread_name.clone(),
+                            on_link: move |thread_id: String| {
+                                let services = services_for_thread_link.clone();
+                                let board_id = board_id_for_thread_link.clone();
+                                let card_id = card_id_for_thread_link.clone();
+                                spawn(async move {
+                                    match services.kanban().link_thread(&board_id, &card_id, &thread_id).await {
+                                        Ok(_) => {
+                                            info!(target = "ui.kanban", event = "thread_linked", thread_id = %thread_id);
+                                            // Refresh card data
+                                            if let Ok(updated) = services.kanban().get_card(&board_id, &card_id).await {
+                                                card_data.set(Some(updated));
+                                            }
+                                        }
+                                        Err(err) => {
+                                            tracing::error!(target = "ui.kanban", "failed to link thread: {err}");
+                                        }
+                                    }
+                                });
+                            },
+                            on_unlink: move |_| {
+                                let services = services_for_thread_unlink.clone();
+                                let board_id = board_id_for_thread_unlink.clone();
+                                let card_id = card_id_for_thread_unlink.clone();
+                                spawn(async move {
+                                    match services.kanban().unlink_thread(&board_id, &card_id).await {
+                                        Ok(_) => {
+                                            info!(target = "ui.kanban", event = "thread_unlinked");
+                                            // Refresh card data
+                                            if let Ok(updated) = services.kanban().get_card(&board_id, &card_id).await {
+                                                card_data.set(Some(updated));
+                                            }
+                                        }
+                                        Err(err) => {
+                                            tracing::error!(target = "ui.kanban", "failed to unlink thread: {err}");
+                                        }
+                                    }
+                                });
+                            },
+                            on_open: move |thread_id: String| {
+                                let _ = &services_for_thread_open;
+                                info!(target = "ui.kanban", event = "open_thread_clicked", thread_id = %thread_id);
+                                // TODO: Navigate to messaging view with this thread
                             },
                         }
                         // Checklist section
@@ -921,6 +976,140 @@ fn PrioritySection(props: PrioritySectionProps) -> Element {
                             }
                         })}
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Thread link section for linking cards to discussion threads.
+#[derive(Props, Clone, PartialEq)]
+struct ThreadLinkSectionProps {
+    /// Linked thread ID (if any).
+    linked_thread_id: Option<String>,
+    /// Display name of the linked thread (if any).
+    linked_thread_name: Option<String>,
+    /// Called when user wants to link a thread.
+    on_link: EventHandler<String>,
+    /// Called when user wants to unlink the thread.
+    on_unlink: EventHandler<()>,
+    /// Called when user wants to open the linked thread.
+    on_open: EventHandler<String>,
+}
+
+#[component]
+fn ThreadLinkSection(props: ThreadLinkSectionProps) -> Element {
+    let mut show_picker = use_signal(|| false);
+    let mut search_query = use_signal(String::new);
+
+    // Mock thread list for now - in production, this would come from messaging service
+    let available_threads = [
+        ("thread-1".to_string(), "General Discussion".to_string()),
+        ("thread-2".to_string(), "Sprint Planning".to_string()),
+        ("thread-3".to_string(), "Bug Reports".to_string()),
+        ("thread-4".to_string(), "Feature Requests".to_string()),
+    ];
+
+    let filtered_threads: Vec<_> = available_threads
+        .iter()
+        .filter(|(_, name)| {
+            let query = search_query().to_lowercase();
+            query.is_empty() || name.to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect();
+
+    rsx! {
+        div {
+            class: "space-y-2",
+            h3 {
+                class: "text-sm font-medium text-slate-400 uppercase tracking-wide",
+                "Discussion"
+            }
+            if let Some(thread_id) = &props.linked_thread_id {
+                // Thread is linked - show info and actions
+                div {
+                    class: "flex items-center gap-2 rounded border border-slate-700 bg-slate-800/50 px-3 py-2",
+                    div {
+                        class: "flex-1 flex items-center gap-2",
+                        span {
+                            class: "text-emerald-400",
+                            "💬"
+                        }
+                        span {
+                            class: "text-sm text-slate-200",
+                            "{props.linked_thread_name.clone().unwrap_or_else(|| \"Linked Thread\".to_string())}"
+                        }
+                    }
+                    button {
+                        class: "rounded bg-emerald-500/20 px-2 py-1 text-xs font-medium text-emerald-400 hover:bg-emerald-500/30",
+                        onclick: {
+                            let thread_id = thread_id.clone();
+                            move |_| props.on_open.call(thread_id.clone())
+                        },
+                        "Open"
+                    }
+                    button {
+                        class: "rounded px-2 py-1 text-xs text-slate-400 hover:text-red-400 hover:bg-red-500/10",
+                        onclick: move |_| props.on_unlink.call(()),
+                        "Unlink"
+                    }
+                }
+            } else if show_picker() {
+                // Thread picker
+                div {
+                    class: "rounded border border-slate-700 bg-slate-800 p-3 space-y-2",
+                    // Search input
+                    input {
+                        r#type: "text",
+                        class: "w-full rounded border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 focus:border-emerald-400 focus:outline-none",
+                        placeholder: "Search threads...",
+                        value: "{search_query}",
+                        oninput: move |evt| search_query.set(evt.value()),
+                    }
+                    // Thread list
+                    div {
+                        class: "max-h-48 overflow-y-auto space-y-1",
+                        {filtered_threads.iter().map(|(id, name)| {
+                            let id_clone = id.clone();
+                            let on_link = props.on_link;
+                            rsx! {
+                                button {
+                                    key: "{id}",
+                                    class: "w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-sm text-slate-200 hover:bg-slate-700",
+                                    onclick: move |_| {
+                                        on_link.call(id_clone.clone());
+                                        show_picker.set(false);
+                                        search_query.set(String::new());
+                                    },
+                                    span { class: "text-slate-400", "💬" }
+                                    "{name}"
+                                }
+                            }
+                        })}
+                        if filtered_threads.is_empty() {
+                            p {
+                                class: "text-sm text-slate-500 text-center py-2",
+                                "No threads found"
+                            }
+                        }
+                    }
+                    // Cancel button
+                    button {
+                        class: "w-full rounded px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-700",
+                        onclick: move |_| {
+                            show_picker.set(false);
+                            search_query.set(String::new());
+                        },
+                        "Cancel"
+                    }
+                }
+            } else {
+                // No thread linked - show link button
+                button {
+                    class: "rounded border border-dashed border-slate-600 px-3 py-1.5 text-sm text-slate-400 hover:border-emerald-400 hover:text-emerald-400",
+                    onclick: move |_| show_picker.set(true),
+                    "Link Discussion Thread"
                 }
             }
         }

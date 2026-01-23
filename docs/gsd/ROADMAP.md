@@ -23,7 +23,7 @@ _Last updated: 2026-01-22_
 | **6.3** | Drive & Attachments | Complete |
 | **6.4** | Calls & Presence | Complete |
 | **6.5** | Canvas Integration | Complete |
-| **6.6** | Kanban Polish | In Progress |
+| **6.6** | Kanban Polish | Complete |
 | **6.7** | UX & Accessibility | Pending |
 | **6.8** | Testing & Tooling | Pending |
 | **6.9** | Apple Beta Packaging | Pending |

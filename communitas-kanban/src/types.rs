@@ -248,6 +248,10 @@ pub struct Card {
     /// IDs of attached tags
     pub tag_ids: Vec<String>,
 
+    // Message thread linking
+    /// ID of the linked message thread for discussions.
+    pub linked_thread_id: Option<String>,
+
     // Tombstone
     /// Soft delete flag
     pub deleted: bool,
@@ -272,6 +276,8 @@ pub struct CardUpdate {
     pub is_golden: Option<bool>,
     /// New due date (None to clear)
     pub due_date: Option<Option<i64>>,
+    /// New linked thread ID (None to clear)
+    pub linked_thread_id: Option<Option<String>>,
 }
 
 /// A checklist step within a card.

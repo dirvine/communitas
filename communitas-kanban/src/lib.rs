@@ -45,6 +45,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
+mod analytics;
 mod error;
 mod filter;
 mod operations;
@@ -53,6 +54,10 @@ mod state_machine;
 mod types;
 
 // Re-exports
+pub use analytics::{
+    BoardAnalytics, BurndownChart, BurndownDataPoint, CycleTimeBucket, CycleTimeDistribution,
+    TimeRange, VelocityDataPoint, VelocityMetric,
+};
 pub use error::{KanbanError, KanbanResult};
 pub use filter::CardFilter;
 pub use service::KanbanService;

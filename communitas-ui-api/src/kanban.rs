@@ -81,6 +81,10 @@ pub struct CardView {
     pub checklist_progress: Option<ChecklistProgress>,
     /// Position within the column (0-indexed).
     pub position: u32,
+    /// Linked message thread ID for discussions.
+    pub linked_thread_id: Option<String>,
+    /// Display name of the linked thread (if any).
+    pub linked_thread_name: Option<String>,
 }
 
 /// Detailed card view with full content.
@@ -116,6 +120,10 @@ pub struct CardDetail {
     pub attachments: Vec<AttachmentView>,
     /// Activity log entries.
     pub activity: Vec<ActivityEntry>,
+    /// Linked message thread ID for discussions.
+    pub linked_thread_id: Option<String>,
+    /// Display name of the linked thread (if any).
+    pub linked_thread_name: Option<String>,
 }
 
 /// A tag for categorizing cards.
@@ -377,6 +385,8 @@ mod tests {
                 total: 4,
             }),
             position: 0,
+            linked_thread_id: None,
+            linked_thread_name: None,
         };
         assert_eq!(card.tags.len(), 1);
         assert_eq!(card.tags[0].name, "urgent");

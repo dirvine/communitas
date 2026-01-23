@@ -8,6 +8,12 @@ use communitas_kanban::{
     BoardUpdate as CoreBoardUpdate, CardState as CoreCardState, CardUpdate as CoreCardUpdate,
     KanbanEvent, KanbanService as CoreKanbanService, Priority as CorePriority,
 };
+
+// Re-export analytics types for UI components
+pub use communitas_kanban::{
+    BoardAnalytics, BurndownChart, BurndownDataPoint, CycleTimeBucket, CycleTimeDistribution,
+    TimeRange, VelocityDataPoint, VelocityMetric,
+};
 use communitas_ui_api::{
     ActivityEntry, BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView,
     ChecklistProgress, ColumnView, CommentView, PriorityView, StepView, SwimlaneMode, TagView,
@@ -122,6 +128,8 @@ pub struct CardUpdate {
     pub tags: Option<Vec<String>>,
     /// New due date (None to clear, Some(None) to explicitly clear).
     pub due_date: Option<Option<i64>>,
+    /// New linked thread ID (None to clear, Some(None) to explicitly clear).
+    pub linked_thread_id: Option<Option<String>>,
 }
 
 /// Service for kanban board and card operations.
@@ -882,6 +890,8 @@ impl KanbanService {
                 due_date: None,
                 checklist_progress: None,
                 position: card.position,
+                linked_thread_id: None, // Thread linking via local CRDT only
+                linked_thread_name: None,
             };
             cards_by_column
                 .entry(card.column_id)
@@ -1117,6 +1127,8 @@ impl KanbanService {
             comments: comment_views,
             attachments: Vec::new(), // TODO: Wire when attachments are available
             activity,
+            linked_thread_id: card.linked_thread_id.clone(),
+            linked_thread_name: None, // Thread name resolved via messaging service
         })
     }
 
@@ -1302,6 +1314,8 @@ impl KanbanService {
             due_date: card_due_date.map(|d| d * 1000),
             checklist_progress: None,
             position: card_position,
+            linked_thread_id: None, // New cards have no linked thread
+            linked_thread_name: None,
         })
     }
 
@@ -1525,6 +1539,7 @@ impl KanbanService {
             title: updates.title,
             description: updates.description,
             due_date: updates.due_date,
+            linked_thread_id: updates.linked_thread_id,
             ..Default::default()
         };
         let card = core.update_card(board_id, card_id, core_update)?;
@@ -1834,6 +1849,157 @@ impl KanbanService {
         })
     }
 
+    /// Link a message thread to a card.
+    ///
+    /// Associates a chat thread with a kanban card for discussions.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.link_thread",
+        fields(board_id, card_id, thread_id)
+    )]
+    pub async fn link_thread(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        thread_id: &str,
+    ) -> Result<(), KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let core = self.core.read().await;
+        let core_update = CoreCardUpdate {
+            linked_thread_id: Some(Some(thread_id.to_string())),
+            ..Default::default()
+        };
+        core.update_card(board_id, card_id, core_update)?;
+        drop(core);
+
+        info!(
+            card_id = %card_id,
+            thread_id = %thread_id,
+            "Thread linked to card"
+        );
+
+        Ok(())
+    }
+
+    /// Unlink a message thread from a card.
+    ///
+    /// Removes the thread association from a kanban card.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.unlink_thread",
+        fields(board_id, card_id)
+    )]
+    pub async fn unlink_thread(&self, board_id: &str, card_id: &str) -> Result<(), KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let core = self.core.read().await;
+        let core_update = CoreCardUpdate {
+            linked_thread_id: Some(None),
+            ..Default::default()
+        };
+        core.update_card(board_id, card_id, core_update)?;
+        drop(core);
+
+        info!(card_id = %card_id, "Thread unlinked from card");
+
+        Ok(())
+    }
+
+    // ===== Analytics Methods =====
+
+    /// Get analytics summary for a board.
+    ///
+    /// Returns current metrics including card counts, WIP, overdue, and cycle time.
+    #[instrument(skip(self), name = "ui.kanban.get_board_analytics", fields(board_id))]
+    pub async fn get_board_analytics(
+        &self,
+        board_id: &str,
+    ) -> Result<communitas_kanban::BoardAnalytics, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let core = self.core.read().await;
+        let analytics = core.get_board_analytics(board_id)?;
+        drop(core);
+
+        debug!(board_id = %board_id, "Retrieved board analytics");
+        Ok(analytics)
+    }
+
+    /// Calculate velocity metrics for a board.
+    ///
+    /// Returns cards completed per period with average and standard deviation.
+    #[instrument(skip(self), name = "ui.kanban.calculate_velocity", fields(board_id))]
+    pub async fn calculate_velocity(
+        &self,
+        board_id: &str,
+        time_range: communitas_kanban::TimeRange,
+    ) -> Result<communitas_kanban::VelocityMetric, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let core = self.core.read().await;
+        let velocity = core.calculate_velocity(board_id, time_range)?;
+        drop(core);
+
+        debug!(board_id = %board_id, "Calculated velocity");
+        Ok(velocity)
+    }
+
+    /// Calculate burndown chart data for a board.
+    ///
+    /// Returns ideal vs actual burndown lines for a given period.
+    #[instrument(skip(self), name = "ui.kanban.calculate_burndown", fields(board_id))]
+    pub async fn calculate_burndown(
+        &self,
+        board_id: &str,
+        period_start: i64,
+        period_end: i64,
+    ) -> Result<communitas_kanban::BurndownChart, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let core = self.core.read().await;
+        let burndown = core.calculate_burndown(board_id, period_start, period_end)?;
+        drop(core);
+
+        debug!(board_id = %board_id, "Calculated burndown");
+        Ok(burndown)
+    }
+
+    /// Calculate cycle time distribution for a board.
+    ///
+    /// Returns histogram showing how long cards typically take to complete.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.calculate_cycle_time_distribution",
+        fields(board_id)
+    )]
+    pub async fn calculate_cycle_time_distribution(
+        &self,
+        board_id: &str,
+        time_range: communitas_kanban::TimeRange,
+    ) -> Result<communitas_kanban::CycleTimeDistribution, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let core = self.core.read().await;
+        let distribution = core.calculate_cycle_time_distribution(board_id, time_range)?;
+        drop(core);
+
+        debug!(board_id = %board_id, "Calculated cycle time distribution");
+        Ok(distribution)
+    }
+
     /// Internal: set loading state.
     pub fn set_loading(&self, loading: bool) {
         let mut snap = self.rx.borrow().clone();
@@ -1909,6 +2075,8 @@ impl KanbanService {
             due_date: card.due_date.map(|d| d * 1000),
             checklist_progress: None, // TODO: Calculate from steps
             position: card.position,
+            linked_thread_id: card.linked_thread_id.clone(),
+            linked_thread_name: None, // Thread name resolved via messaging service
         }
     }
 

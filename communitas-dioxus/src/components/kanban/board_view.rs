@@ -310,24 +310,22 @@ struct Swimlane {
 }
 
 /// Group cards into swimlanes based on the specified mode.
+/// Uses iterator-based approach to avoid intermediate Vec allocations.
 fn group_cards_into_swimlanes(board: &BoardViewData, mode: SwimlaneMode) -> Vec<Swimlane> {
-    // Collect all cards from all columns
-    let all_cards: Vec<CardView> = board
-        .columns
-        .iter()
-        .flat_map(|col| col.cards.clone())
-        .collect();
+    // Create an iterator over all cards without intermediate allocation
+    let cards_iter = || board.columns.iter().flat_map(|col| col.cards.iter());
 
     match mode {
         SwimlaneMode::None => vec![], // Should not happen, handled by caller
-        SwimlaneMode::ByAssignee => group_by_assignee(&all_cards),
-        SwimlaneMode::ByTag => group_by_tag(&all_cards),
-        SwimlaneMode::ByState => group_by_state(&all_cards),
+        SwimlaneMode::ByAssignee => group_by_assignee(cards_iter()),
+        SwimlaneMode::ByTag => group_by_tag(cards_iter()),
+        SwimlaneMode::ByState => group_by_state(cards_iter()),
     }
 }
 
 /// Group cards by assignee.
-fn group_by_assignee(cards: &[CardView]) -> Vec<Swimlane> {
+/// Takes an iterator to avoid intermediate allocations.
+fn group_by_assignee<'a>(cards: impl Iterator<Item = &'a CardView>) -> Vec<Swimlane> {
     let mut groups: HashMap<String, Vec<CardView>> = HashMap::new();
     let mut unassigned: Vec<CardView> = Vec::new();
 
@@ -372,7 +370,8 @@ fn group_by_assignee(cards: &[CardView]) -> Vec<Swimlane> {
 }
 
 /// Group cards by tag.
-fn group_by_tag(cards: &[CardView]) -> Vec<Swimlane> {
+/// Takes an iterator to avoid intermediate allocations.
+fn group_by_tag<'a>(cards: impl Iterator<Item = &'a CardView>) -> Vec<Swimlane> {
     let mut groups: HashMap<String, (String, Option<String>, Vec<CardView>)> = HashMap::new();
     let mut no_tag: Vec<CardView> = Vec::new();
 
@@ -417,32 +416,45 @@ fn group_by_tag(cards: &[CardView]) -> Vec<Swimlane> {
 }
 
 /// Group cards by state.
-fn group_by_state(cards: &[CardView]) -> Vec<Swimlane> {
-    let state_order = [
-        (CardState::Todo, "To Do", "#64748b"),             // slate-500
-        (CardState::InProgress, "In Progress", "#3b82f6"), // blue-500
-        (CardState::InReview, "In Review", "#f59e0b"),     // amber-500
-        (CardState::Done, "Done", "#22c55e"),              // emerald-500
-        (CardState::Archived, "Archived", "#475569"),      // slate-600
+/// Takes an iterator to avoid intermediate allocations.
+/// Uses fixed-size array for O(n) single-pass grouping (CardState has 5 variants).
+fn group_by_state<'a>(cards: impl Iterator<Item = &'a CardView>) -> Vec<Swimlane> {
+    // Use fixed array: [Todo, InProgress, InReview, Done, Archived]
+    let mut groups: [Vec<CardView>; 5] = Default::default();
+
+    // Single pass to group cards by state index
+    for card in cards {
+        let idx = match card.state {
+            CardState::Todo => 0,
+            CardState::InProgress => 1,
+            CardState::InReview => 2,
+            CardState::Done => 3,
+            CardState::Archived => 4,
+        };
+        groups[idx].push(card.clone());
+    }
+
+    let state_info = [
+        ("Todo", "To Do", "#64748b"),             // slate-500
+        ("InProgress", "In Progress", "#3b82f6"), // blue-500
+        ("InReview", "In Review", "#f59e0b"),     // amber-500
+        ("Done", "Done", "#22c55e"),              // emerald-500
+        ("Archived", "Archived", "#475569"),      // slate-600
     ];
 
-    state_order
-        .iter()
-        .map(|(state, label, color)| {
-            let state_cards: Vec<CardView> = cards
-                .iter()
-                .filter(|c| c.state == *state)
-                .cloned()
-                .collect();
-
+    groups
+        .into_iter()
+        .enumerate()
+        .filter(|(_, cards)| !cards.is_empty())
+        .map(|(idx, cards)| {
+            let (key, label, color) = state_info[idx];
             Swimlane {
-                key: format!("{state:?}"),
-                label: (*label).to_string(),
-                color: Some((*color).to_string()),
-                cards: state_cards,
+                key: key.to_string(),
+                label: label.to_string(),
+                color: Some(color.to_string()),
+                cards,
             }
         })
-        .filter(|s| !s.cards.is_empty()) // Only show swimlanes with cards
         .collect()
 }
 
@@ -876,9 +888,8 @@ mod tests {
     #[test]
     fn group_by_state_creates_correct_swimlanes() {
         let board = make_test_board();
-        let all_cards: Vec<CardView> = board.columns.iter().flat_map(|c| c.cards.clone()).collect();
 
-        let swimlanes = group_by_state(&all_cards);
+        let swimlanes = group_by_state(board.columns.iter().flat_map(|c| c.cards.iter()));
 
         assert_eq!(swimlanes.len(), 2); // Todo and InProgress
         assert_eq!(swimlanes[0].label, "To Do");
@@ -898,7 +909,7 @@ mod tests {
             },
         ];
 
-        let swimlanes = group_by_assignee(&cards);
+        let swimlanes = group_by_assignee(cards.iter());
 
         assert_eq!(swimlanes.len(), 2);
         assert_eq!(swimlanes[0].label, "alice");
@@ -919,7 +930,7 @@ mod tests {
             card
         }];
 
-        let swimlanes = group_by_tag(&cards);
+        let swimlanes = group_by_tag(cards.iter());
 
         assert_eq!(swimlanes.len(), 2);
         assert_eq!(swimlanes[0].label, "Bug");
@@ -932,9 +943,9 @@ mod tests {
     fn empty_cards_return_empty_swimlanes() {
         let cards: Vec<CardView> = vec![];
 
-        let by_state = group_by_state(&cards);
-        let by_assignee = group_by_assignee(&cards);
-        let by_tag = group_by_tag(&cards);
+        let by_state = group_by_state(cards.iter());
+        let by_assignee = group_by_assignee(cards.iter());
+        let by_tag = group_by_tag(cards.iter());
 
         assert!(by_state.is_empty());
         assert!(by_assignee.is_empty());
@@ -1019,7 +1030,7 @@ mod tests {
         card.assignees = vec!["alice".to_string(), "bob".to_string()];
         let cards = vec![card];
 
-        let swimlanes = group_by_assignee(&cards);
+        let swimlanes = group_by_assignee(cards.iter());
 
         // Card should appear in both alice's and bob's swimlanes
         assert_eq!(swimlanes.len(), 2);
@@ -1051,7 +1062,7 @@ mod tests {
             make_test_card("card-3", "Unassigned", CardState::Todo),
         ];
 
-        let swimlanes = group_by_assignee(&cards);
+        let swimlanes = group_by_assignee(cards.iter());
 
         // Should have 4 swimlanes: alice, bob, charlie, Unassigned
         assert_eq!(swimlanes.len(), 4);
@@ -1098,7 +1109,7 @@ mod tests {
         ];
         let cards = vec![card];
 
-        let swimlanes = group_by_tag(&cards);
+        let swimlanes = group_by_tag(cards.iter());
 
         // Card should appear in both Bug and Urgent swimlanes
         assert_eq!(swimlanes.len(), 2);
@@ -1145,7 +1156,7 @@ mod tests {
             make_test_card("card-3", "No Tags", CardState::Todo),
         ];
 
-        let swimlanes = group_by_tag(&cards);
+        let swimlanes = group_by_tag(cards.iter());
 
         // Should have 4 swimlanes: Bug, Feature, No Tag, Priority (alphabetical, No Tag at end)
         assert_eq!(swimlanes.len(), 4);
@@ -1195,7 +1206,7 @@ mod tests {
             },
         ];
 
-        let swimlanes = group_by_assignee(&cards);
+        let swimlanes = group_by_assignee(cards.iter());
 
         // Should be sorted: alice, bob, zoe (Unassigned excluded as no unassigned cards)
         assert_eq!(swimlanes.len(), 3);
@@ -1212,7 +1223,7 @@ mod tests {
             make_test_card("card-3", "InProgress Card", CardState::InProgress),
         ];
 
-        let swimlanes = group_by_state(&cards);
+        let swimlanes = group_by_state(cards.iter());
 
         // Order should be: To Do, In Progress, Done (workflow order, not alphabetical)
         assert_eq!(swimlanes.len(), 3);

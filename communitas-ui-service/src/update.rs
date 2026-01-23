@@ -44,7 +44,6 @@ pub enum UpdateStatus {
     Error(String),
 }
 
-
 /// Errors that can occur during update operations.
 #[derive(Debug, Error)]
 pub enum UpdateError {

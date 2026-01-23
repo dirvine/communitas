@@ -75,6 +75,7 @@ impl TourState {
     /// Advance to the next step.
     ///
     /// Returns `true` if there are more steps, `false` if the tour is complete.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> bool {
         if self.current_step + 1 < self.total_steps {
             self.current_step += 1;

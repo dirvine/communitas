@@ -83,12 +83,12 @@ pub use offline::{
 // Re-export settings components for application preferences
 // Note: These will be used when settings UI is integrated
 #[allow(unused_imports)]
-pub use settings::UpdateCard;
-#[allow(unused_imports)]
 pub use settings::UpdateAvailableModal;
+#[allow(unused_imports)]
+pub use settings::UpdateBadgeStatus;
+#[allow(unused_imports)]
+pub use settings::UpdateCard;
 #[allow(unused_imports)]
 pub use settings::UpdateProgressBar;
 #[allow(unused_imports)]
 pub use settings::UpdateStatusBadge;
-#[allow(unused_imports)]
-pub use settings::UpdateBadgeStatus;

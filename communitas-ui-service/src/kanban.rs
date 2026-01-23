@@ -88,6 +88,25 @@ pub struct KanbanSnapshot {
     pub loading: bool,
     /// Current swimlane view mode.
     pub swimlane_mode: SwimlaneMode,
+    /// Active conflicts from concurrent edits.
+    pub conflicts: Vec<ConflictInfo>,
+}
+
+/// Information about a detected CRDT conflict.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictInfo {
+    /// Unique ID for this conflict instance.
+    pub id: String,
+    /// ID of the board containing the conflict.
+    pub board_id: String,
+    /// ID of the card involved in the conflict.
+    pub card_id: String,
+    /// Title of the card for display.
+    pub card_title: String,
+    /// Description of what changed remotely.
+    pub remote_change: String,
+    /// When the conflict was detected (Unix timestamp ms).
+    pub detected_at: i64,
 }
 
 /// Update payload for card modifications.
@@ -559,6 +578,58 @@ impl KanbanService {
         snap.swimlane_mode = mode;
         self.send_snapshot(snap);
         debug!(swimlane_mode = ?mode, "Swimlane mode updated");
+    }
+
+    /// Add a conflict to the current snapshot.
+    ///
+    /// Called when CRDT merge detects concurrent edits to the same card.
+    pub fn add_conflict(&self, conflict: ConflictInfo) {
+        let mut snap = self.rx.borrow().clone();
+        // Avoid duplicate conflicts for the same card
+        if !snap.conflicts.iter().any(|c| c.card_id == conflict.card_id) {
+            info!(
+                card_id = %conflict.card_id,
+                change = %conflict.remote_change,
+                "Conflict detected"
+            );
+            snap.conflicts.push(conflict);
+            self.send_snapshot(snap);
+        }
+    }
+
+    /// Dismiss a specific conflict by ID.
+    pub fn dismiss_conflict(&self, conflict_id: &str) {
+        let mut snap = self.rx.borrow().clone();
+        snap.conflicts.retain(|c| c.id != conflict_id);
+        self.send_snapshot(snap);
+        debug!(conflict_id = %conflict_id, "Conflict dismissed");
+    }
+
+    /// Dismiss all conflicts for a specific card.
+    pub fn dismiss_card_conflicts(&self, card_id: &str) {
+        let mut snap = self.rx.borrow().clone();
+        snap.conflicts.retain(|c| c.id != card_id);
+        self.send_snapshot(snap);
+        debug!(card_id = %card_id, "Card conflicts dismissed");
+    }
+
+    /// Clear all conflicts.
+    pub fn clear_conflicts(&self) {
+        let mut snap = self.rx.borrow().clone();
+        snap.conflicts.clear();
+        self.send_snapshot(snap);
+        debug!("All conflicts cleared");
+    }
+
+    /// Get active conflicts for a board.
+    pub fn get_conflicts(&self, board_id: &str) -> Vec<ConflictInfo> {
+        self.rx
+            .borrow()
+            .conflicts
+            .iter()
+            .filter(|c| c.board_id == board_id)
+            .cloned()
+            .collect()
     }
     /// Load boards for an entity, setting loading state and subscribing to events.
     ///

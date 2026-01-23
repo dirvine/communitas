@@ -2,6 +2,7 @@
 
 use communitas_ui_api::kanban::{BoardView as BoardViewData, CardState, CardView, SwimlaneMode};
 use communitas_ui_service::UiServices;
+use communitas_ui_service::kanban::ConflictInfo;
 use dioxus::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,8 +58,29 @@ pub fn BoardView(props: BoardViewProps) -> Element {
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| Option::<String>::None);
 
-    // Conflict banner state
-    let mut show_conflict_banner = use_signal(|| false);
+    // Conflict state from kanban service subscription
+    let mut conflicts = use_signal(Vec::<ConflictInfo>::new);
+    let board_id_for_conflicts = props.board_id.clone();
+
+    // Subscribe to kanban snapshot for conflicts
+    let kanban_for_conflicts = kanban.clone();
+    use_future(move || {
+        let kanban = kanban_for_conflicts.clone();
+        let board_id = board_id_for_conflicts.clone();
+        async move {
+            let mut rx = kanban.subscribe();
+            while rx.changed().await.is_ok() {
+                let snap = rx.borrow().clone();
+                let board_conflicts: Vec<ConflictInfo> = snap
+                    .conflicts
+                    .iter()
+                    .filter(|c| c.board_id == board_id)
+                    .cloned()
+                    .collect();
+                conflicts.set(board_conflicts);
+            }
+        }
+    });
 
     // Drag state for card drag-and-drop (shared via context)
     let drag_state = use_signal(DragState::default);
@@ -66,6 +88,9 @@ pub fn BoardView(props: BoardViewProps) -> Element {
 
     // Swimlane mode state (synced with service)
     let mut swimlane_mode = use_signal(|| SwimlaneMode::None);
+
+    // Clone kanban for use in rsx! (after the use_future closures consume their clones)
+    let kanban_for_banner = kanban.clone();
 
     // Fetch board data
     let board_id = props.board_id.clone();
@@ -131,10 +156,12 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                     }
                 }
             } else if let Some(board) = board_data() {
-                // CRDT conflict banner
-                if show_conflict_banner() {
+                // CRDT conflict banners
+                for conflict in conflicts() {
                     ConflictBanner {
-                        on_dismiss: move |_| show_conflict_banner.set(false),
+                        key: "{conflict.id}",
+                        conflict: conflict.clone(),
+                        kanban: kanban_for_banner.clone(),
                     }
                 }
                 // Board header
@@ -617,29 +644,72 @@ fn BoardHeader(props: BoardHeaderProps) -> Element {
     }
 }
 
-/// CRDT conflict banner.
-#[derive(Props, Clone, PartialEq)]
+/// CRDT conflict banner showing details of detected concurrent edits.
+#[derive(Props, Clone)]
 struct ConflictBannerProps {
-    on_dismiss: EventHandler<()>,
+    /// The conflict information to display.
+    conflict: ConflictInfo,
+    /// Kanban service for dismissing conflicts.
+    kanban: Arc<communitas_ui_service::kanban::KanbanService>,
+}
+
+impl PartialEq for ConflictBannerProps {
+    fn eq(&self, other: &Self) -> bool {
+        // Compare by conflict only, kanban service is a singleton
+        self.conflict == other.conflict
+    }
 }
 
 #[component]
 fn ConflictBanner(props: ConflictBannerProps) -> Element {
+    let conflict = &props.conflict;
+    let conflict_id = conflict.id.clone();
+    let kanban = props.kanban.clone();
+
+    // Auto-dismiss after 30 seconds
+    let conflict_id_for_timer = conflict_id.clone();
+    let kanban_for_timer = kanban.clone();
+    use_future(move || {
+        let conflict_id = conflict_id_for_timer.clone();
+        let kanban = kanban_for_timer.clone();
+        async move {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            kanban.dismiss_conflict(&conflict_id);
+        }
+    });
+
     rsx! {
         div {
             class: "bg-amber-500/20 border-b border-amber-500/50 px-4 py-2 flex items-center justify-between",
             role: "alert",
+            aria_live: "polite",
             div {
-                class: "flex items-center gap-2",
-                span { class: "text-amber-400", "!" }
-                span { class: "text-amber-200 text-sm",
-                    "Changes from another device detected. Syncing..."
+                class: "flex items-center gap-3",
+                span {
+                    class: "w-6 h-6 rounded-full bg-amber-500/30 flex items-center justify-center",
+                    span { class: "text-amber-400 text-sm", "!" }
+                }
+                div {
+                    class: "flex flex-col",
+                    span { class: "text-amber-200 text-sm font-medium",
+                        "Concurrent edit detected"
+                    }
+                    span { class: "text-amber-300/70 text-xs",
+                        "\"{conflict.card_title}\" was modified: {conflict.remote_change}"
+                    }
                 }
             }
-            button {
-                class: "text-amber-400 hover:text-amber-300 text-sm",
-                onclick: move |_| props.on_dismiss.call(()),
-                "Dismiss"
+            div {
+                class: "flex items-center gap-2",
+                button {
+                    class: "text-amber-400 hover:text-amber-300 text-xs px-2 py-1 rounded hover:bg-amber-500/20 transition",
+                    onclick: {
+                        let conflict_id = conflict_id.clone();
+                        let kanban = kanban.clone();
+                        move |_| kanban.dismiss_conflict(&conflict_id)
+                    },
+                    "Dismiss"
+                }
             }
         }
     }

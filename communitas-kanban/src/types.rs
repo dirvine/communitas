@@ -402,4 +402,17 @@ pub enum KanbanEvent {
         /// ID of the changed board.
         board_id: String,
     },
+    /// A concurrent edit conflict was detected during CRDT merge.
+    ///
+    /// This occurs when a remote change modifies the same card that
+    /// was recently edited locally. The CRDT automatically resolves
+    /// the conflict, but the user should be notified.
+    ConflictDetected {
+        /// ID of the board containing the conflict.
+        board_id: String,
+        /// ID of the card involved in the conflict.
+        card_id: String,
+        /// Brief description of what changed remotely.
+        remote_change: String,
+    },
 }

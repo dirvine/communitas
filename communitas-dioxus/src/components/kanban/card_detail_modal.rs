@@ -74,6 +74,7 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let services_for_title = services.clone();
     let services_for_desc = services.clone();
     let services_for_priority = services.clone();
+    let services_for_due_date = services.clone();
     let services_for_add_step = services.clone();
     let services_for_toggle_step = services.clone();
     let services_for_comments = services.clone();
@@ -81,6 +82,7 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let board_id_for_title = props.board_id.clone();
     let board_id_for_desc = props.board_id.clone();
     let board_id_for_priority = props.board_id.clone();
+    let board_id_for_due_date = props.board_id.clone();
     let board_id_for_add_step = props.board_id.clone();
     let board_id_for_toggle_step = props.board_id.clone();
     let board_id_for_comments = props.board_id.clone();
@@ -88,6 +90,7 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let card_id_for_title = props.card_id.clone();
     let card_id_for_desc = props.card_id.clone();
     let card_id_for_priority = props.card_id.clone();
+    let card_id_for_due_date = props.card_id.clone();
     let card_id_for_add_step = props.card_id.clone();
     let card_id_for_toggle_step = props.card_id.clone();
     let card_id_for_comments = props.card_id.clone();
@@ -223,8 +226,28 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
                         // Due date section
                         DueDateSection {
                             due_date: card.due_date,
-                            on_change: move |_date| {
-                                info!(target = "ui.kanban", event = "due_date_changed");
+                            on_change: move |new_date: Option<i64>| {
+                                let services = services_for_due_date.clone();
+                                let board_id = board_id_for_due_date.clone();
+                                let card_id = card_id_for_due_date.clone();
+                                spawn(async move {
+                                    let update = CardUpdate {
+                                        due_date: Some(new_date),
+                                        ..Default::default()
+                                    };
+                                    match services.kanban().update_card(&board_id, &card_id, update).await {
+                                        Ok(_) => {
+                                            info!(target = "ui.kanban", event = "due_date_changed", ?new_date);
+                                            // Refresh card data
+                                            if let Ok(updated) = services.kanban().get_card(&board_id, &card_id).await {
+                                                card_data.set(Some(updated));
+                                            }
+                                        }
+                                        Err(err) => {
+                                            tracing::error!(target = "ui.kanban", "failed to update due date: {err}");
+                                        }
+                                    }
+                                });
                             },
                         }
                         // Priority section
@@ -612,7 +635,7 @@ fn TagsSection(props: TagsSectionProps) -> Element {
     }
 }
 
-/// Due date section.
+/// Due date section with inline date picker.
 #[derive(Props, Clone, PartialEq)]
 struct DueDateSectionProps {
     due_date: Option<i64>,
@@ -621,10 +644,37 @@ struct DueDateSectionProps {
 
 #[component]
 fn DueDateSection(props: DueDateSectionProps) -> Element {
-    let formatted = props.due_date.map(|ts| {
-        let dt = chrono::DateTime::from_timestamp_millis(ts);
-        dt.map(|d| d.format("%Y-%m-%d").to_string())
-            .unwrap_or_else(|| "Invalid date".to_string())
+    let mut show_picker = use_signal(|| false);
+
+    // Format current due date for display
+    let (formatted, status_class, status_label) = if let Some(ts) = props.due_date {
+        let formatted = chrono::DateTime::from_timestamp_millis(ts)
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "Invalid date".to_string());
+
+        // Calculate days until due
+        let now = chrono::Utc::now().timestamp_millis();
+        let diff_ms = ts - now;
+        let diff_days = diff_ms / 86_400_000;
+
+        let (status_class, status_label) = if diff_days < 0 {
+            ("text-red-400 bg-red-500/20", "Overdue")
+        } else if diff_days == 0 {
+            ("text-amber-400 bg-amber-500/20", "Today")
+        } else if diff_days <= 3 {
+            ("text-amber-400 bg-amber-500/20", "Due soon")
+        } else {
+            ("text-slate-400 bg-slate-700", "")
+        };
+
+        (Some(formatted), status_class, status_label)
+    } else {
+        (None, "", "")
+    };
+
+    // Convert due_date to YYYY-MM-DD for the input
+    let input_value = props.due_date.and_then(|ts| {
+        chrono::DateTime::from_timestamp_millis(ts).map(|d| d.format("%Y-%m-%d").to_string())
     });
 
     rsx! {
@@ -635,30 +685,158 @@ fn DueDateSection(props: DueDateSectionProps) -> Element {
                 "Due Date"
             }
             div {
-                class: "flex items-center gap-2",
-                if let Some(date) = formatted {
-                    span {
-                        class: "rounded bg-slate-700 px-3 py-1 text-sm text-slate-200",
-                        "{date}"
-                    }
-                    button {
-                        class: "text-sm text-slate-400 hover:text-red-400",
-                        onclick: move |_| props.on_change.call(None),
-                        "Clear"
+                class: "flex flex-col gap-2",
+                // Current date display
+                if let Some(date) = &formatted {
+                    div {
+                        class: "flex items-center gap-2",
+                        span {
+                            class: "rounded bg-slate-700 px-3 py-1 text-sm text-slate-200",
+                            "{date}"
+                        }
+                        if !status_label.is_empty() {
+                            span {
+                                class: format!("text-xs px-2 py-0.5 rounded {status_class}"),
+                                "{status_label}"
+                            }
+                        }
+                        button {
+                            class: "text-sm text-slate-400 hover:text-emerald-400",
+                            onclick: move |_| show_picker.set(!show_picker()),
+                            if show_picker() { "Cancel" } else { "Edit" }
+                        }
+                        button {
+                            class: "text-sm text-slate-400 hover:text-red-400",
+                            onclick: move |_| {
+                                props.on_change.call(None);
+                                show_picker.set(false);
+                            },
+                            "Clear"
+                        }
                     }
                 } else {
                     button {
-                        class: "rounded border border-dashed border-slate-600 px-3 py-1 text-sm text-slate-400 hover:border-emerald-400 hover:text-emerald-400",
-                        onclick: move |_| {
-                            // TODO: Open date picker
-                            props.on_change.call(Some(chrono::Utc::now().timestamp_millis()));
-                        },
+                        class: "rounded border border-dashed border-slate-600 px-3 py-1 text-sm text-slate-400 hover:border-emerald-400 hover:text-emerald-400 w-fit",
+                        onclick: move |_| show_picker.set(true),
                         "Set due date"
+                    }
+                }
+                // Date picker (inline)
+                if show_picker() {
+                    DatePicker {
+                        value: input_value.unwrap_or_default(),
+                        on_select: move |date_str: String| {
+                            if let Some(ts) = parse_date_to_millis(&date_str) {
+                                props.on_change.call(Some(ts));
+                                show_picker.set(false);
+                            }
+                        },
+                        on_cancel: move |_| show_picker.set(false),
                     }
                 }
             }
         }
     }
+}
+
+/// Inline date picker using HTML5 date input.
+#[derive(Props, Clone, PartialEq)]
+struct DatePickerProps {
+    /// Current date value in YYYY-MM-DD format.
+    value: String,
+    /// Called when a date is selected.
+    on_select: EventHandler<String>,
+    /// Called when picker is cancelled.
+    on_cancel: EventHandler<()>,
+}
+
+#[component]
+fn DatePicker(props: DatePickerProps) -> Element {
+    let mut date_value = use_signal(|| props.value.clone());
+
+    // Quick date presets
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let tomorrow = (chrono::Utc::now() + chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let next_week = (chrono::Utc::now() + chrono::Duration::days(7))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let today_val = today.clone();
+    let tomorrow_val = tomorrow.clone();
+    let next_week_val = next_week.clone();
+
+    rsx! {
+        div {
+            class: "rounded border border-slate-700 bg-slate-800 p-3 space-y-3",
+            // Quick presets
+            div {
+                class: "flex gap-2",
+                button {
+                    class: "rounded bg-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-600",
+                    onclick: move |_| {
+                        date_value.set(today_val.clone());
+                        props.on_select.call(today_val.clone());
+                    },
+                    "Today"
+                }
+                button {
+                    class: "rounded bg-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-600",
+                    onclick: move |_| {
+                        date_value.set(tomorrow_val.clone());
+                        props.on_select.call(tomorrow_val.clone());
+                    },
+                    "Tomorrow"
+                }
+                button {
+                    class: "rounded bg-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-600",
+                    onclick: move |_| {
+                        date_value.set(next_week_val.clone());
+                        props.on_select.call(next_week_val.clone());
+                    },
+                    "Next week"
+                }
+            }
+            // Date input
+            div {
+                class: "flex gap-2",
+                input {
+                    r#type: "date",
+                    class: "flex-1 rounded border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 focus:border-emerald-400 focus:outline-none",
+                    value: "{date_value}",
+                    oninput: move |evt| date_value.set(evt.value()),
+                }
+                button {
+                    class: "rounded bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-slate-900",
+                    onclick: move |_| {
+                        let val = date_value();
+                        if !val.is_empty() {
+                            props.on_select.call(val);
+                        }
+                    },
+                    "Set"
+                }
+                button {
+                    class: "rounded px-3 py-1.5 text-sm text-slate-400 hover:text-white",
+                    onclick: move |_| props.on_cancel.call(()),
+                    "Cancel"
+                }
+            }
+        }
+    }
+}
+
+/// Parse a YYYY-MM-DD date string to milliseconds timestamp.
+fn parse_date_to_millis(date_str: &str) -> Option<i64> {
+    use chrono::NaiveDate;
+    NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        .ok()
+        .map(|date| {
+            date.and_hms_opt(23, 59, 59)
+                .map(|dt| dt.and_utc().timestamp_millis())
+                .unwrap_or(0)
+        })
 }
 
 /// Priority section for selecting card priority.
@@ -1044,5 +1222,32 @@ mod tests {
         let three_days_ago = chrono::Utc::now().timestamp_millis() - 3 * 24 * 60 * 60_000;
         let result = format_timestamp(three_days_ago);
         assert_eq!(result, "3d ago");
+    }
+
+    #[test]
+    fn parse_date_to_millis_valid_date() {
+        let result = parse_date_to_millis("2026-01-23");
+        assert!(result.is_some());
+        let ts = result.unwrap();
+        // Should be end of day (23:59:59)
+        assert!(ts > 0);
+    }
+
+    #[test]
+    fn parse_date_to_millis_invalid_date() {
+        let result = parse_date_to_millis("not-a-date");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_date_to_millis_empty_string() {
+        let result = parse_date_to_millis("");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_date_to_millis_wrong_format() {
+        let result = parse_date_to_millis("01/23/2026");
+        assert!(result.is_none());
     }
 }

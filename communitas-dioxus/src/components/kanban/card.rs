@@ -26,13 +26,20 @@ pub struct KanbanCardProps {
 pub fn KanbanCard(props: KanbanCardProps) -> Element {
     let services = use_context::<Arc<UiServices>>();
     let mut drag_state = use_context::<Signal<DragState>>();
-    let card = &props.card;
+    // Clone card to avoid lifetime issues in closures
+    let card = props.card.clone();
 
     // Drag state (local)
     let mut is_dragging = use_signal(|| false);
 
     // Modal state
     let mut show_detail_modal = use_signal(|| false);
+
+    // Move menu state (accessible via 'm' key)
+    let mut show_move_menu = use_signal(|| false);
+
+    // Help tooltip state (accessible via '?' key)
+    let mut show_help_tooltip = use_signal(|| false);
 
     // Moving state (for visual feedback)
     let mut is_moving = use_signal(|| false);
@@ -43,9 +50,13 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
     let card_title_for_drag = card_title.clone();
     let card_id_for_drag_end = card_id.clone();
     let card_id_for_keyboard = card_id.clone();
+    let card_id_for_move_menu = card_id.clone();
     let board_id = props.board_id.clone();
     let board_id_for_keyboard = board_id.clone();
+    let board_id_for_move_menu = board_id.clone();
     let column_id = props.column_id.clone();
+    let column_id_for_move_menu = column_id.clone();
+    let services_for_move = services.clone();
     let column_id_for_drag = column_id.clone();
     let card_position = card.position;
     let on_move_announce = props.on_move_announce;
@@ -119,10 +130,31 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
             onclick: move |_| {
                 show_detail_modal.set(true);
             },
-            // Keyboard support (Enter to open detail, Ctrl+Arrow to move)
+            // Keyboard support (Enter to open detail, Ctrl+Arrow to move, m for menu, ? for help)
             onkeydown: move |evt| {
                 if evt.key() == Key::Enter {
                     show_detail_modal.set(true);
+                    return;
+                }
+
+                // 'm' key opens move menu
+                if evt.key() == Key::Character("m".to_string()) || evt.key() == Key::Character("M".to_string()) {
+                    evt.prevent_default();
+                    show_move_menu.set(true);
+                    return;
+                }
+
+                // '?' key shows keyboard shortcuts help
+                if evt.key() == Key::Character("?".to_string()) {
+                    evt.prevent_default();
+                    show_help_tooltip.set(!show_help_tooltip());
+                    return;
+                }
+
+                // Escape closes menus
+                if evt.key() == Key::Escape {
+                    show_move_menu.set(false);
+                    show_help_tooltip.set(false);
                     return;
                 }
 
@@ -297,6 +329,35 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                 on_close: move |_| show_detail_modal.set(false),
             }
         }
+        // Move menu (accessible via 'm' key)
+        if show_move_menu() {
+            CardMoveMenu {
+                board_id: board_id_for_move_menu.clone(),
+                card_id: card_id_for_move_menu.clone(),
+                current_column_id: column_id_for_move_menu.clone(),
+                on_move: move |target_col: String| {
+                    show_move_menu.set(false);
+                    let services = services_for_move.clone();
+                    let board_id = board_id_for_move_menu.clone();
+                    let card_id = card_id_for_move_menu.clone();
+                    let on_announce = on_move_announce;
+                    spawn(async move {
+                        if let Err(e) = services.kanban().move_card(&board_id, &card_id, &target_col, 0).await {
+                            tracing::error!(target = "ui.kanban", "Move failed: {e}");
+                        } else {
+                            on_announce.call("Card moved to column".to_string());
+                        }
+                    });
+                },
+                on_close: move |_| show_move_menu.set(false),
+            }
+        }
+        // Keyboard shortcuts help tooltip
+        if show_help_tooltip() {
+            KeyboardHelpTooltip {
+                on_close: move |_| show_help_tooltip.set(false),
+            }
+        }
     }
 }
 
@@ -384,6 +445,133 @@ fn PriorityBadge(props: PriorityBadgeProps) -> Element {
             class: format!("text-xs px-1.5 py-0.5 rounded font-medium {bg_color} {text_color}"),
             title: format!("Priority: {}", label),
             "{label}"
+        }
+    }
+}
+
+/// Move menu for keyboard-accessible card movement.
+/// Shows a list of columns to move the card to.
+#[derive(Props, Clone, PartialEq)]
+struct CardMoveMenuProps {
+    board_id: String,
+    card_id: String,
+    current_column_id: String,
+    on_move: EventHandler<String>,
+    on_close: EventHandler<()>,
+}
+
+#[component]
+fn CardMoveMenu(props: CardMoveMenuProps) -> Element {
+    let services = use_context::<Arc<UiServices>>();
+    let mut columns = use_signal(Vec::new);
+
+    // Fetch columns for this board
+    let board_id = props.board_id.clone();
+    use_future(move || {
+        let services = services.clone();
+        let board_id = board_id.clone();
+        async move {
+            if let Ok(board) = services.kanban().get_board(&board_id).await {
+                columns.set(board.columns);
+            }
+        }
+    });
+
+    rsx! {
+        // Backdrop
+        div {
+            class: "fixed inset-0 z-40",
+            onclick: move |_| props.on_close.call(()),
+        }
+        // Menu
+        div {
+            class: "absolute left-0 top-full mt-1 w-48 rounded-lg border border-slate-600 bg-slate-800 shadow-xl z-50",
+            role: "menu",
+            aria_label: "Move card to column",
+            div {
+                class: "px-3 py-2 border-b border-slate-700",
+                span { class: "text-xs font-medium text-slate-400 uppercase", "Move to..." }
+            }
+            div {
+                class: "py-1 max-h-48 overflow-y-auto",
+                for col in columns() {
+                    if col.id != props.current_column_id {
+                        button {
+                            key: "{col.id}",
+                            class: "w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700 focus:bg-slate-700 focus:outline-none",
+                            role: "menuitem",
+                            tabindex: "0",
+                            onclick: {
+                                let col_id = col.id.clone();
+                                move |_| props.on_move.call(col_id.clone())
+                            },
+                            "{col.name}"
+                        }
+                    }
+                }
+            }
+            div {
+                class: "px-3 py-2 border-t border-slate-700",
+                span { class: "text-xs text-slate-500", "Press Esc to cancel" }
+            }
+        }
+    }
+}
+
+/// Keyboard shortcuts help tooltip.
+#[derive(Props, Clone, PartialEq)]
+struct KeyboardHelpTooltipProps {
+    on_close: EventHandler<()>,
+}
+
+#[component]
+fn KeyboardHelpTooltip(props: KeyboardHelpTooltipProps) -> Element {
+    rsx! {
+        // Backdrop
+        div {
+            class: "fixed inset-0 z-40",
+            onclick: move |_| props.on_close.call(()),
+        }
+        // Tooltip
+        div {
+            class: "absolute left-0 top-full mt-1 w-64 rounded-lg border border-slate-600 bg-slate-800 shadow-xl z-50 p-4",
+            role: "tooltip",
+            aria_label: "Keyboard shortcuts",
+            h4 { class: "text-sm font-semibold text-white mb-3", "Keyboard Shortcuts" }
+            div {
+                class: "space-y-2 text-xs",
+                ShortcutRow { keys: "Enter", description: "Open card details" }
+                ShortcutRow { keys: "m", description: "Open move menu" }
+                ShortcutRow { keys: "Ctrl + ←/→", description: "Move to adjacent column" }
+                ShortcutRow { keys: "Ctrl + ↑/↓", description: "Move within column" }
+                ShortcutRow { keys: "?", description: "Toggle this help" }
+                ShortcutRow { keys: "Esc", description: "Close menus" }
+            }
+            div {
+                class: "mt-3 pt-2 border-t border-slate-700",
+                span { class: "text-xs text-slate-500", "Press ? or Esc to close" }
+            }
+        }
+    }
+}
+
+/// Single shortcut row in the help tooltip.
+#[derive(Props, Clone, PartialEq)]
+struct ShortcutRowProps {
+    keys: &'static str,
+    description: &'static str,
+}
+
+#[component]
+fn ShortcutRow(props: ShortcutRowProps) -> Element {
+    rsx! {
+        div {
+            class: "flex justify-between items-center",
+            span {
+                class: "px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-mono",
+                "{props.keys}"
+            }
+            span { class: "text-slate-400", "{props.description}" }
         }
     }
 }

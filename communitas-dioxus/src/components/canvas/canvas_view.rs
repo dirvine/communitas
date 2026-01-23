@@ -36,6 +36,15 @@ pub struct CanvasViewProps {
     /// Callback when redo is triggered (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y).
     #[props(default)]
     pub on_redo: Option<EventHandler<()>>,
+    /// Callback when tool is selected via keyboard shortcut (1-9).
+    #[props(default)]
+    pub on_tool_select: Option<EventHandler<u32>>,
+    /// Callback when Escape is pressed (deselect all).
+    #[props(default)]
+    pub on_deselect: Option<EventHandler<()>>,
+    /// Callback when Delete/Backspace is pressed (delete selected).
+    #[props(default)]
+    pub on_delete_selected: Option<EventHandler<()>>,
 }
 
 /// Main canvas view for rendering elements and handling interactions.
@@ -46,6 +55,9 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
 
     // Subscribe to canvas state
     let mut canvas_snapshot = use_signal(|| canvas_service.current_snapshot());
+
+    // Keyboard shortcut help overlay visibility
+    let mut show_help = use_signal(|| false);
 
     // Track recently conflicted elements for flash animation (TODO: implement conflict UI)
     let _conflict_flash_ids = use_signal(Vec::<String>::new);
@@ -66,13 +78,55 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
 
     let snapshot = canvas_snapshot();
 
-    // Keyboard handler for undo/redo shortcuts
+    // Keyboard handler for canvas shortcuts
     let on_undo = props.on_undo;
     let on_redo = props.on_redo;
+    let on_tool_select = props.on_tool_select;
+    let on_deselect = props.on_deselect;
+    let on_delete_selected = props.on_delete_selected;
     let handle_keydown = move |evt: KeyboardEvent| {
         let key = evt.key();
         let ctrl_or_meta = evt.modifiers().ctrl() || evt.modifiers().meta();
         let shift = evt.modifiers().shift();
+
+        // Don't handle shortcuts if modifier keys are pressed (except for undo/redo)
+        match &key {
+            // Tool shortcuts: 1-9 keys (without modifiers)
+            Key::Character(c) if !ctrl_or_meta && !shift && c.len() == 1 => {
+                if let Some(ch) = c.chars().next() {
+                    // Number keys 1-9 for tool selection
+                    if let Some(digit) = ch.to_digit(10) && (1..=9).contains(&digit) {
+                        evt.prevent_default();
+                        if let Some(handler) = &on_tool_select {
+                            handler.call(digit);
+                        }
+                    }
+                    // ? key for help overlay
+                    if ch == '?' {
+                        evt.prevent_default();
+                        show_help.set(!show_help());
+                    }
+                }
+            }
+            // Escape to deselect all
+            Key::Escape => {
+                evt.prevent_default();
+                show_help.set(false);
+                if let Some(handler) = &on_deselect {
+                    handler.call(());
+                }
+            }
+            // Delete/Backspace to remove selected elements
+            Key::Delete | Key::Backspace => {
+                if !ctrl_or_meta {
+                    evt.prevent_default();
+                    if let Some(handler) = &on_delete_selected {
+                        handler.call(());
+                    }
+                }
+            }
+            _ => {}
+        }
 
         // Cmd/Ctrl+Z = Undo
         if ctrl_or_meta && !shift && key == Key::Character("z".to_string()) {
@@ -222,6 +276,56 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
             }
             // Remote cursors overlay
             {render_remote_cursors(&snapshot.remote_cursors, snapshot.viewport_width, snapshot.viewport_height)}
+
+            // Keyboard shortcuts help overlay (? key to toggle)
+            if show_help() {
+                div {
+                    class: "absolute inset-0 bg-slate-900/80 flex items-center justify-center z-50",
+                    onclick: move |_| show_help.set(false),
+
+                    div {
+                        class: "bg-slate-800 rounded-lg p-6 max-w-md shadow-xl",
+                        role: "dialog",
+                        aria_modal: "true",
+                        aria_label: "Keyboard shortcuts",
+                        onclick: move |e| e.stop_propagation(),
+
+                        h2 {
+                            class: "text-lg font-semibold text-white mb-4",
+                            "Keyboard Shortcuts"
+                        }
+
+                        div {
+                            class: "grid grid-cols-2 gap-2 text-sm",
+
+                            // Tool shortcuts
+                            kbd { class: "bg-slate-700 px-2 py-1 rounded text-slate-300", "1-9" }
+                            span { class: "text-slate-400", "Select tool" }
+
+                            kbd { class: "bg-slate-700 px-2 py-1 rounded text-slate-300", "Esc" }
+                            span { class: "text-slate-400", "Deselect all" }
+
+                            kbd { class: "bg-slate-700 px-2 py-1 rounded text-slate-300", "Delete" }
+                            span { class: "text-slate-400", "Delete selected" }
+
+                            kbd { class: "bg-slate-700 px-2 py-1 rounded text-slate-300", "Ctrl+Z" }
+                            span { class: "text-slate-400", "Undo" }
+
+                            kbd { class: "bg-slate-700 px-2 py-1 rounded text-slate-300", "Ctrl+Y" }
+                            span { class: "text-slate-400", "Redo" }
+
+                            kbd { class: "bg-slate-700 px-2 py-1 rounded text-slate-300", "?" }
+                            span { class: "text-slate-400", "Toggle this help" }
+                        }
+
+                        button {
+                            class: "mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors",
+                            onclick: move |_| show_help.set(false),
+                            "Close"
+                        }
+                    }
+                }
+            }
         }
     }
 }

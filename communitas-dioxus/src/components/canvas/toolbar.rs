@@ -30,28 +30,72 @@ pub struct CanvasToolbarProps {
 #[component]
 pub fn CanvasToolbar(props: CanvasToolbarProps) -> Element {
     let selected = props.selected_tool;
+    let tools: Vec<_> = ToolType::all().to_vec();
+    let tool_count = tools.len();
+
+    // Track focused tool index for roving tabindex
+    let mut focused_index = use_signal(|| 0usize);
+
+    // Arrow key navigation handler
+    let handle_keydown = move |evt: KeyboardEvent| {
+        let key = evt.key();
+        let current = focused_index();
+
+        match key {
+            Key::ArrowRight | Key::ArrowDown => {
+                evt.prevent_default();
+                let next = (current + 1) % tool_count;
+                focused_index.set(next);
+            }
+            Key::ArrowLeft | Key::ArrowUp => {
+                evt.prevent_default();
+                let prev = if current == 0 {
+                    tool_count - 1
+                } else {
+                    current - 1
+                };
+                focused_index.set(prev);
+            }
+            Key::Home => {
+                evt.prevent_default();
+                focused_index.set(0);
+            }
+            Key::End => {
+                evt.prevent_default();
+                focused_index.set(tool_count - 1);
+            }
+            _ => {}
+        }
+    };
 
     rsx! {
         div {
             class: "canvas-toolbar flex items-center gap-1 p-2 bg-slate-800 rounded-lg",
             role: "toolbar",
             aria_label: "Canvas tools",
+            onkeydown: handle_keydown,
             // Drawing tools
             div {
                 class: "flex items-center gap-1 pr-2 border-r border-slate-700",
-                for tool in ToolType::all() {
+                role: "group",
+                aria_label: "Drawing tools",
+                for (index, tool) in tools.iter().enumerate() {
                     ToolButton {
                         key: "{tool:?}",
                         tool: *tool,
                         selected: *tool == selected,
+                        focused: index == focused_index(),
+                        shortcut: (index + 1).to_string(),
                         on_click: {
                             let on_change = props.on_tool_change;
                             move |t| {
+                                focused_index.set(index);
                                 if let Some(handler) = &on_change {
                                     handler.call(t);
                                 }
                             }
                         },
+                        on_focus: move |_| focused_index.set(index),
                     }
                 }
             }
@@ -112,7 +156,16 @@ pub fn CanvasToolbar(props: CanvasToolbarProps) -> Element {
 struct ToolButtonProps {
     tool: ToolType,
     selected: bool,
+    /// Whether this button has keyboard focus (roving tabindex).
+    #[props(default = false)]
+    focused: bool,
+    /// Keyboard shortcut number (1-9).
+    #[props(default)]
+    shortcut: String,
     on_click: EventHandler<ToolType>,
+    /// Callback when button receives focus.
+    #[props(default)]
+    on_focus: Option<EventHandler<()>>,
 }
 
 /// Individual tool button in the toolbar.
@@ -121,6 +174,8 @@ fn ToolButton(props: ToolButtonProps) -> Element {
     let tool = props.tool;
     let icon = tool_icon(tool);
     let label = tool.label();
+    let shortcut = &props.shortcut;
+    let on_focus = props.on_focus;
 
     let bg_class = if props.selected {
         "bg-emerald-600 text-white"
@@ -128,13 +183,29 @@ fn ToolButton(props: ToolButtonProps) -> Element {
         "hover:bg-slate-700 text-slate-300"
     };
 
+    // Roving tabindex: only focused button is in tab order
+    let tab_index = if props.focused { "0" } else { "-1" };
+
+    // Include shortcut in title if available
+    let title_text = if shortcut.is_empty() {
+        label.to_string()
+    } else {
+        format!("{} ({})", label, shortcut)
+    };
+
     rsx! {
         button {
             class: format!("p-2 rounded-lg transition-colors {}", bg_class),
-            title: "{label}",
-            aria_label: "{label}",
+            tabindex: "{tab_index}",
+            title: "{title_text}",
+            aria_label: "{title_text}",
             aria_pressed: props.selected,
             onclick: move |_| props.on_click.call(tool),
+            onfocus: move |_| {
+                if let Some(handler) = &on_focus {
+                    handler.call(());
+                }
+            },
             span { class: "text-lg", "{icon}" }
         }
     }

@@ -11,6 +11,7 @@ pub mod tokens;
 pub mod version;
 
 use communitas_core::generate_id_words;
+
 use communitas_ui_api::{
     OrganizationCategory, PresenceStatus, SampleWords, UnifiedContact, UnifiedEntity,
     UnifiedEntityType,
@@ -25,6 +26,7 @@ use dioxus::prelude::*;
 use dioxus_logger::tracing::Level;
 use futures::StreamExt;
 use native_dialog::{MessageDialog, MessageType};
+use onboarding::{TOUR_STEPS, TourOverlay, TourState, use_tour_state};
 use std::{
     borrow::Cow,
     sync::{Arc, OnceLock},
@@ -268,6 +270,9 @@ fn App() -> Element {
     use_context_provider(|| services_clone);
     use_context_provider(|| Signal::new(AuthState::default()));
 
+    // Onboarding tour state
+    let mut tour_state = use_context_provider(|| Signal::new(TourState::new(TOUR_STEPS.len())));
+
     // Log startup timing on first render (runs once)
     use_effect(|| {
         if let Some(start) = STARTUP_TIME.get() {
@@ -280,10 +285,46 @@ fn App() -> Element {
         }
     });
 
+    // Tour navigation handlers
+    let on_next = move |_: ()| {
+        tour_state.with_mut(|state| {
+            state.next();
+        });
+    };
+
+    let on_previous = move |_: ()| {
+        tour_state.with_mut(|state| {
+            state.previous();
+        });
+    };
+
+    let on_skip = move |_: ()| {
+        tour_state.with_mut(|state| {
+            state.skip();
+        });
+        info!(target: "ui.onboarding", "Tour skipped by user");
+    };
+
+    let on_finish = move |_: ()| {
+        tour_state.with_mut(|state| {
+            state.complete();
+        });
+        info!(target: "ui.onboarding", "Tour completed successfully");
+    };
+
     rsx! {
         AppLifecycleManager {}
         RouteObserver {}
         Router::<Route> {}
+
+        // Onboarding tour overlay (rendered above all content)
+        TourOverlay {
+            tour_state: tour_state,
+            on_next: on_next,
+            on_previous: on_previous,
+            on_skip: on_skip,
+            on_finish: on_finish,
+        }
     }
 }
 
@@ -292,10 +333,14 @@ fn AppLifecycleManager() -> Element {
     let services = use_context::<Arc<UiServices>>();
     let mut auth = use_auth();
     let phase = auth.read().phase;
+    let mut tour_state = use_tour_state();
 
     // Track whether auto-login has been attempted to prevent duplicate attempts
     // when auth state flickers or component re-renders
     let mut auto_login_attempted = use_signal(|| false);
+
+    // Track whether tour has been triggered for this session
+    let mut tour_triggered = use_signal(|| false);
 
     // Clone services for each future
     let services_for_autologin = services.clone();
@@ -343,6 +388,26 @@ fn AppLifecycleManager() -> Element {
             }
         }
     });
+
+    // Trigger onboarding tour for new users after first authentication
+    use_effect(move || {
+        if matches!(phase, AuthPhase::Authenticated) && !tour_triggered() {
+            // Mark as triggered to prevent re-triggering
+            tour_triggered.set(true);
+
+            // Check if user should see onboarding (first run or version upgrade)
+            // For now, start tour for demonstration - in production, check AppConfig
+            // TODO: Integrate with AppConfig.should_show_onboarding() when service is available
+            let should_show = !tour_state.read().skipped;
+            if should_show {
+                info!(target: "ui.onboarding", "Starting onboarding tour for authenticated user");
+                tour_state.with_mut(|state| {
+                    state.start();
+                });
+            }
+        }
+    });
+
     rsx! { Fragment {} }
 }
 
@@ -1165,10 +1230,48 @@ fn NetworkRoute() -> Element {
 
 #[component]
 fn MoreRoute() -> Element {
+    let mut tour_state = use_tour_state();
+
+    let start_tour = move |_| {
+        tour_state.with_mut(|state| {
+            state.start();
+        });
+        info!(target: "ui.onboarding", "Tour started from Settings");
+    };
+
     render_authenticated_page(
         "More",
         rsx! {
-            PlaceholderPanel { title: "More".into(), body: "Settings, MCP tools, and advanced utilities.".into() }
+            div { class: "space-y-6",
+                // Version info section
+                div {
+                    class: "rounded-xl border border-slate-800 bg-slate-950/60 p-6",
+                    h2 { class: "mb-4 text-lg font-semibold text-slate-100", "About" }
+                    div { class: "space-y-2 text-sm text-slate-400",
+                        p { "Version: {version::CURRENT.version}" }
+                        p { "Build: {version::CURRENT.commit_hash}" }
+                        p { "Platform: {version::CURRENT.target}" }
+                    }
+                }
+
+                // Help section with tour restart
+                div {
+                    class: "rounded-xl border border-slate-800 bg-slate-950/60 p-6",
+                    h2 { class: "mb-4 text-lg font-semibold text-slate-100", "Help" }
+                    p { class: "mb-4 text-sm text-slate-400",
+                        "New to Communitas? Take a guided tour of the main features."
+                    }
+                    button {
+                        class: "rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950",
+                        r#type: "button",
+                        onclick: start_tour,
+                        "Start Tour"
+                    }
+                }
+
+                // Placeholder for additional settings
+                PlaceholderPanel { title: "Settings".into(), body: "Additional settings and MCP tools coming soon.".into() }
+            }
         },
     )
 }

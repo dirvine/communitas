@@ -1,5 +1,6 @@
 //! Dioxus UI components for Communitas.
 
+pub mod announcer;
 pub mod call;
 pub mod canvas;
 mod composer;
@@ -57,4 +58,11 @@ pub use skeleton::{
 #[allow(unused_imports)]
 pub use error_boundary::{
     ErrorBanner, ErrorCard, ErrorPage, NetworkError, WarningBanner, user_friendly_error,
+};
+// Re-export announcer components for screen reader accessibility
+#[allow(unused_imports)]
+pub use announcer::{
+    AnnouncementMode, Announcer, AnnouncerContext, announce_action, announce_assertive,
+    announce_count, announce_error, announce_loaded, announce_loading, announce_navigation,
+    announce_polite, announce_success, use_announcer,
 };

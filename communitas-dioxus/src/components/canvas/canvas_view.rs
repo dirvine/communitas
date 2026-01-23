@@ -95,7 +95,9 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
             Key::Character(c) if !ctrl_or_meta && !shift && c.len() == 1 => {
                 if let Some(ch) = c.chars().next() {
                     // Number keys 1-9 for tool selection
-                    if let Some(digit) = ch.to_digit(10) && (1..=9).contains(&digit) {
+                    if let Some(digit) = ch.to_digit(10)
+                        && (1..=9).contains(&digit)
+                    {
                         evt.prevent_default();
                         if let Some(handler) = &on_tool_select {
                             handler.call(digit);

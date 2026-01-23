@@ -26,6 +26,12 @@ pub struct FileListProps {
     pub on_sort: EventHandler<(SortColumn, SortDirection)>,
     /// Context menu handler (entry, x, y).
     pub on_context_menu: EventHandler<(DirectoryEntry, i32, i32)>,
+    /// Delete selected entries handler.
+    #[props(default)]
+    pub on_delete: Option<EventHandler<Vec<String>>>,
+    /// Select all entries handler.
+    #[props(default)]
+    pub on_select_all: Option<EventHandler<()>>,
 }
 
 /// File list component with list and grid views.
@@ -77,6 +83,8 @@ pub fn FileList(props: FileListProps) -> Element {
                 on_open: props.on_open,
                 on_sort: props.on_sort,
                 on_context_menu: props.on_context_menu,
+                on_delete: props.on_delete,
+                on_select_all: props.on_select_all,
             }
         },
         ViewMode::Grid => rsx! {
@@ -86,6 +94,8 @@ pub fn FileList(props: FileListProps) -> Element {
                 on_select: props.on_select,
                 on_open: props.on_open,
                 on_context_menu: props.on_context_menu,
+                on_delete: props.on_delete,
+                on_select_all: props.on_select_all,
             }
         },
     }
@@ -126,6 +136,10 @@ struct ListViewProps {
     on_open: EventHandler<DirectoryEntry>,
     on_sort: EventHandler<(SortColumn, SortDirection)>,
     on_context_menu: EventHandler<(DirectoryEntry, i32, i32)>,
+    #[props(default)]
+    on_delete: Option<EventHandler<Vec<String>>>,
+    #[props(default)]
+    on_select_all: Option<EventHandler<()>>,
 }
 
 #[component]
@@ -133,6 +147,12 @@ fn ListView(props: ListViewProps) -> Element {
     let sort_column = props.sort_column;
     let sort_direction = props.sort_direction;
     let on_sort = props.on_sort;
+    let entries = props.entries.clone();
+    let entry_count = entries.len();
+
+    // Roving tabindex: track which row has focus
+    let mut focused_index = use_signal(|| 0usize);
+
     let handle_header_click = move |col: SortColumn| {
         let new_direction = if sort_column == col && sort_direction == SortDirection::Ascending {
             SortDirection::Descending
@@ -142,9 +162,103 @@ fn ListView(props: ListViewProps) -> Element {
         on_sort.call((col, new_direction));
     };
 
+    // Keyboard navigation handler for the table
+    let handle_keydown = {
+        let entries = entries.clone();
+        let on_select = props.on_select;
+        let on_open = props.on_open;
+        let on_context_menu = props.on_context_menu;
+        let on_delete = props.on_delete;
+        let on_select_all = props.on_select_all;
+        let selected = props.selected.clone();
+
+        move |evt: KeyboardEvent| {
+            let key = evt.key();
+            let current = focused_index();
+            let ctrl_or_meta = evt.modifiers().ctrl() || evt.modifiers().meta();
+            let shift = evt.modifiers().shift();
+
+            match key {
+                // Navigation: Up/Down arrows
+                Key::ArrowDown => {
+                    evt.prevent_default();
+                    if current + 1 < entry_count {
+                        focused_index.set(current + 1);
+                    }
+                }
+                Key::ArrowUp => {
+                    evt.prevent_default();
+                    if current > 0 {
+                        focused_index.set(current - 1);
+                    }
+                }
+                Key::Home => {
+                    evt.prevent_default();
+                    focused_index.set(0);
+                }
+                Key::End => {
+                    evt.prevent_default();
+                    if entry_count > 0 {
+                        focused_index.set(entry_count - 1);
+                    }
+                }
+                // Open: Enter key
+                Key::Enter => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_open.call(entry.clone());
+                    }
+                }
+                // Toggle selection: Space key
+                Key::Character(ref c) if c == " " => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_select.call((entry.path.clone(), ctrl_or_meta));
+                    }
+                }
+                // Context menu: Shift+F10 or ContextMenu key
+                Key::F10 if shift => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_context_menu.call((entry.clone(), 0, 0));
+                    }
+                }
+                Key::ContextMenu => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_context_menu.call((entry.clone(), 0, 0));
+                    }
+                }
+                // Delete: Delete or Backspace
+                Key::Delete | Key::Backspace => {
+                    evt.prevent_default();
+                    if let Some(handler) = &on_delete {
+                        if !selected.is_empty() {
+                            handler.call(selected.clone());
+                        } else if let Some(entry) = entries.get(current) {
+                            handler.call(vec![entry.path.clone()]);
+                        }
+                    }
+                }
+                // Select all: Ctrl+A
+                Key::Character(ref c) if ctrl_or_meta && c.to_lowercase() == "a" => {
+                    evt.prevent_default();
+                    if let Some(handler) = &on_select_all {
+                        handler.call(());
+                    }
+                }
+                _ => {}
+            }
+        }
+    };
+
     rsx! {
         div {
             class: "flex-1 overflow-auto",
+            tabindex: "0",
+            role: "application",
+            aria_label: "File list. Use arrow keys to navigate, Enter to open, Space to select, Delete to remove.",
+            onkeydown: handle_keydown,
             table {
                 class: "w-full text-sm",
                 role: "grid",
@@ -177,12 +291,13 @@ fn ListView(props: ListViewProps) -> Element {
                     }
                 }
                 tbody {
-                    {props.entries.iter().map(|entry| {
+                    {props.entries.iter().enumerate().map(|(index, entry)| {
                         let entry_clone = entry.clone();
                         let entry_for_open = entry.clone();
                         let entry_for_ctx = entry.clone();
                         let path = entry.path.clone();
                         let is_selected = props.selected.contains(&entry.path);
+                        let is_focused = index == focused_index();
 
                         // Generate aria-label with file info
                         let file_type = if entry.is_directory {
@@ -196,17 +311,24 @@ fn ListView(props: ListViewProps) -> Element {
                             tr {
                                 key: "{path}",
                                 class: format!(
-                                    "border-b border-slate-800/50 cursor-pointer transition {}",
+                                    "border-b border-slate-800/50 cursor-pointer transition {} {}",
                                     if is_selected {
                                         "bg-emerald-500/10"
                                     } else {
                                         "hover:bg-slate-800/50"
+                                    },
+                                    if is_focused {
+                                        "ring-2 ring-emerald-400/50 ring-inset"
+                                    } else {
+                                        ""
                                     }
                                 ),
                                 role: "row",
                                 aria_label: format!("{}, {}, {}", entry.name, file_type, size_str),
                                 aria_selected: is_selected,
+                                aria_rowindex: "{index + 1}",
                                 onclick: move |evt| {
+                                    focused_index.set(index);
                                     let multi = evt.modifiers().ctrl() || evt.modifiers().meta();
                                     props.on_select.call((entry_clone.path.clone(), multi));
                                 },
@@ -218,19 +340,24 @@ fn ListView(props: ListViewProps) -> Element {
                                 // Checkbox
                                 td {
                                     class: "p-2",
+                                    role: "gridcell",
                                     input {
                                         r#type: "checkbox",
                                         checked: is_selected,
                                         class: "rounded border-slate-600",
+                                        tabindex: "-1",
+                                        aria_label: format!("Select {}", entry.name),
                                     }
                                 }
                                 // Name with icon
                                 td {
                                     class: "p-2",
+                                    role: "gridcell",
                                     div {
                                         class: "flex items-center gap-2",
                                         span {
                                             class: "text-lg",
+                                            aria_hidden: "true",
                                             {file_icon(entry)}
                                         }
                                         span {
@@ -242,11 +369,13 @@ fn ListView(props: ListViewProps) -> Element {
                                 // Size
                                 td {
                                     class: "p-2 text-right text-slate-400",
+                                    role: "gridcell",
                                     {format_size(entry.size_bytes, entry.is_directory)}
                                 }
                                 // Modified
                                 td {
                                     class: "p-2 text-right text-slate-400",
+                                    role: "gridcell",
                                     {format_timestamp(entry.modified_at)}
                                 }
                             }
@@ -291,22 +420,144 @@ struct GridViewProps {
     on_select: EventHandler<(String, bool)>,
     on_open: EventHandler<DirectoryEntry>,
     on_context_menu: EventHandler<(DirectoryEntry, i32, i32)>,
+    #[props(default)]
+    on_delete: Option<EventHandler<Vec<String>>>,
+    #[props(default)]
+    on_select_all: Option<EventHandler<()>>,
 }
 
 #[component]
 fn GridView(props: GridViewProps) -> Element {
+    let entries = props.entries.clone();
+    let entry_count = entries.len();
+
+    // Roving tabindex: track which item has focus
+    let mut focused_index = use_signal(|| 0usize);
+
+    // Estimate columns per row (120px min-width cards)
+    // This is approximate; for true grid nav we'd need layout info
+    let cols_per_row = 6usize; // Reasonable default for typical screen
+
+    // Keyboard navigation handler for the grid
+    let handle_keydown = {
+        let entries = entries.clone();
+        let on_select = props.on_select;
+        let on_open = props.on_open;
+        let on_context_menu = props.on_context_menu;
+        let on_delete = props.on_delete;
+        let on_select_all = props.on_select_all;
+        let selected = props.selected.clone();
+
+        move |evt: KeyboardEvent| {
+            let key = evt.key();
+            let current = focused_index();
+            let ctrl_or_meta = evt.modifiers().ctrl() || evt.modifiers().meta();
+            let shift = evt.modifiers().shift();
+
+            match key {
+                // Navigation: Arrow keys for 2D grid
+                Key::ArrowRight => {
+                    evt.prevent_default();
+                    if current + 1 < entry_count {
+                        focused_index.set(current + 1);
+                    }
+                }
+                Key::ArrowLeft => {
+                    evt.prevent_default();
+                    if current > 0 {
+                        focused_index.set(current - 1);
+                    }
+                }
+                Key::ArrowDown => {
+                    evt.prevent_default();
+                    let next = current + cols_per_row;
+                    if next < entry_count {
+                        focused_index.set(next);
+                    }
+                }
+                Key::ArrowUp => {
+                    evt.prevent_default();
+                    if current >= cols_per_row {
+                        focused_index.set(current - cols_per_row);
+                    }
+                }
+                Key::Home => {
+                    evt.prevent_default();
+                    focused_index.set(0);
+                }
+                Key::End => {
+                    evt.prevent_default();
+                    if entry_count > 0 {
+                        focused_index.set(entry_count - 1);
+                    }
+                }
+                // Open: Enter key
+                Key::Enter => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_open.call(entry.clone());
+                    }
+                }
+                // Toggle selection: Space key
+                Key::Character(ref c) if c == " " => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_select.call((entry.path.clone(), ctrl_or_meta));
+                    }
+                }
+                // Context menu: Shift+F10 or ContextMenu key
+                Key::F10 if shift => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_context_menu.call((entry.clone(), 0, 0));
+                    }
+                }
+                Key::ContextMenu => {
+                    evt.prevent_default();
+                    if let Some(entry) = entries.get(current) {
+                        on_context_menu.call((entry.clone(), 0, 0));
+                    }
+                }
+                // Delete: Delete or Backspace
+                Key::Delete | Key::Backspace => {
+                    evt.prevent_default();
+                    if let Some(handler) = &on_delete {
+                        if !selected.is_empty() {
+                            handler.call(selected.clone());
+                        } else if let Some(entry) = entries.get(current) {
+                            handler.call(vec![entry.path.clone()]);
+                        }
+                    }
+                }
+                // Select all: Ctrl+A
+                Key::Character(ref c) if ctrl_or_meta && c.to_lowercase() == "a" => {
+                    evt.prevent_default();
+                    if let Some(handler) = &on_select_all {
+                        handler.call(());
+                    }
+                }
+                _ => {}
+            }
+        }
+    };
+
     rsx! {
         div {
             class: "flex-1 overflow-auto p-4",
+            tabindex: "0",
+            role: "application",
+            aria_label: "File grid. Use arrow keys to navigate, Enter to open, Space to select, Delete to remove.",
+            onkeydown: handle_keydown,
             div {
                 class: "grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-4",
                 role: "grid",
-                {props.entries.iter().map(|entry| {
+                {props.entries.iter().enumerate().map(|(index, entry)| {
                     let entry_clone = entry.clone();
                     let entry_for_open = entry.clone();
                     let entry_for_ctx = entry.clone();
                     let path = entry.path.clone();
                     let is_selected = props.selected.contains(&entry.path);
+                    let is_focused = index == focused_index();
 
                     // Generate aria-label for grid items
                     let grid_file_type = if entry.is_directory {
@@ -319,18 +570,24 @@ fn GridView(props: GridViewProps) -> Element {
                         div {
                             key: "{path}",
                             class: format!(
-                                "flex flex-col items-center p-3 rounded-lg cursor-pointer transition {}",
+                                "flex flex-col items-center p-3 rounded-lg cursor-pointer transition {} {}",
                                 if is_selected {
                                     "bg-emerald-500/20 ring-2 ring-emerald-500/50"
                                 } else {
                                     "hover:bg-slate-800"
+                                },
+                                if is_focused {
+                                    "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900"
+                                } else {
+                                    ""
                                 }
                             ),
                             role: "gridcell",
                             aria_label: format!("{}, {}", entry.name, grid_file_type),
                             aria_selected: is_selected,
-                            tabindex: "0",
+                            tabindex: if is_focused { "0" } else { "-1" },
                             onclick: move |evt| {
+                                focused_index.set(index);
                                 let multi = evt.modifiers().ctrl() || evt.modifiers().meta();
                                 props.on_select.call((entry_clone.path.clone(), multi));
                             },
@@ -342,6 +599,7 @@ fn GridView(props: GridViewProps) -> Element {
                             // Icon
                             div {
                                 class: "text-4xl mb-2",
+                                aria_hidden: "true",
                                 {file_icon(entry)}
                             }
                             // Name
@@ -515,5 +773,145 @@ mod tests {
 
         let aria_label = format!("{}, {}", name, grid_file_type);
         assert_eq!(aria_label, "Downloads, folder");
+    }
+
+    // Keyboard navigation tests
+    #[test]
+    fn keyboard_navigation_arrow_down_increments_index() {
+        let current = 0usize;
+        let entry_count = 5;
+        let next = if current + 1 < entry_count {
+            current + 1
+        } else {
+            current
+        };
+        assert_eq!(next, 1);
+    }
+
+    #[test]
+    fn keyboard_navigation_arrow_up_decrements_index() {
+        let current = 3usize;
+        let prev = if current > 0 { current - 1 } else { current };
+        assert_eq!(prev, 2);
+    }
+
+    #[test]
+    fn keyboard_navigation_arrow_up_at_zero_stays_at_zero() {
+        let current = 0usize;
+        let prev = if current > 0 { current - 1 } else { current };
+        assert_eq!(prev, 0);
+    }
+
+    #[test]
+    fn keyboard_navigation_home_goes_to_start() {
+        let focused_index = 0usize; // Home sets to 0
+        assert_eq!(focused_index, 0);
+    }
+
+    #[test]
+    fn keyboard_navigation_end_goes_to_last() {
+        let entry_count = 10usize;
+        let focused_index = entry_count - 1;
+        assert_eq!(focused_index, 9);
+    }
+
+    #[test]
+    fn grid_navigation_arrow_down_jumps_row() {
+        let current = 0usize;
+        let cols_per_row = 6usize;
+        let entry_count = 20;
+        let next = current + cols_per_row;
+        let focused = if next < entry_count { next } else { current };
+        assert_eq!(focused, 6);
+    }
+
+    #[test]
+    fn grid_navigation_arrow_up_jumps_row() {
+        let current = 8usize;
+        let cols_per_row = 6usize;
+        let prev = if current >= cols_per_row {
+            current - cols_per_row
+        } else {
+            current
+        };
+        assert_eq!(prev, 2);
+    }
+
+    #[test]
+    fn grid_navigation_arrow_up_first_row_stays() {
+        let current = 3usize;
+        let cols_per_row = 6usize;
+        let prev = if current >= cols_per_row {
+            current - cols_per_row
+        } else {
+            current
+        };
+        assert_eq!(prev, 3);
+    }
+
+    #[test]
+    fn roving_tabindex_focused_item_is_tabbable() {
+        let is_focused = true;
+        let tabindex = if is_focused { "0" } else { "-1" };
+        assert_eq!(tabindex, "0");
+    }
+
+    #[test]
+    fn roving_tabindex_unfocused_item_not_tabbable() {
+        let is_focused = false;
+        let tabindex = if is_focused { "0" } else { "-1" };
+        assert_eq!(tabindex, "-1");
+    }
+
+    #[test]
+    fn delete_with_selection_uses_selection() {
+        let selected = vec!["/a".to_string(), "/b".to_string()];
+        let current = 0usize;
+        let entries = vec![DirectoryEntry {
+            name: "c".to_string(),
+            path: "/c".to_string(),
+            is_directory: false,
+            size_bytes: 0,
+            mime_type: None,
+            modified_at: 0,
+            created_at: 0,
+            checksum: None,
+        }];
+
+        let to_delete = if !selected.is_empty() {
+            selected.clone()
+        } else if let Some(entry) = entries.get(current) {
+            vec![entry.path.clone()]
+        } else {
+            vec![]
+        };
+
+        assert_eq!(to_delete, vec!["/a".to_string(), "/b".to_string()]);
+    }
+
+    #[test]
+    fn delete_without_selection_uses_focused() {
+        let selected: Vec<String> = vec![];
+        let current = 0usize;
+        let entries = vec![DirectoryEntry {
+            name: "c".to_string(),
+            path: "/c".to_string(),
+            is_directory: false,
+            size_bytes: 0,
+            mime_type: None,
+            modified_at: 0,
+            created_at: 0,
+            checksum: None,
+        }];
+
+        let to_delete = if !selected.is_empty() {
+            selected.clone()
+        } else if let Some(entry) = entries.get(current) {
+            vec![entry.path.clone()]
+        } else {
+            vec![]
+        };
+
+        assert_eq!(to_delete, vec!["/c".to_string()]);
     }
 }

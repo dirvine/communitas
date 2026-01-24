@@ -1,6 +1,18 @@
 # Communitas — The Unstoppable Collaboration Platform
 
+[![Release](https://img.shields.io/github/v/release/maidsafe/communitas)](https://github.com/maidsafe/communitas/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/maidsafe/communitas/ci.yml)](https://github.com/maidsafe/communitas/actions)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+
 > **A partition-tolerant, post-quantum secure, peer-to-peer collaboration network that works when the internet doesn't.**
+
+## Download
+
+**[Download Communitas v0.8.0 for macOS →](https://github.com/maidsafe/communitas/releases/latest)**
+
+- **macOS (Universal)**: Supports Intel (x86_64) and Apple Silicon (M1/M2/M3/M4)
+- Signed and notarized by Apple
+- Auto-updates enabled
 
 ## Why Communitas?
 

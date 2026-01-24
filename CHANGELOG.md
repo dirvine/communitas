@@ -4,6 +4,29 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.8.0] - 2026-01-24
+
+### 🎉 Production Release
+
+Communitas v0.8.0 marks the production release of our local-first, post-quantum ready collaboration platform. This release has been thoroughly tested through the beta program and is ready for general use.
+
+### Highlights
+- **Complete Feature Set**: Messaging, Drive, Canvas, Kanban, and Calls all fully functional
+- **Post-Quantum Security**: ML-DSA/ML-KEM cryptography protects your data from future threats
+- **Auto-Updates**: Seamless background updates via GitHub Releases
+- **Accessibility**: Full keyboard navigation and screen reader support
+- **Performance**: Optimized for smooth 60fps operation under 200MB memory
+
+### Changes from Beta
+- Removed beta language from onboarding and UI
+- Production release workflow for stable version tags
+- Updated documentation for general availability
+- Full regression test suite
+
+For detailed feature list, see the v1.0.0-beta.1 (now superseded) release notes below.
+
+---
+
 ## [1.0.0-beta.1] - 2026-01-23
 
 ### 🎉 First Beta Release - M6 Beta-Ready (Apple Desktop)

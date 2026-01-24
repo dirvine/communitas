@@ -1326,7 +1326,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-core"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "ammonia",
  "anyhow",
@@ -1402,7 +1402,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-dioxus"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1428,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-headless"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1468,7 +1468,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-kanban"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1485,7 +1485,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-mcp"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1523,7 +1523,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-p2p-test"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "communitas-core",
@@ -1537,7 +1537,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-ui-api"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1545,7 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-ui-service"
-version = "1.0.0-beta.1"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "blake3",

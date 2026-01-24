@@ -23,6 +23,7 @@ dirs = "5.0"
 cpal = "0.15"
 async-trait = "0.1"
 nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
+scap = "0.0.8"
 
 [dependencies.tokio]
 workspace = true

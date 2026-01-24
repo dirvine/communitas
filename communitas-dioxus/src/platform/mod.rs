@@ -28,9 +28,12 @@
 mod device_enumerator;
 #[allow(dead_code)]
 mod notifications;
+mod screen_source_enumerator;
 mod webview;
 
 pub use device_enumerator::create_device_enumerator;
+#[allow(unused_imports)] // Used by CallLobby when screen share picker is shown
+pub use screen_source_enumerator::create_screen_source_enumerator;
 // Notification functions will be used when call UI is fully integrated
 #[allow(unused_imports)]
 pub use notifications::{

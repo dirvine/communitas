@@ -7,8 +7,8 @@
 //! ## Device Hot-Plug
 //!
 //! The [`CpalDeviceEnumerator`] can be queried at any time to get the current device
-//! list. For hot-plug detection, the UI should call [`CallService::on_devices_changed`]
-//! when system events indicate device changes.
+//! list. For hot-plug detection, the UI should call `CallService::on_devices_changed`
+//! from `communitas_ui_service` when system events indicate device changes.
 
 use async_trait::async_trait;
 use communitas_ui_api::call::{DeviceType, MediaDevice};
@@ -231,8 +231,8 @@ fn sanitize_device_id(name: &str) -> String {
 /// Create a shared device enumerator instance.
 ///
 /// This is the recommended way to create a device enumerator for use with
-/// [`CallService::with_device_enumerator`]. The enumerator is used for lazy
-/// initialization when the call UI is first accessed.
+/// `CallService::with_device_enumerator` from `communitas_ui_service`. The
+/// enumerator is used for lazy initialization when the call UI is first accessed.
 ///
 /// # Example
 ///

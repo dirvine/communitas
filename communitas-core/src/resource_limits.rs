@@ -173,7 +173,7 @@ impl ResourceLimits {
     /// Create resource limits from configuration.
     ///
     /// Logs a warning and uses safe defaults if validation fails.
-    /// For stricter error handling, use [`try_from_config`].
+    /// For stricter error handling, use [`Self::try_from_config`].
     pub fn from_config(config: ResourceLimitsConfig) -> Self {
         match Self::try_from_config(config) {
             Ok(limits) => limits,

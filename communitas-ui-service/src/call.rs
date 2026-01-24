@@ -657,7 +657,7 @@ impl CallService {
 
     /// Query the current status of a call from the core.
     ///
-    /// Unlike [`get_call_state`] which returns locally cached state, this method
+    /// Unlike `get_call_state` which returns locally cached state, this method
     /// queries the Communitas core for the authoritative call status including
     /// mute, video, and screen sharing states.
     ///
@@ -688,7 +688,7 @@ impl CallService {
     /// Query the participant IDs for a specific call from the core.
     ///
     /// Returns a list of participant identifiers. To get full participant details,
-    /// use the locally cached participants via [`get_participants`].
+    /// use the locally cached participants via `get_participants`.
     ///
     /// # Errors
     ///
@@ -2548,8 +2548,8 @@ impl CallService {
     /// added or removed (e.g., USB microphone plugged in/unplugged). It refreshes
     /// the device list and checks if any currently selected devices are missing.
     ///
-    /// If a selected device is no longer available, [`handle_device_disconnection`]
-    /// is called to report the error and update settings.
+    /// If a selected device is no longer available, `handle_device_disconnection`
+    /// is called internally to report the error and update settings.
     #[instrument(skip(self), name = "ui.call.on_devices_changed")]
     pub async fn on_devices_changed(&self) {
         debug!("Device change detected, refreshing device list");

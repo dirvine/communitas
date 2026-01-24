@@ -14,7 +14,7 @@
 //! - BLAKE3 hash verification on load
 //!
 //! ## Storage Layout
-//! ```
+//! ```text
 //! <storage_dir>/blocks/
 //!   ├── metadata.json (hash → metadata, pin status, access time)
 //!   └── blobs/

@@ -169,7 +169,7 @@ impl DirectoryService {
     /// If another refresh is requested during the debounce period, this request
     /// is cancelled (returns Ok without doing work).
     ///
-    /// Use this instead of [`refresh_all`] when responding to events that may
+    /// Use this instead of `refresh_all` when responding to events that may
     /// fire rapidly (e.g., auth state changes, network reconnection).
     #[instrument(name = "ui.directory.refresh_debounced", skip(self))]
     pub async fn refresh_debounced(&self) -> Result<(), DirectoryError> {

@@ -9,7 +9,7 @@
 //! - Enables password-only login on familiar devices
 //!
 //! Architecture:
-//! ```
+//! ```text
 //! ┌─────────────────────────────────────────────────────────┐
 //! │                  User Authentication                    │
 //! │         (Password / Passkey / Four-Word Address)       │

@@ -101,6 +101,9 @@ pub struct KanbanService {
 
 impl KanbanService {
     /// Compile-time capacity for LRU cache (guaranteed non-zero).
+    /// Safety: MAX_BOARD_DOCUMENTS is a non-zero constant (50), so this cannot fail.
+    /// The panic branch is unreachable but required by match exhaustiveness.
+    #[allow(clippy::panic)] // Compile-time assertion, not runtime panic
     const LRU_CAPACITY: NonZeroUsize = match NonZeroUsize::new(MAX_BOARD_DOCUMENTS) {
         Some(n) => n,
         None => panic!("MAX_BOARD_DOCUMENTS must be non-zero"),

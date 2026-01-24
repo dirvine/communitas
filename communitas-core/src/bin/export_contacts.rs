@@ -3,7 +3,8 @@
 //! Outputs a JSON snapshot of contacts with presence info that matches
 //! the format returned by the `list_contacts` MCP tool.
 //!
-//! Usage: export_contacts <four_words> <display_name> <storage_dir> [filter] [--no-presence]
+//! Usage: `export_contacts <four_words> <display_name> <storage_dir> [filter] [--no-presence]`
+//!
 //! Filter options: all (default), online, favorites
 
 #![allow(clippy::print_stdout)] // CLI tool outputs JSON to stdout

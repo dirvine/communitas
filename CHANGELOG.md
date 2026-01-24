@@ -4,6 +4,22 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.8.1] - 2026-01-24
+
+### Patch Release
+
+Minor release addressing CI/CD compliance and documentation quality.
+
+### Fixed
+- Removed `expect()` from `InputValidator::default()` in production code
+- Added `#[allow(clippy::panic)]` for compile-time const assertion in Kanban service
+- Fixed all documentation warnings (broken intra-doc links, code block formats)
+
+### Changed
+- Updated workspace dependency versions for crates.io publishing consistency
+
+---
+
 ## [0.8.0] - 2026-01-24
 
 ### 🎉 Production Release

@@ -8,7 +8,7 @@
 //! ## Device Enumeration
 //!
 //! Use [`create_device_enumerator`] to get a platform-appropriate device enumerator
-//! for use with [`CallService::with_device_enumerator`].
+//! for use with `CallService::with_device_enumerator` from `communitas_ui_service`.
 //!
 //! ```ignore
 //! use communitas_dioxus::platform::create_device_enumerator;

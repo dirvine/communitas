@@ -3,7 +3,8 @@
 //! Outputs a JSON snapshot of conversation threads that matches the format
 //! returned by the `list_threads` MCP tool.
 //!
-//! Usage: export_threads <four_words> <display_name> <storage_dir> [filter]
+//! Usage: `export_threads <four_words> <display_name> <storage_dir> [filter]`
+//!
 //! Filter options: all (default), unread, entities, contacts
 
 #![allow(clippy::print_stdout)] // CLI tool outputs JSON to stdout

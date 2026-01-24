@@ -332,7 +332,7 @@ fn extract_json_path<'a>(
 }
 
 /// Extract a value from an MCP response format
-/// MCP responses have the actual data inside content[0].text as a JSON string
+/// MCP responses have the actual data inside `content[0].text` as a JSON string
 fn extract_from_mcp_response(result: &serde_json::Value, path: &str) -> Option<serde_json::Value> {
     // First try to get the content text and parse it as JSON
     let text = result

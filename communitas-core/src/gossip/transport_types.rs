@@ -7,6 +7,6 @@ use std::sync::Arc;
 
 /// Shared transport type used across Sites components
 ///
-/// This avoids the complexity of Arc<RwLock<Box<dyn GossipTransport>>>
+/// This avoids the complexity of `Arc<RwLock<Box<dyn GossipTransport>>>`
 /// and the Clone requirements. All Sites components use this type.
 pub type SharedTransport = Arc<dyn GossipTransport + Send + Sync>;

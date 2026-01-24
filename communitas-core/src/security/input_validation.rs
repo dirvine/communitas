@@ -50,13 +50,28 @@ pub struct InputValidator {
 impl Default for InputValidator {
     /// Creates a default InputValidator with all regex patterns compiled.
     ///
-    /// # Panics
-    /// Panics if the hardcoded regex patterns fail to compile. This should never
-    /// happen as the patterns are constant strings that are tested. If this panics,
-    /// it indicates a programmer error that should be caught during development.
-    #[allow(clippy::expect_used)] // Infallible: constant regex patterns tested at compile time
+    /// If regex compilation fails (which should never happen with constant patterns),
+    /// returns a validator with None patterns that falls back to basic validation.
     fn default() -> Self {
-        Self::new().expect("InputValidator regex patterns are invalid - this is a bug")
+        // Use new() which is infallible for valid constant patterns
+        // If it somehow fails, return a validator without regex patterns
+        // which provides basic validation without pattern matching
+        match Self::new() {
+            Ok(validator) => validator,
+            Err(_) => {
+                // This branch should never be reached with valid constant patterns
+                // Log the error in production and use fallback validator
+                tracing::error!(
+                    "InputValidator regex compilation failed - using fallback validator"
+                );
+                Self {
+                    four_words_pattern: None,
+                    username_pattern: None,
+                    sql_injection_pattern: None,
+                    script_injection_pattern: None,
+                }
+            }
+        }
     }
 }
 

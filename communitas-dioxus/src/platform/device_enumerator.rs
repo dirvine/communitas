@@ -151,18 +151,63 @@ impl CpalDeviceEnumerator {
         Ok(result)
     }
 
-    /// Enumerate camera devices.
+    /// Enumerate camera devices using nokhwa.
     ///
-    /// Note: Camera enumeration requires platform-specific APIs not provided by cpal.
-    /// This returns an empty list. For real camera support, use platform-specific
-    /// implementations (AVFoundation on macOS, Media Foundation on Windows, etc.).
+    /// Uses the native backend for each platform:
+    /// - macOS: AVFoundation
+    /// - Windows: Media Foundation
+    /// - Linux: V4L2
+    ///
+    /// Returns an empty list if:
+    /// - No cameras are available
+    /// - Camera access permission is denied
+    /// - The platform backend fails to initialize
     fn enumerate_camera_devices(&self) -> Vec<MediaDevice> {
-        debug!("Camera enumeration not implemented via cpal - returning empty list");
-        // TODO: Implement platform-specific camera enumeration
-        // macOS: AVFoundation
-        // Windows: Media Foundation
-        // Linux: V4L2
-        Vec::new()
+        match Self::enumerate_camera_devices_internal() {
+            Ok(cameras) => {
+                debug!(count = cameras.len(), "Enumerated cameras");
+                cameras
+            }
+            Err(e) => {
+                warn!(error = %e, "Camera enumeration failed, returning empty list");
+                Vec::new()
+            }
+        }
+    }
+
+    /// Internal camera enumeration that can fail.
+    fn enumerate_camera_devices_internal() -> Result<Vec<MediaDevice>, CallError> {
+        use nokhwa::utils::ApiBackend;
+
+        // Query available cameras using the native backend for each platform
+        let cameras = nokhwa::query(ApiBackend::Auto).map_err(|e| {
+            CallError::DeviceEnumerationFailed(format!("Failed to query cameras: {e}"))
+        })?;
+
+        let mut result = Vec::new();
+        for camera_info in cameras {
+            // Get camera name, removing quotes if present
+            let name = camera_info.human_name().trim_matches('"').to_string();
+
+            // Generate stable ID from camera index
+            let id = match camera_info.index() {
+                nokhwa::utils::CameraIndex::Index(idx) => format!("camera-{idx}"),
+                nokhwa::utils::CameraIndex::String(s) => {
+                    format!("camera-{}", sanitize_device_id(s.as_str()))
+                }
+            };
+
+            result.push(MediaDevice {
+                id,
+                name,
+                device_type: DeviceType::Camera,
+                is_default: result.is_empty(), // First camera is default
+                is_available: true,
+            });
+        }
+
+        debug!(count = result.len(), "Enumerated cameras via nokhwa");
+        Ok(result)
     }
 }
 
@@ -302,11 +347,17 @@ mod tests {
     }
 
     #[test]
-    fn test_camera_enumeration_returns_empty() {
+    fn test_camera_enumeration_does_not_panic() {
         let enumerator = CpalDeviceEnumerator::new();
+        // Camera enumeration should not panic, even if no cameras are available
+        // or if permission is denied. It should return an empty list gracefully.
         let cameras = enumerator.enumerate_camera_devices();
-        // Camera enumeration is stubbed out
-        assert!(cameras.is_empty());
+        // Verify device structure if any cameras returned
+        for camera in &cameras {
+            assert!(!camera.id.is_empty());
+            assert!(!camera.name.is_empty());
+            assert_eq!(camera.device_type, DeviceType::Camera);
+        }
     }
 
     #[test]

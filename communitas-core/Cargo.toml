@@ -125,9 +125,6 @@ tokio-test = "0.4"
 tempfile = "3.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rustls = { version = "0.23", features = ["ring"] }
-libfuzzer-sys = "0.4"
 serial_test = "3"
-# Fuzzing binary commented out - fuzz directory needs to be created
-# [[bin]]
-# name = "fuzz_crdt_sync"
-# path = "fuzz/fuzz_targets/crdt_sync.rs"
+# libfuzzer-sys removed - causes link failures on Linux CI
+# Add back when fuzz targets are created in a dedicated fuzz/ directory

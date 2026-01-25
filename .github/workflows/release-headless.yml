@@ -32,6 +32,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout saorsa-canvas (dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/saorsa-canvas
+          path: ../saorsa-canvas
+
       - name: Get version
         id: get-version
         run: |
@@ -80,6 +86,12 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout saorsa-canvas (dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/saorsa-canvas
+          path: ../saorsa-canvas
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@1.88.0
@@ -131,6 +143,12 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout saorsa-canvas (dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/saorsa-canvas
+          path: ../saorsa-canvas
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@1.88.0

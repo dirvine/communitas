@@ -11,6 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout saorsa-canvas (dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/saorsa-canvas
+          path: ../saorsa-canvas
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -95,6 +101,12 @@ jobs:
     name: WebDriver (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout saorsa-canvas (dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/saorsa-canvas
+          path: ../saorsa-canvas
 
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'

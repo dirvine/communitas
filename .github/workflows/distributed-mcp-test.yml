@@ -41,6 +41,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout saorsa-canvas (dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/saorsa-canvas
+          path: ../saorsa-canvas
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.88.0
 

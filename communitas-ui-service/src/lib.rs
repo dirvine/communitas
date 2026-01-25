@@ -232,7 +232,11 @@ impl UiServices {
             ))
         };
         let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
-        let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
+        let drive = Arc::new(DriveService::with_storage(
+            auth.clone(),
+            app.clone(),
+            Some(Arc::new(storage.clone())),
+        ));
         let call = Arc::new(CallService::new(auth.clone(), app.clone()));
         let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
         Ok(Self {
@@ -287,7 +291,11 @@ impl UiServices {
             directory.clone(),
         ));
         let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
-        let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
+        let drive = Arc::new(DriveService::with_storage(
+            auth.clone(),
+            app.clone(),
+            Some(Arc::new(storage.clone())),
+        ));
         let call = Arc::new(CallService::with_device_enumerator(
             auth.clone(),
             app.clone(),
@@ -348,7 +356,11 @@ impl UiServices {
             directory.clone(),
         ));
         let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
-        let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
+        let drive = Arc::new(DriveService::with_storage(
+            auth.clone(),
+            app.clone(),
+            Some(Arc::new(storage.clone())),
+        ));
         let call = Arc::new(CallService::with_enumerators(
             auth.clone(),
             app.clone(),

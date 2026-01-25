@@ -22,7 +22,9 @@ use communitas_ui_api::SyncState;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{RwLock, watch};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
+
+use crate::storage::UiStorage;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::util::current_timestamp_millis;
@@ -200,30 +202,52 @@ pub struct DriveService {
     network_available: Arc<RwLock<bool>>,
     /// Default max retries for staged uploads.
     staging_max_retries: u32,
+    /// Optional storage for persistence (resume support).
+    storage: Option<Arc<UiStorage>>,
 }
 
 impl DriveService {
     /// Create a new drive service linked to the auth controller.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
+        Self::with_storage(auth, app, None)
+    }
+
+    /// Create a new drive service with optional persistent storage for resume support.
+    pub fn with_storage(
+        auth: Arc<AuthController>,
+        app: Arc<CommunitasApp>,
+        storage: Option<Arc<UiStorage>>,
+    ) -> Self {
         let (tx, rx) = watch::channel(DriveSnapshot::default());
         let (staging_event_tx, _) = tokio::sync::broadcast::channel(256);
+
+        // Load persisted state if storage is available
+        let (active_uploads, staging_queue) = if let Some(ref store) = storage {
+            let uploads = Self::load_active_uploads_from_storage(store);
+            let staging = Self::load_staging_queue_from_storage(store);
+            (uploads, staging)
+        } else {
+            (HashMap::new(), HashMap::new())
+        };
+
         Self {
             auth,
             app,
             tx,
             rx,
-            active_uploads: Arc::new(RwLock::new(HashMap::new())),
+            active_uploads: Arc::new(RwLock::new(active_uploads)),
             active_downloads: Arc::new(RwLock::new(HashMap::new())),
             upload_counter: Arc::new(RwLock::new(0)),
             download_counter: Arc::new(RwLock::new(0)),
             share_links: Arc::new(RwLock::new(HashMap::new())),
             share_link_stats: Arc::new(RwLock::new(HashMap::new())),
             share_link_counter: Arc::new(RwLock::new(0)),
-            staging_queue: Arc::new(RwLock::new(HashMap::new())),
+            staging_queue: Arc::new(RwLock::new(staging_queue)),
             staging_counter: Arc::new(RwLock::new(0)),
             staging_event_tx,
             network_available: Arc::new(RwLock::new(true)), // Assume online initially
             staging_max_retries: 3,
+            storage,
         }
     }
 
@@ -240,6 +264,108 @@ impl DriveService {
     /// Access the underlying Communitas application.
     pub fn app(&self) -> Arc<CommunitasApp> {
         self.app.clone()
+    }
+
+    // ===== Persistence Helpers =====
+
+    /// Load active uploads from storage (called during init).
+    fn load_active_uploads_from_storage(storage: &UiStorage) -> HashMap<String, UploadProgress> {
+        let path = storage.active_uploads_file();
+        match std::fs::read_to_string(&path) {
+            Ok(contents) => match serde_json::from_str(&contents) {
+                Ok(uploads) => {
+                    debug!(count = ?HashMap::<String, UploadProgress>::len(&uploads), "loaded active uploads from storage");
+                    uploads
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to parse active uploads file, starting fresh");
+                    HashMap::new()
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
+            Err(e) => {
+                warn!(error = %e, "failed to read active uploads file, starting fresh");
+                HashMap::new()
+            }
+        }
+    }
+
+    /// Load staging queue from storage (called during init).
+    fn load_staging_queue_from_storage(storage: &UiStorage) -> HashMap<String, StagedUpload> {
+        let path = storage.staging_queue_file();
+        match std::fs::read_to_string(&path) {
+            Ok(contents) => match serde_json::from_str(&contents) {
+                Ok(queue) => {
+                    debug!(count = ?HashMap::<String, StagedUpload>::len(&queue), "loaded staging queue from storage");
+                    queue
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to parse staging queue file, starting fresh");
+                    HashMap::new()
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
+            Err(e) => {
+                warn!(error = %e, "failed to read staging queue file, starting fresh");
+                HashMap::new()
+            }
+        }
+    }
+
+    /// Persist active uploads to storage (atomic write via temp file + rename).
+    async fn persist_active_uploads(&self) {
+        let Some(ref storage) = self.storage else {
+            return;
+        };
+        let uploads = self.active_uploads.read().await;
+        let path = storage.active_uploads_file();
+
+        // Atomic write: write to temp file, then rename
+        let temp_path = path.with_extension("json.tmp");
+        match serde_json::to_string_pretty(&*uploads) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&temp_path, &json) {
+                    warn!(error = %e, "failed to write active uploads temp file");
+                    return;
+                }
+                if let Err(e) = std::fs::rename(&temp_path, &path) {
+                    warn!(error = %e, "failed to rename active uploads file");
+                    // Clean up temp file on failure
+                    let _ = std::fs::remove_file(&temp_path);
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "failed to serialize active uploads");
+            }
+        }
+    }
+
+    /// Persist staging queue to storage (atomic write via temp file + rename).
+    async fn persist_staging_queue(&self) {
+        let Some(ref storage) = self.storage else {
+            return;
+        };
+        let queue = self.staging_queue.read().await;
+        let path = storage.staging_queue_file();
+
+        // Atomic write: write to temp file, then rename
+        let temp_path = path.with_extension("json.tmp");
+        match serde_json::to_string_pretty(&*queue) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&temp_path, &json) {
+                    warn!(error = %e, "failed to write staging queue temp file");
+                    return;
+                }
+                if let Err(e) = std::fs::rename(&temp_path, &path) {
+                    warn!(error = %e, "failed to rename staging queue file");
+                    // Clean up temp file on failure
+                    let _ = std::fs::remove_file(&temp_path);
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "failed to serialize staging queue");
+            }
+        }
     }
 
     // ===== Disk Operations =====
@@ -3022,6 +3148,7 @@ impl DriveService {
                 upload.updated_at = current_timestamp_millis();
             }
         }
+        self.update_staging_snapshot().await;
 
         let _ = self.staging_event_tx.send(StagingEvent::UploadStarted {
             upload_id: upload_id.to_string(),
@@ -3054,6 +3181,8 @@ impl DriveService {
                 u.conflict = Some(conflict.clone());
                 u.updated_at = current_timestamp_millis();
             }
+            drop(queue);
+            self.update_staging_snapshot().await;
 
             let _ = self.staging_event_tx.send(StagingEvent::ConflictDetected {
                 upload_id: upload_id.to_string(),
@@ -3092,6 +3221,8 @@ impl DriveService {
                         u.state = StagedUploadState::Completed;
                         u.updated_at = current_timestamp_millis();
                     }
+                    drop(queue);
+                    self.update_staging_snapshot().await;
                     return Ok(());
                 }
 
@@ -3111,6 +3242,8 @@ impl DriveService {
                     u.conflict = Some(conflict);
                     u.updated_at = current_timestamp_millis();
                 }
+                drop(queue);
+                self.update_staging_snapshot().await;
 
                 let _ = self.staging_event_tx.send(StagingEvent::ConflictDetected {
                     upload_id: upload_id.to_string(),
@@ -3140,6 +3273,8 @@ impl DriveService {
                     u.state = StagedUploadState::Completed;
                     u.updated_at = current_timestamp_millis();
                 }
+                drop(queue);
+                self.update_staging_snapshot().await;
 
                 let _ = self.staging_event_tx.send(StagingEvent::UploadCompleted {
                     upload_id: upload_id.to_string(),
@@ -3157,6 +3292,8 @@ impl DriveService {
                     u.error = Some(error_msg.clone());
                     u.updated_at = current_timestamp_millis();
                 }
+                drop(queue);
+                self.update_staging_snapshot().await;
 
                 let _ = self.staging_event_tx.send(StagingEvent::UploadFailed {
                     upload_id: upload_id.to_string(),
@@ -3188,6 +3325,7 @@ impl DriveService {
             snap.staging_status = Some(status);
             let _ = self.tx.send(snap);
         }
+        self.persist_staging_queue().await;
     }
 
     // ===== Helper Methods =====
@@ -3210,6 +3348,8 @@ impl DriveService {
         let mut snap = self.rx.borrow().clone();
         snap.uploads = uploads.clone();
         let _ = self.tx.send(snap);
+        drop(uploads); // Release read lock before persisting
+        self.persist_active_uploads().await;
     }
 
     async fn update_download_snapshot(&self) {

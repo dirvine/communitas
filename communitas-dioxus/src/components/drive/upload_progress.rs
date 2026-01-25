@@ -56,6 +56,34 @@ pub fn UploadProgressPanel(props: UploadProgressPanelProps) -> Element {
         // In production, this would remove from the UI list
     };
 
+    // Resume handler (resumes a single upload)
+    let drive_for_resume = services.drive();
+    let on_resume = move |upload_id: String, source_path: String| {
+        let drive = drive_for_resume.clone();
+        spawn(async move {
+            let path = std::path::Path::new(&source_path);
+            let _ = drive.resume_upload_by_id(&upload_id, path).await;
+        });
+    };
+
+    // Resume all handler
+    let drive_for_resume_all = services.drive();
+    let on_resume_all = move |_| {
+        let drive = drive_for_resume_all.clone();
+        let current = uploads();
+        spawn(async move {
+            let source_paths: std::collections::HashMap<String, std::path::PathBuf> = current
+                .iter()
+                .filter(|u| u.state.is_resumable())
+                .map(|u| {
+                    // Use file_path as the source (this should be stored in a separate field in production)
+                    (u.id.clone(), std::path::PathBuf::from(&u.file_path))
+                })
+                .collect();
+            let _ = drive.resume_all_pending(&source_paths).await;
+        });
+    };
+
     let current_uploads = uploads();
 
     if current_uploads.is_empty() {
@@ -86,11 +114,15 @@ pub fn UploadProgressPanel(props: UploadProgressPanelProps) -> Element {
 
     let active_count = current_uploads
         .iter()
-        .filter(|u| !u.state.is_terminal())
+        .filter(|u| !u.state.is_terminal() && !matches!(u.state, UploadState::Resumable))
         .count();
     let completed_count = current_uploads
         .iter()
         .filter(|u| u.state.is_terminal())
+        .count();
+    let resumable_count = current_uploads
+        .iter()
+        .filter(|u| u.state.is_resumable())
         .count();
 
     rsx! {
@@ -105,12 +137,21 @@ pub fn UploadProgressPanel(props: UploadProgressPanelProps) -> Element {
                     class: "text-sm font-semibold text-slate-200",
                     if active_count > 0 {
                         "Uploading {active_count} file(s)..."
+                    } else if resumable_count > 0 {
+                        "{resumable_count} upload(s) can resume"
                     } else {
                         "Uploads complete"
                     }
                 }
                 div {
                     class: "flex items-center gap-2",
+                    if resumable_count > 0 {
+                        button {
+                            class: "text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
+                            onclick: on_resume_all.clone(),
+                            "Resume All"
+                        }
+                    }
                     if completed_count > 0 {
                         button {
                             class: "text-xs text-slate-400 hover:text-slate-200",
@@ -134,7 +175,10 @@ pub fn UploadProgressPanel(props: UploadProgressPanelProps) -> Element {
                     let upload_id = upload.id.clone();
                     let upload_id_cancel = upload_id.clone();
                     let upload_id_dismiss = upload_id.clone();
+                    let upload_id_resume = upload_id.clone();
+                    let source_path_resume = upload.file_path.clone();
                     let on_cancel = on_cancel.clone();
+                    let on_resume = on_resume.clone();
 
                     rsx! {
                         li {
@@ -144,6 +188,7 @@ pub fn UploadProgressPanel(props: UploadProgressPanelProps) -> Element {
                                 upload: upload.clone(),
                                 on_cancel: move |_| on_cancel(upload_id_cancel.clone()),
                                 on_dismiss: move |_| on_dismiss(upload_id_dismiss.clone()),
+                                on_resume: move |_| on_resume(upload_id_resume.clone(), source_path_resume.clone()),
                             }
                         }
                     }
@@ -159,12 +204,20 @@ struct UploadItemProps {
     upload: UploadProgressData,
     on_cancel: EventHandler<()>,
     on_dismiss: EventHandler<()>,
+    on_resume: EventHandler<()>,
 }
 
 #[component]
 fn UploadItem(props: UploadItemProps) -> Element {
     let percent = props.upload.percent_complete();
     let is_terminal = props.upload.state.is_terminal();
+    let is_resumable = props.upload.state.is_resumable();
+
+    // Show resume info if this upload was resumed from a previous session
+    let resume_info = props
+        .upload
+        .resumed_from_bytes
+        .map(|bytes| format!("Resumed from {}", format_bytes(bytes)));
 
     rsx! {
         div {
@@ -200,14 +253,24 @@ fn UploadItem(props: UploadItemProps) -> Element {
                     UploadState::Cancelled => rsx! {
                         span { class: "text-xs text-slate-500", "Cancelled" }
                     },
+                    UploadState::Resumable => rsx! {
+                        span { class: "text-xs text-amber-400", "Resumable" }
+                    },
                 }
             }
-            // Progress bar
-            if !is_terminal {
+            // Resume info if applicable
+            if let Some(info) = resume_info.as_ref() {
+                div {
+                    class: "text-xs text-slate-500",
+                    "{info}"
+                }
+            }
+            // Progress bar - show for active uploads and resumable (to show resume point)
+            if !is_terminal || is_resumable {
                 div {
                     class: "h-1.5 bg-slate-800 rounded-full overflow-hidden",
                     div {
-                        class: "h-full bg-emerald-500 transition-all duration-300",
+                        class: if is_resumable { "h-full bg-amber-500 transition-all duration-300" } else { "h-full bg-emerald-500 transition-all duration-300" },
                         style: "width: {percent}%",
                     }
                 }
@@ -215,7 +278,18 @@ fn UploadItem(props: UploadItemProps) -> Element {
             // Actions
             div {
                 class: "flex justify-end gap-2",
-                if !is_terminal {
+                if is_resumable {
+                    button {
+                        class: "text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
+                        onclick: move |_| props.on_resume.call(()),
+                        "Resume"
+                    }
+                    button {
+                        class: "text-xs text-slate-400 hover:text-slate-200",
+                        onclick: move |_| props.on_dismiss.call(()),
+                        "Dismiss"
+                    }
+                } else if !is_terminal {
                     button {
                         class: "text-xs text-slate-400 hover:text-red-400",
                         onclick: move |_| props.on_cancel.call(()),
@@ -230,6 +304,23 @@ fn UploadItem(props: UploadItemProps) -> Element {
                 }
             }
         }
+    }
+}
+
+/// Formats bytes into a human-readable string.
+fn format_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
     }
 }
 
@@ -287,6 +378,18 @@ mod tests {
         assert!(UploadState::Complete.is_terminal());
         assert!(UploadState::Failed("error".to_string()).is_terminal());
         assert!(UploadState::Cancelled.is_terminal());
+        // Resumable is NOT terminal - it can transition to Uploading
+        assert!(!UploadState::Resumable.is_terminal());
+    }
+
+    #[test]
+    fn upload_state_is_resumable() {
+        assert!(!UploadState::Pending.is_resumable());
+        assert!(!UploadState::Uploading.is_resumable());
+        assert!(!UploadState::Complete.is_resumable());
+        assert!(UploadState::Failed("error".to_string()).is_resumable());
+        assert!(!UploadState::Cancelled.is_resumable());
+        assert!(UploadState::Resumable.is_resumable());
     }
 
     #[test]
@@ -300,7 +403,19 @@ mod tests {
             state: UploadState::Uploading,
             started_at: 0,
             checksum_verified: false,
+            transfer_id: None,
+            resumed_from_bytes: None,
         };
         assert_eq!(progress.percent_complete(), 50);
+    }
+
+    #[test]
+    fn format_bytes_helper() {
+        assert_eq!(format_bytes(0), "0 B");
+        assert_eq!(format_bytes(512), "512 B");
+        assert_eq!(format_bytes(1024), "1.0 KB");
+        assert_eq!(format_bytes(1536), "1.5 KB");
+        assert_eq!(format_bytes(1024 * 1024), "1.0 MB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1.0 GB");
     }
 }

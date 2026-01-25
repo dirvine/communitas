@@ -475,7 +475,7 @@ mod tests {
             allow_outside_focus: false,
         };
         let cloned = config.clone();
-        assert_eq!(cloned.auto_focus_first, true);
-        assert_eq!(cloned.allow_outside_focus, false);
+        assert!(cloned.auto_focus_first);
+        assert!(!cloned.allow_outside_focus);
     }
 }

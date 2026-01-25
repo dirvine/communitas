@@ -69,9 +69,15 @@ toml = "0.8"
 anyhow = "1.0"
 thiserror = "1.0"
 
-# Logging
+# Logging & Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-opentelemetry = "0.23"
+
+# OpenTelemetry
+opentelemetry = { version = "0.22", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.22", features = ["rt-tokio", "metrics"] }
+opentelemetry-otlp = { version = "0.15", features = ["tonic", "metrics"] }
 
 # Cryptography
 blake3 = "1.0"

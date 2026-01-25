@@ -507,10 +507,7 @@ pub fn ConflictBanner(
         spacing::MD
     );
 
-    let content_style = format!(
-        "display: flex; align-items: center; gap: {};",
-        spacing::SM
-    );
+    let content_style = format!("display: flex; align-items: center; gap: {};", spacing::SM);
 
     let text_style = format!(
         "color: {}; font-size: {};",
@@ -518,10 +515,7 @@ pub fn ConflictBanner(
         typography::TEXT_SM
     );
 
-    let actions_style = format!(
-        "display: flex; align-items: center; gap: {};",
-        spacing::SM
-    );
+    let actions_style = format!("display: flex; align-items: center; gap: {};", spacing::SM);
 
     let resolve_button_style = format!(
         "background-color: {}; color: {}; border: none; padding: {} {}; \
@@ -972,12 +966,7 @@ pub fn ToastContainer(props: ToastContainerProps) -> Element {
     }
 
     // Only show max_visible toasts (most recent)
-    let visible_toasts: Vec<_> = props
-        .toasts
-        .iter()
-        .rev()
-        .take(props.max_visible)
-        .collect();
+    let visible_toasts: Vec<_> = props.toasts.iter().rev().take(props.max_visible).collect();
 
     let container_style = format!(
         "position: fixed; bottom: {}; left: 50%; transform: translateX(-50%); \

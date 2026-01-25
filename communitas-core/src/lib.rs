@@ -49,6 +49,7 @@ pub mod keystore;
 pub mod linking_service;
 pub mod message_service;
 pub mod message_sync;
+pub mod metrics;
 pub mod peer_presence; // Network-wide peer discovery (ADR-014)
 pub mod permissions; // Granular per-resource permission system // Invite service with CRDT persistence
 pub mod presence_service;
@@ -58,6 +59,7 @@ pub mod retry_utils; // Exponential backoff for resilient retries (MESH_CAPABILI
 pub mod security;
 pub mod services;
 pub mod storage;
+pub mod telemetry;
 pub mod test_harness;
 pub mod types;
 pub mod validation;

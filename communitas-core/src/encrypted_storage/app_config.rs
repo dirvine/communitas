@@ -654,8 +654,10 @@ mod tests {
 
     #[test]
     fn test_should_check_update_disabled() {
-        let mut config = AppConfig::default();
-        config.auto_update_enabled = false;
+        let config = AppConfig {
+            auto_update_enabled: false,
+            ..Default::default()
+        };
         assert!(
             !config.should_check_update(),
             "Should not check when disabled"

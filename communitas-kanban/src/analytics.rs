@@ -545,6 +545,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_time_range_custom_validation() {
         // Valid custom range
         let valid = TimeRange::custom(100, 200);

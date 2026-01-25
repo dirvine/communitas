@@ -4,10 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "wdio run wdio.conf.js"
+    "test": "wdio run wdio.conf.js",
+    "test:smoke": "wdio run wdio.conf.js --spec '**/smoke*.js'",
+    "test:accessibility": "wdio run wdio.conf.js --spec '**/accessibility*.js'",
+    "test:offline": "wdio run wdio.conf.js --spec '**/offline*.js'",
+    "test:drive": "wdio run wdio.conf.js --spec '**/*drive*.js'",
+    "test:call": "wdio run wdio.conf.js --spec '**/*call*.js'",
+    "test:kanban": "wdio run wdio.conf.js --spec '**/*kanban*.js'",
+    "test:canvas": "wdio run wdio.conf.js --spec '**/*canvas*.js'",
+    "test:messaging": "wdio run wdio.conf.js --spec '**/*messaging*.js'"
   },
   "devDependencies": {
     "@wdio/cli": "^9.19.3",
+    "@wdio/json-reporter": "^9.19.3",
     "@wdio/local-runner": "^9.19.3",
     "@wdio/mocha-framework": "^9.19.3",
     "@wdio/spec-reporter": "^9.19.3",

@@ -835,8 +835,8 @@ fn AddColumnForm(props: AddColumnFormProps) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use communitas_ui_api::kanban::{BoardSettings, ColumnView, TagView};
     use communitas_ui_api::SyncState;
+    use communitas_ui_api::kanban::{BoardSettings, ColumnView, TagView};
 
     fn make_test_card(id: &str, title: &str, state: CardState) -> CardView {
         CardView {

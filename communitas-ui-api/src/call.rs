@@ -1748,17 +1748,21 @@ mod tests {
 
     #[test]
     fn quality_metrics_total_bitrate() {
-        let mut metrics = QualityMetrics::default();
-        metrics.audio_bitrate_kbps = 32;
-        metrics.video_bitrate_kbps = 1500;
+        let metrics = QualityMetrics {
+            audio_bitrate_kbps: 32,
+            video_bitrate_kbps: 1500,
+            ..Default::default()
+        };
         assert_eq!(metrics.total_bitrate_kbps(), 1532);
     }
 
     #[test]
     fn quality_metrics_recalculate() {
-        let mut metrics = QualityMetrics::default();
-        metrics.latency_ms = 200;
-        metrics.packet_loss_percent = 3.0;
+        let mut metrics = QualityMetrics {
+            latency_ms: 200,
+            packet_loss_percent: 3.0,
+            ..Default::default()
+        };
         metrics.recalculate_quality();
         assert_eq!(metrics.quality, ConnectionQuality::Fair);
     }

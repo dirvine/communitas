@@ -12,13 +12,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use communitas_ui_api::SyncState;
 use communitas_ui_api::drive::{
     ConflictResolution, ConflictType, DirectoryEntry, DiskInfo, DiskType, DownloadProgress,
     DownloadState, FileMetadata, FilePreview, QuotaInfo, ShareLink, ShareLinkAccessResult,
     ShareLinkConfig, ShareLinkStats, StagedUpload, StagedUploadState, StagingConflict,
     StagingEvent, StagingQueueStatus, UploadProgress, UploadState,
 };
-use communitas_ui_api::SyncState;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{RwLock, watch};
@@ -454,7 +454,8 @@ impl DriveService {
                 // No transfer_id means upload wasn't fully started
                 // Check if we can find a matching transfer by path
                 // For now, mark as failed since we can't reliably match
-                upload.state = UploadState::Failed("interrupted before transfer started".to_string());
+                upload.state =
+                    UploadState::Failed("interrupted before transfer started".to_string());
                 debug!(
                     upload_id = %upload_id,
                     "upload interrupted before transfer started, marking as failed"
@@ -470,17 +471,17 @@ impl DriveService {
         // Notify subscribers
         self.update_upload_snapshot().await;
 
-        debug!(resumable_count = resumable_count, "resume detection complete");
+        debug!(
+            resumable_count = resumable_count,
+            "resume detection complete"
+        );
         Ok(resumable_count)
     }
 
     /// Get the count of resumable uploads.
     pub async fn resumable_upload_count(&self) -> usize {
         let uploads = self.active_uploads.read().await;
-        uploads
-            .values()
-            .filter(|u| u.state.is_resumable())
-            .count()
+        uploads.values().filter(|u| u.state.is_resumable()).count()
     }
 
     // ===== Disk Operations =====
@@ -1807,7 +1808,11 @@ impl DriveService {
     ///
     /// # Errors
     /// Returns error if upload not found, not resumable, or resume fails.
-    #[instrument(skip(self, source_path), name = "ui.drive.resume_upload_by_id", fields(upload_id))]
+    #[instrument(
+        skip(self, source_path),
+        name = "ui.drive.resume_upload_by_id",
+        fields(upload_id)
+    )]
     pub async fn resume_upload_by_id(
         &self,
         upload_id: &str,

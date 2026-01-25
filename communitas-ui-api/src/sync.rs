@@ -205,7 +205,11 @@ impl SyncSummary {
 
     /// Returns the total number of items.
     pub fn total(&self) -> u32 {
-        self.synced_count + self.syncing_count + self.queued_count + self.conflict_count + self.error_count
+        self.synced_count
+            + self.syncing_count
+            + self.queued_count
+            + self.conflict_count
+            + self.error_count
     }
 }
 

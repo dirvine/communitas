@@ -342,61 +342,6 @@ async fn handle_request_inner(
         Err(error) => JsonRpcResponse::error(request.id, error),
     }))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::body::Body;
-    use http::Request;
-    use http_body_util::BodyExt;
-    use tower::ServiceExt;
-
-    fn test_args() -> Args {
-        Args {
-            demo: false,
-            storage_dir: None,
-            four_words: None,
-            display_name: "Test".to_string(),
-            http: true,
-            tls: false,
-            listen: None,
-            no_client_auth: true,
-        }
-    }
-
-    async fn response_json(router: Router, body: &'static str) -> serde_json::Value {
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/mcp")
-                    .header("content-type", "application/json")
-                    .body(Body::from(body))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        let bytes = response.into_body().collect().await.unwrap().to_bytes();
-        serde_json::from_slice(&bytes).unwrap()
-    }
-
-    #[tokio::test]
-    async fn test_parse_error_response() {
-        let state = Arc::new(HttpServerState::new(test_args()));
-        let router = create_router(state);
-        let json = response_json(router, "{invalid json").await;
-        assert_eq!(json["error"]["code"], -32700);
-    }
-
-    #[tokio::test]
-    async fn test_invalid_request_response() {
-        let state = Arc::new(HttpServerState::new(test_args()));
-        let router = create_router(state);
-        let json = response_json(router, r#"{"jsonrpc":"2.0","id":1}"#).await;
-        assert_eq!(json["error"]["code"], -32600);
-    }
-}
-
 /// Initialize demo mode
 async fn initialize_demo_mode(state: &HttpServerState) -> Result<()> {
     let four_words = match &state.args.four_words {
@@ -925,4 +870,58 @@ async fn handle_resources_read(
     };
 
     serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use http::Request;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    fn test_args() -> Args {
+        Args {
+            demo: false,
+            storage_dir: None,
+            four_words: None,
+            display_name: "Test".to_string(),
+            http: true,
+            tls: false,
+            listen: None,
+            no_client_auth: true,
+        }
+    }
+
+    async fn response_json(router: Router, body: &'static str) -> serde_json::Value {
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_parse_error_response() {
+        let state = Arc::new(HttpServerState::new(test_args()));
+        let router = create_router(state);
+        let json = response_json(router, "{invalid json").await;
+        assert_eq!(json["error"]["code"], -32700);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_request_response() {
+        let state = Arc::new(HttpServerState::new(test_args()));
+        let router = create_router(state);
+        let json = response_json(router, r#"{"jsonrpc":"2.0","id":1}"#).await;
+        assert_eq!(json["error"]["code"], -32600);
+    }
 }

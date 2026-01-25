@@ -65,10 +65,16 @@ bytes = "1.5"
 anyhow = "1.0"
 thiserror = "2.0"
 
-# Logging
+# Logging & Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 log = "0.4"
+
+# OpenTelemetry (optional, enabled via "metrics" feature)
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
 
 # WebAuthn for passkey/biometric authentication
 webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
@@ -117,6 +123,10 @@ mime_guess = "2.0"
 
 # Local dependencies (version required for crates.io publishing)
 communitas-kanban = { version = "=0.8.1", path = "../communitas-kanban" }
+
+[features]
+default = []
+metrics = ["opentelemetry", "opentelemetry_sdk", "opentelemetry-otlp", "tracing-opentelemetry"]
 
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]

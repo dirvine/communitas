@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use communitas_core::app::CommunitasApp;
 use communitas_ui_api::{SyncMetadata, SyncProgress, SyncState, SyncSummary};
-use communitas_ui_service::storage::UiStorage;
 use communitas_ui_service::UiServices;
+use communitas_ui_service::storage::UiStorage;
 use tempfile::TempDir;
 
 /// Stack size for test threads (8MB) to handle large async state machines.
@@ -155,10 +155,7 @@ fn test_sync_metadata_conflict() {
 fn test_sync_metadata_error() {
     let meta = SyncMetadata::error("Network unreachable");
     assert_eq!(meta.state, SyncState::Error);
-    assert_eq!(
-        meta.error_message,
-        Some("Network unreachable".to_string())
-    );
+    assert_eq!(meta.error_message, Some("Network unreachable".to_string()));
 }
 
 // =============================================================================
@@ -597,7 +594,10 @@ async fn test_kanban_card_sync_state_default_inner() {
         "Should not be in loading state after load"
     );
     // Boards are loaded for the entity
-    assert!(boards.is_empty() || !boards.is_empty(), "Boards list should be accessible");
+    assert!(
+        boards.is_empty() || !boards.is_empty(),
+        "Boards list should be accessible"
+    );
 }
 
 #[test]

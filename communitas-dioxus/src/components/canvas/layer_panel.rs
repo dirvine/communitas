@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn layers_sort_by_z_index() {
-        let mut layers = vec![
+        let mut layers = [
             make_layer("1", "Bottom", 0),
             make_layer("2", "Middle", 5),
             make_layer("3", "Top", 10),

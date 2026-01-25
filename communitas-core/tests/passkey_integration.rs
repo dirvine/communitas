@@ -48,7 +48,7 @@ fn passkey_registration_start() {
 #[tokio::test]
 async fn passkey_manager_file_storage() {
     let temp_dir = TempDir::new().unwrap();
-    let manager = PasskeyManager::with_keyring(temp_dir.path().to_path_buf(), false).unwrap();
+    let manager = PasskeyManager::with_keyring(temp_dir.path(), false).unwrap();
 
     // Initially no passkey should exist
     let has_passkey = manager.has_passkey("test-identity").await;
@@ -59,7 +59,7 @@ async fn passkey_manager_file_storage() {
 #[tokio::test]
 async fn passkey_manager_list_empty() {
     let temp_dir = TempDir::new().unwrap();
-    let manager = PasskeyManager::with_keyring(temp_dir.path().to_path_buf(), false).unwrap();
+    let manager = PasskeyManager::with_keyring(temp_dir.path(), false).unwrap();
 
     let passkeys = manager.list_passkeys().await;
     assert!(passkeys.is_ok());
@@ -70,7 +70,7 @@ async fn passkey_manager_list_empty() {
 #[tokio::test]
 async fn passkey_manager_multiple_identities() {
     let temp_dir = TempDir::new().unwrap();
-    let manager = PasskeyManager::with_keyring(temp_dir.path().to_path_buf(), false).unwrap();
+    let manager = PasskeyManager::with_keyring(temp_dir.path(), false).unwrap();
 
     // Both identities should start without passkeys
     assert!(!manager.has_passkey("identity-one").await);
@@ -137,7 +137,7 @@ fn passkey_registration_user_info() {
 #[ignore = "Requires platform keyring access - run manually with --ignored"]
 async fn passkey_keyring_storage() {
     let temp_dir = TempDir::new().unwrap();
-    let manager = PasskeyManager::with_keyring(temp_dir.path().to_path_buf(), true).unwrap();
+    let manager = PasskeyManager::with_keyring(temp_dir.path(), true).unwrap();
 
     // This would require actual credential creation
     // For CI, we just verify the manager can be created with keyring enabled

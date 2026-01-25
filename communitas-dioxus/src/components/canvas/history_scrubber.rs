@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn current_position_matching() {
-        let entries = vec![
+        let entries = [
             make_entry("1", HistoryActionType::AddElement),
             make_entry("2", HistoryActionType::ModifyElement),
             make_entry("3", HistoryActionType::DeleteElement),

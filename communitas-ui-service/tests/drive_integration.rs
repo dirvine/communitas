@@ -715,19 +715,16 @@ async fn test_large_file_streaming_download_inner() {
         }
 
         let progress = drive.get_download_progress(&download_id).await;
-        match progress {
-            Some(p) => {
-                if p.state.is_terminal() {
-                    assert!(
-                        p.state == communitas_ui_api::drive::DownloadState::Complete,
-                        "Download should complete successfully, got: {:?}",
-                        p.state
-                    );
-                    break;
-                }
-                assert!(p.bytes_downloaded <= p.total_bytes);
+        if let Some(p) = progress {
+            if p.state.is_terminal() {
+                assert!(
+                    p.state == communitas_ui_api::drive::DownloadState::Complete,
+                    "Download should complete successfully, got: {:?}",
+                    p.state
+                );
+                break;
             }
-            None => {}
+            assert!(p.bytes_downloaded <= p.total_bytes);
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
@@ -846,15 +843,15 @@ async fn test_concurrent_uploads_inner() {
             }
 
             let progress = drive.get_upload_progress(upload_id).await;
-            if let Some(p) = progress {
-                if p.state.is_terminal() {
-                    assert!(
-                        p.state == communitas_ui_api::drive::UploadState::Complete,
-                        "Upload should complete: {:?}",
-                        p.state
-                    );
-                    break;
-                }
+            if let Some(p) = progress
+                && p.state.is_terminal()
+            {
+                assert!(
+                    p.state == communitas_ui_api::drive::UploadState::Complete,
+                    "Upload should complete: {:?}",
+                    p.state
+                );
+                break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }

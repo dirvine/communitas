@@ -235,9 +235,11 @@ impl ConflictBannerState {
 fn test_conflict_banner_messaging() {
     let banner = ConflictBannerVariant::Messaging;
     assert_eq!(banner.title(), "Message conflicts detected");
-    assert!(banner
-        .description_template()
-        .contains("message(s) have conflicting versions"));
+    assert!(
+        banner
+            .description_template()
+            .contains("message(s) have conflicting versions")
+    );
     assert_eq!(banner.resolve_label(), "Review Messages");
 }
 
@@ -346,11 +348,11 @@ impl SyncIndicatorProps {
 
     fn icon(&self) -> &'static str {
         match self.state {
-            SyncState::Synced => "\u{2713}",  // ✓
-            SyncState::Syncing => "\u{21BB}", // ↻
-            SyncState::Queued => "\u{23F1}",  // ⏱
+            SyncState::Synced => "\u{2713}",   // ✓
+            SyncState::Syncing => "\u{21BB}",  // ↻
+            SyncState::Queued => "\u{23F1}",   // ⏱
             SyncState::Conflict => "\u{26A0}", // ⚠
-            SyncState::Error => "\u{2717}",   // ✗
+            SyncState::Error => "\u{2717}",    // ✗
         }
     }
 

@@ -307,7 +307,7 @@ mod tests {
         let bg = "#ffffff";
         let ratio = contrast_ratio(fg, bg);
         // Adjust test based on actual ratio
-        if ratio >= 3.0 && ratio < 4.5 {
+        if (3.0..4.5).contains(&ratio) {
             assert!(meets_wcag_aa(fg, bg, true));
             assert!(!meets_wcag_aa(fg, bg, false));
         }

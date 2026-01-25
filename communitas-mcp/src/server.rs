@@ -988,6 +988,68 @@ impl McpServer {
     }
 }
 
+/// Run the MCP server
+pub async fn run(args: Args) -> Result<()> {
+    let mut server = McpServer::new(args);
+
+    let stdin = tokio::io::stdin();
+    let mut stdout = tokio::io::stdout();
+    let mut reader = BufReader::new(stdin);
+    let mut line = String::new();
+
+    info!("MCP Server ready, waiting for requests on stdin");
+
+    loop {
+        line.clear();
+
+        match reader.read_line(&mut line).await {
+            Ok(0) => {
+                // EOF - client closed connection
+                info!("Client disconnected (EOF)");
+                break;
+            }
+            Ok(_) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                debug!("Received: {}", trimmed);
+
+                // Parse JSON-RPC request
+                let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
+                    Ok(req) => req,
+                    Err(e) => {
+                        error!("Failed to parse request: {}", e);
+                        let response = JsonRpcResponse::error(None, JsonRpcError::parse_error());
+                        let json = serde_json::to_string(&response)?;
+                        stdout.write_all(json.as_bytes()).await?;
+                        stdout.write_all(b"\n").await?;
+                        stdout.flush().await?;
+                        continue;
+                    }
+                };
+
+                // Handle the request
+                if let Some(response) = server.handle_request(request).await {
+                    let json = serde_json::to_string(&response)?;
+                    debug!("Sending: {}", json);
+                    stdout.write_all(json.as_bytes()).await?;
+                    stdout.write_all(b"\n").await?;
+                    stdout.flush().await?;
+                }
+            }
+            Err(e) => {
+                error!("Error reading from stdin: {}", e);
+                break;
+            }
+        }
+    }
+
+    info!("MCP Server shutting down");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1063,66 +1125,4 @@ mod tests {
             error.message
         );
     }
-}
-
-/// Run the MCP server
-pub async fn run(args: Args) -> Result<()> {
-    let mut server = McpServer::new(args);
-
-    let stdin = tokio::io::stdin();
-    let mut stdout = tokio::io::stdout();
-    let mut reader = BufReader::new(stdin);
-    let mut line = String::new();
-
-    info!("MCP Server ready, waiting for requests on stdin");
-
-    loop {
-        line.clear();
-
-        match reader.read_line(&mut line).await {
-            Ok(0) => {
-                // EOF - client closed connection
-                info!("Client disconnected (EOF)");
-                break;
-            }
-            Ok(_) => {
-                let trimmed = line.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-
-                debug!("Received: {}", trimmed);
-
-                // Parse JSON-RPC request
-                let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
-                    Ok(req) => req,
-                    Err(e) => {
-                        error!("Failed to parse request: {}", e);
-                        let response = JsonRpcResponse::error(None, JsonRpcError::parse_error());
-                        let json = serde_json::to_string(&response)?;
-                        stdout.write_all(json.as_bytes()).await?;
-                        stdout.write_all(b"\n").await?;
-                        stdout.flush().await?;
-                        continue;
-                    }
-                };
-
-                // Handle the request
-                if let Some(response) = server.handle_request(request).await {
-                    let json = serde_json::to_string(&response)?;
-                    debug!("Sending: {}", json);
-                    stdout.write_all(json.as_bytes()).await?;
-                    stdout.write_all(b"\n").await?;
-                    stdout.flush().await?;
-                }
-            }
-            Err(e) => {
-                error!("Error reading from stdin: {}", e);
-                break;
-            }
-        }
-    }
-
-    info!("MCP Server shutting down");
-    Ok(())
 }

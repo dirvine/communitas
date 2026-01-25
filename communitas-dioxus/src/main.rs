@@ -2207,15 +2207,17 @@ mod tests {
     #[ignore = "requires UiServices test infrastructure update"]
     fn dashboard_renders_authenticated_session_name() {
         let env = TestEnv::new();
-        let mut authed = AuthState::default();
-        authed.phase = AuthPhase::Authenticated;
-        authed.session = Some(AuthSession {
-            pubkey_hex: "deadbeef".into(),
-            four_words: "forest-ocean-light-house".into(),
-            display_name: "Test Pilot".into(),
-            device_name: "Test Device".into(),
-            expires_at: u64::MAX, // Test session never expires
-        });
+        let authed = AuthState {
+            phase: AuthPhase::Authenticated,
+            session: Some(AuthSession {
+                pubkey_hex: "deadbeef".into(),
+                four_words: "forest-ocean-light-house".into(),
+                display_name: "Test Pilot".into(),
+                device_name: "Test Device".into(),
+                expires_at: u64::MAX, // Test session never expires
+            }),
+            ..Default::default()
+        };
         let html = render_route_html("/", env.services(), authed);
         assert!(
             html.contains("Test Pilot") && html.contains("forest-ocean-light-house"),

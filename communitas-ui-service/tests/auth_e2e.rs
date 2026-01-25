@@ -618,7 +618,7 @@ async fn test_multiple_identity_isolation_inner() {
     let config = RecoveryConfig::default();
 
     // Create three separate identities with different mnemonics
-    let identities = vec![
+    let identities = [
         (
             generate_recovery_mnemonic(&config).unwrap().to_string(),
             "Alice",

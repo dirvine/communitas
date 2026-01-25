@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn status_counting() {
-        let operations = vec![
+        let operations = [
             make_operation("1", OperationType::AddElement, OfflineStatus::Pending),
             make_operation("2", OperationType::UpdateElement, OfflineStatus::Pending),
             make_operation(

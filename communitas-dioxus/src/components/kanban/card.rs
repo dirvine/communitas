@@ -1,7 +1,7 @@
 //! Kanban card component with drag-and-drop support.
 
-use communitas_ui_api::kanban::{CardState, CardView, ChecklistProgress, PriorityView, TagView};
 use communitas_ui_api::SyncState;
+use communitas_ui_api::kanban::{CardState, CardView, ChecklistProgress, PriorityView, TagView};
 use communitas_ui_service::UiServices;
 use communitas_ui_service::kanban::MoveDirection;
 use dioxus::prelude::*;

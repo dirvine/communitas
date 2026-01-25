@@ -446,8 +446,11 @@ mod focus_management {
     #[test]
     fn return_focus_tracks_previous() {
         // Return focus should track the previously focused element
-        let tracking_method = "element_id";
-        assert!(!tracking_method.is_empty());
+        let tracking_method: &str = "element_id";
+        assert!(
+            !tracking_method.is_empty(),
+            "Focus tracking method should be defined"
+        );
     }
 }
 

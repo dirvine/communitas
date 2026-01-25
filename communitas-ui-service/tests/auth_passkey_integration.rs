@@ -100,9 +100,9 @@ async fn try_auto_login_no_passkey() {
 
     let result = controller.try_auto_login().await;
     // Should return None (no auto-login available) or an error
-    match result {
-        Ok(session) => assert!(session.is_none(), "Should not auto-login without passkey"),
-        Err(_) => {} // Error is acceptable for no passkeys case
+    // Error is acceptable for no passkeys case
+    if let Ok(session) = result {
+        assert!(session.is_none(), "Should not auto-login without passkey");
     }
 }
 

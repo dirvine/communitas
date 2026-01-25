@@ -297,7 +297,7 @@ mod tests {
         let current_time = 10000_i64;
         let timeout = 5000_i64;
 
-        let cursors = vec![
+        let cursors = [
             RemoteCursor {
                 user_id: "1".to_string(),
                 user_name: "Active".to_string(),

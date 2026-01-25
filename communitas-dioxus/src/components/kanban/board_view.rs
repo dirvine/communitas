@@ -833,6 +833,7 @@ fn AddColumnForm(props: AddColumnFormProps) -> Element {
 }
 
 #[cfg(test)]
+#[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
     use communitas_ui_api::SyncState;

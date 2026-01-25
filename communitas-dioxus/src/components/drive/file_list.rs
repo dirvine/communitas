@@ -737,6 +737,7 @@ fn format_timestamp(timestamp_ms: i64) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
     use communitas_ui_api::SyncState;

@@ -306,6 +306,7 @@ fn CreateBoardModal(props: CreateBoardModalProps) -> Element {
 }
 
 #[cfg(test)]
+#[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
 

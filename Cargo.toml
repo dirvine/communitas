@@ -90,7 +90,8 @@ clap = "4"
 yrs = { version = "0.19", features = ["sync"] }
 
 # Canvas (Saorsa Canvas integration - ADR-021)
-canvas-core = { path = "../saorsa-canvas/canvas-core", default-features = false, features = ["std"] }
+# canvas-core: use git dependency for CI compatibility (local override in .cargo/config.toml for dev)
+canvas-core = { git = "https://github.com/saorsa-labs/saorsa-canvas.git", default-features = false, features = ["std"] }
 
 # Security patches for transitive dependencies
 

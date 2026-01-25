@@ -30,11 +30,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout saorsa-canvas (dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: saorsa-labs/saorsa-canvas
-          path: ../saorsa-canvas
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

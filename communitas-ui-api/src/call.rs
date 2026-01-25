@@ -1353,6 +1353,132 @@ impl MissedCallsSnapshot {
     }
 }
 
+// ===== Pending Call Invite Types =====
+
+/// Maximum number of pending call invites to store.
+pub const MAX_PENDING_INVITES: usize = 10;
+
+/// Expiration time for pending call invites in milliseconds (5 minutes).
+pub const PENDING_INVITE_EXPIRY_MS: i64 = 5 * 60 * 1000;
+
+/// A pending call invite received while offline.
+///
+/// When the application is offline or disconnected, incoming call invites
+/// are queued and can be processed when connectivity is restored.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingCallInvite {
+    /// Unique invite ID.
+    pub id: String,
+    /// Call ID to join.
+    pub call_id: String,
+    /// Entity that initiated the call.
+    pub caller_id: String,
+    /// Display name of the caller.
+    pub caller_name: String,
+    /// Entity where the call is happening (group, channel).
+    pub entity_id: String,
+    /// Type of call.
+    pub call_type: CallType,
+    /// When the invite was received (Unix ms).
+    pub received_at: i64,
+    /// When the invite expires (Unix ms).
+    pub expires_at: i64,
+}
+
+impl PendingCallInvite {
+    /// Create a new pending call invite.
+    pub fn new(
+        call_id: String,
+        caller_id: String,
+        caller_name: String,
+        entity_id: String,
+        call_type: CallType,
+    ) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        Self {
+            id: format!("invite-{}-{}", call_id, now),
+            call_id,
+            caller_id,
+            caller_name,
+            entity_id,
+            call_type,
+            received_at: now,
+            expires_at: now + PENDING_INVITE_EXPIRY_MS,
+        }
+    }
+
+    /// Check if this invite has expired.
+    pub fn is_expired(&self) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        now >= self.expires_at
+    }
+
+    /// Returns a human-readable time remaining.
+    pub fn time_remaining(&self) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        let remaining_ms = self.expires_at.saturating_sub(now);
+        if remaining_ms <= 0 {
+            return "Expired".to_string();
+        }
+
+        let remaining_secs = remaining_ms / 1000;
+        let remaining_mins = remaining_secs / 60;
+
+        if remaining_mins > 0 {
+            format!("{}m {}s", remaining_mins, remaining_secs % 60)
+        } else {
+            format!("{}s", remaining_secs)
+        }
+    }
+}
+
+/// Snapshot of pending call invites for reactive UI updates.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PendingInvitesSnapshot {
+    /// Pending call invites, oldest first (FIFO order).
+    pub invites: Vec<PendingCallInvite>,
+    /// Total count of non-expired invites.
+    pub count: usize,
+    /// Last time the invites list was updated.
+    pub last_updated: i64,
+}
+
+impl PendingInvitesSnapshot {
+    /// Returns true if there are any pending invites.
+    pub fn has_invites(&self) -> bool {
+        !self.invites.is_empty()
+    }
+
+    /// Get invites for a specific caller.
+    pub fn for_caller(&self, caller_id: &str) -> Vec<&PendingCallInvite> {
+        self.invites
+            .iter()
+            .filter(|i| i.caller_id == caller_id)
+            .collect()
+    }
+
+    /// Get the most urgent (oldest non-expired) invite.
+    pub fn most_urgent(&self) -> Option<&PendingCallInvite> {
+        self.invites.iter().find(|i| !i.is_expired())
+    }
+
+    /// Get only non-expired invites.
+    pub fn active(&self) -> Vec<&PendingCallInvite> {
+        self.invites.iter().filter(|i| !i.is_expired()).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2329,5 +2455,182 @@ mod tests {
         let recent = history.recent(3);
         assert_eq!(recent.len(), 3);
         assert_eq!(recent[0].call_id, "call9"); // Newest
+    }
+
+    // ===== Pending Call Invite Tests =====
+
+    #[test]
+    fn pending_call_invite_new() {
+        let invite = PendingCallInvite::new(
+            "call-123".to_string(),
+            "caller-456".to_string(),
+            "Alice".to_string(),
+            "group-789".to_string(),
+            CallType::Group,
+        );
+
+        assert_eq!(invite.call_id, "call-123");
+        assert_eq!(invite.caller_id, "caller-456");
+        assert_eq!(invite.caller_name, "Alice");
+        assert_eq!(invite.entity_id, "group-789");
+        assert_eq!(invite.call_type, CallType::Group);
+        assert!(invite.id.starts_with("invite-call-123-"));
+        assert!(invite.expires_at > invite.received_at);
+        assert_eq!(
+            invite.expires_at - invite.received_at,
+            PENDING_INVITE_EXPIRY_MS
+        );
+    }
+
+    #[test]
+    fn pending_call_invite_is_expired() {
+        let mut invite = PendingCallInvite::new(
+            "call-1".to_string(),
+            "caller-1".to_string(),
+            "Test".to_string(),
+            "entity-1".to_string(),
+            CallType::Direct,
+        );
+
+        // Fresh invite should not be expired
+        assert!(!invite.is_expired());
+
+        // Set expires_at to the past
+        invite.expires_at = invite.received_at - 1000;
+        assert!(invite.is_expired());
+    }
+
+    #[test]
+    fn pending_call_invite_time_remaining() {
+        let mut invite = PendingCallInvite::new(
+            "call-1".to_string(),
+            "caller-1".to_string(),
+            "Test".to_string(),
+            "entity-1".to_string(),
+            CallType::Direct,
+        );
+
+        // Fresh invite should show remaining time
+        let remaining = invite.time_remaining();
+        assert!(!remaining.contains("Expired"));
+
+        // Expired invite
+        invite.expires_at = invite.received_at - 1000;
+        assert_eq!(invite.time_remaining(), "Expired");
+    }
+
+    #[test]
+    fn pending_invites_snapshot_default() {
+        let snapshot = PendingInvitesSnapshot::default();
+        assert!(snapshot.invites.is_empty());
+        assert_eq!(snapshot.count, 0);
+        assert!(!snapshot.has_invites());
+    }
+
+    #[test]
+    fn pending_invites_snapshot_has_invites() {
+        let mut snapshot = PendingInvitesSnapshot::default();
+        assert!(!snapshot.has_invites());
+
+        snapshot.invites.push(PendingCallInvite::new(
+            "call-1".to_string(),
+            "caller-1".to_string(),
+            "Alice".to_string(),
+            "entity-1".to_string(),
+            CallType::Direct,
+        ));
+        snapshot.count = 1;
+
+        assert!(snapshot.has_invites());
+    }
+
+    #[test]
+    fn pending_invites_snapshot_for_caller() {
+        let mut snapshot = PendingInvitesSnapshot::default();
+
+        snapshot.invites.push(PendingCallInvite::new(
+            "call-1".to_string(),
+            "alice".to_string(),
+            "Alice".to_string(),
+            "entity-1".to_string(),
+            CallType::Direct,
+        ));
+        snapshot.invites.push(PendingCallInvite::new(
+            "call-2".to_string(),
+            "bob".to_string(),
+            "Bob".to_string(),
+            "entity-2".to_string(),
+            CallType::Direct,
+        ));
+        snapshot.invites.push(PendingCallInvite::new(
+            "call-3".to_string(),
+            "alice".to_string(),
+            "Alice".to_string(),
+            "entity-3".to_string(),
+            CallType::Group,
+        ));
+
+        let alice_invites = snapshot.for_caller("alice");
+        assert_eq!(alice_invites.len(), 2);
+
+        let bob_invites = snapshot.for_caller("bob");
+        assert_eq!(bob_invites.len(), 1);
+
+        let charlie_invites = snapshot.for_caller("charlie");
+        assert!(charlie_invites.is_empty());
+    }
+
+    #[test]
+    fn pending_invites_snapshot_most_urgent() {
+        let snapshot = PendingInvitesSnapshot::default();
+        assert!(snapshot.most_urgent().is_none());
+
+        let mut snapshot_with_invites = PendingInvitesSnapshot::default();
+        snapshot_with_invites.invites.push(PendingCallInvite::new(
+            "call-1".to_string(),
+            "caller-1".to_string(),
+            "Alice".to_string(),
+            "entity-1".to_string(),
+            CallType::Direct,
+        ));
+
+        let urgent = snapshot_with_invites.most_urgent();
+        assert!(urgent.is_some());
+        assert_eq!(urgent.unwrap().call_id, "call-1");
+    }
+
+    #[test]
+    fn pending_invites_snapshot_active() {
+        let mut snapshot = PendingInvitesSnapshot::default();
+
+        let mut expired_invite = PendingCallInvite::new(
+            "call-expired".to_string(),
+            "caller-1".to_string(),
+            "Expired".to_string(),
+            "entity-1".to_string(),
+            CallType::Direct,
+        );
+        expired_invite.expires_at = expired_invite.received_at - 1000; // Expired
+
+        let fresh_invite = PendingCallInvite::new(
+            "call-fresh".to_string(),
+            "caller-2".to_string(),
+            "Fresh".to_string(),
+            "entity-2".to_string(),
+            CallType::Direct,
+        );
+
+        snapshot.invites.push(expired_invite);
+        snapshot.invites.push(fresh_invite);
+
+        let active = snapshot.active();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].call_id, "call-fresh");
+    }
+
+    #[test]
+    fn pending_invite_constants() {
+        assert_eq!(MAX_PENDING_INVITES, 10);
+        assert_eq!(PENDING_INVITE_EXPIRY_MS, 5 * 60 * 1000); // 5 minutes
     }
 }

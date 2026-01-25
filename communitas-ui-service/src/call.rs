@@ -25,8 +25,8 @@ use communitas_ui_api::call::{
     CallHistory, CallHistoryEntry, CallInfo, CallOutcome, CallSettings, CallSnapshot, CallState,
     CallType, ConnectionQuality, DeviceType, HistoryParticipant, MediaDevice, MediaError,
     MediaErrorKind, MissedCallNotification, MissedCallsSnapshot, Participant, ParticipantQuality,
-    ParticipantRole, QualityMetrics, RecordingInfo, RecordingState, ScreenShareInfo,
-    ScreenShareSource,
+    ParticipantRole, PendingCallInvite, PendingInvitesSnapshot, QualityMetrics, RecordingInfo,
+    RecordingState, ScreenShareInfo, ScreenShareSource, MAX_PENDING_INVITES,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, broadcast, watch};
@@ -320,6 +320,10 @@ pub struct CallService {
     history_tx: watch::Sender<CallHistory>,
     /// Watch channel for missed call notifications
     missed_calls_tx: watch::Sender<MissedCallsSnapshot>,
+    /// Pending call invites (received while offline/disconnected)
+    pending_invites: Arc<RwLock<Vec<PendingCallInvite>>>,
+    /// Watch channel for pending invite notifications
+    pending_invites_tx: watch::Sender<PendingInvitesSnapshot>,
     /// Storage path for call history (None = no persistence)
     storage_path: Option<std::path::PathBuf>,
 }
@@ -460,6 +464,10 @@ impl CallService {
         let missed_snapshot = Self::build_missed_calls_snapshot(&history);
         let (missed_calls_tx, _missed_rx) = watch::channel(missed_snapshot);
 
+        // Initialize empty pending invites queue
+        let pending_invites = Arc::new(RwLock::new(Vec::new()));
+        let (pending_invites_tx, _pending_rx) = watch::channel(PendingInvitesSnapshot::default());
+
         let state = Arc::new(RwLock::new(CallServiceState::default()));
         let history_arc = Arc::new(RwLock::new(history));
 
@@ -501,6 +509,8 @@ impl CallService {
             history: history_arc,
             history_tx,
             missed_calls_tx,
+            pending_invites,
+            pending_invites_tx,
             storage_path,
         }
     }
@@ -2008,6 +2018,190 @@ impl CallService {
         // Also update missed calls snapshot
         let missed_snapshot = Self::build_missed_calls_snapshot(&history);
         let _ = self.missed_calls_tx.send(missed_snapshot);
+    }
+
+    // ===== Pending Call Invites (Offline Queue) =====
+
+    /// Queue a pending call invite received while offline.
+    ///
+    /// When the application is offline or disconnected, incoming call invites
+    /// are queued here. They can be processed when connectivity is restored.
+    ///
+    /// - Invites are stored in FIFO order
+    /// - Maximum of 10 pending invites (oldest are removed when full)
+    /// - Invites expire after 5 minutes
+    ///
+    /// # Arguments
+    ///
+    /// * `call_id` - ID of the call to join
+    /// * `caller_id` - Entity that initiated the call
+    /// * `caller_name` - Display name of the caller
+    /// * `entity_id` - Entity where the call is happening (group, channel)
+    /// * `call_type` - Type of call
+    #[instrument(
+        skip(self),
+        name = "ui.call.queue_pending_invite",
+        fields(call_id, caller_id)
+    )]
+    pub async fn queue_pending_invite(
+        &self,
+        call_id: String,
+        caller_id: String,
+        caller_name: String,
+        entity_id: String,
+        call_type: CallType,
+    ) {
+        let invite = PendingCallInvite::new(call_id, caller_id, caller_name, entity_id, call_type);
+
+        {
+            let mut invites = self.pending_invites.write().await;
+
+            // Remove expired invites first
+            invites.retain(|i| !i.is_expired());
+
+            // Check if we already have an invite for this call
+            if invites.iter().any(|i| i.call_id == invite.call_id) {
+                debug!(call_id = %invite.call_id, "Invite for this call already exists, skipping");
+                return;
+            }
+
+            // Enforce maximum limit (FIFO - remove oldest)
+            while invites.len() >= MAX_PENDING_INVITES {
+                let removed = invites.remove(0);
+                debug!(call_id = %removed.call_id, "Removed oldest pending invite to make room");
+            }
+
+            debug!(
+                call_id = %invite.call_id,
+                caller = %invite.caller_name,
+                "Queued pending call invite"
+            );
+            invites.push(invite);
+        }
+
+        self.broadcast_pending_invites().await;
+    }
+
+    /// Get all pending call invites.
+    ///
+    /// Returns all non-expired pending invites in FIFO order.
+    #[instrument(skip(self), name = "ui.call.get_pending_invites")]
+    pub async fn get_pending_invites(&self) -> Vec<PendingCallInvite> {
+        let mut invites = self.pending_invites.write().await;
+
+        // Remove expired invites
+        let had_expired = invites.iter().any(|i| i.is_expired());
+        invites.retain(|i| !i.is_expired());
+
+        let result = invites.clone();
+
+        // Broadcast if we removed expired invites
+        if had_expired {
+            drop(invites);
+            self.broadcast_pending_invites().await;
+        }
+
+        result
+    }
+
+    /// Get a specific pending invite by call ID.
+    #[instrument(skip(self), name = "ui.call.get_pending_invite", fields(call_id))]
+    pub async fn get_pending_invite(&self, call_id: &str) -> Option<PendingCallInvite> {
+        let invites = self.pending_invites.read().await;
+        invites
+            .iter()
+            .find(|i| i.call_id == call_id && !i.is_expired())
+            .cloned()
+    }
+
+    /// Remove a pending invite (e.g., after accepting or declining).
+    #[instrument(skip(self), name = "ui.call.remove_pending_invite", fields(call_id))]
+    pub async fn remove_pending_invite(&self, call_id: &str) {
+        {
+            let mut invites = self.pending_invites.write().await;
+            let before_len = invites.len();
+            invites.retain(|i| i.call_id != call_id);
+            if invites.len() < before_len {
+                debug!(call_id = %call_id, "Removed pending invite");
+            }
+        }
+        self.broadcast_pending_invites().await;
+    }
+
+    /// Clear all pending call invites.
+    #[instrument(skip(self), name = "ui.call.clear_pending_invites")]
+    pub async fn clear_pending_invites(&self) {
+        {
+            let mut invites = self.pending_invites.write().await;
+            let count = invites.len();
+            invites.clear();
+            if count > 0 {
+                debug!(count, "Cleared all pending invites");
+            }
+        }
+        self.broadcast_pending_invites().await;
+    }
+
+    /// Get the count of non-expired pending invites.
+    #[instrument(skip(self), name = "ui.call.pending_invite_count")]
+    pub async fn pending_invite_count(&self) -> usize {
+        let invites = self.pending_invites.read().await;
+        invites.iter().filter(|i| !i.is_expired()).count()
+    }
+
+    /// Subscribe to pending invite updates.
+    ///
+    /// Returns a watch receiver that will emit updates whenever the pending
+    /// invites list changes (new invites, removals, expirations).
+    pub fn subscribe_pending_invites(&self) -> watch::Receiver<PendingInvitesSnapshot> {
+        self.pending_invites_tx.subscribe()
+    }
+
+    /// Get the current pending invites snapshot.
+    #[instrument(skip(self), name = "ui.call.get_pending_invites_snapshot")]
+    pub async fn get_pending_invites_snapshot(&self) -> PendingInvitesSnapshot {
+        self.build_pending_invites_snapshot().await
+    }
+
+    /// Build a pending invites snapshot from the current state.
+    async fn build_pending_invites_snapshot(&self) -> PendingInvitesSnapshot {
+        let mut invites = self.pending_invites.write().await;
+
+        // Remove expired invites
+        invites.retain(|i| !i.is_expired());
+
+        let active_invites = invites.clone();
+        let count = active_invites.len();
+
+        PendingInvitesSnapshot {
+            invites: active_invites,
+            count,
+            last_updated: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0),
+        }
+    }
+
+    /// Broadcast pending invite changes.
+    async fn broadcast_pending_invites(&self) {
+        let snapshot = self.build_pending_invites_snapshot().await;
+        let _ = self.pending_invites_tx.send(snapshot);
+    }
+
+    /// Process pending invites after reconnection.
+    ///
+    /// This method should be called when the application reconnects after
+    /// being offline. It removes expired invites and returns the active ones
+    /// that can still be joined.
+    #[instrument(skip(self), name = "ui.call.process_pending_invites_on_reconnect")]
+    pub async fn process_pending_invites_on_reconnect(&self) -> Vec<PendingCallInvite> {
+        let invites = self.get_pending_invites().await;
+        let count = invites.len();
+        if count > 0 {
+            debug!(count, "Processing pending invites after reconnection");
+        }
+        invites
     }
 
     // ===== Call Controls =====
@@ -5286,5 +5480,239 @@ mod tests {
             state_guard.participants.is_empty(),
             "participant should be removed"
         );
+    }
+
+    // ===== Pending Call Invite Tests =====
+
+    #[tokio::test]
+    async fn pending_invite_queue_adds_invite() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        assert_eq!(service.pending_invite_count().await, 0);
+
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        assert_eq!(service.pending_invite_count().await, 1);
+
+        let invites = service.get_pending_invites().await;
+        assert_eq!(invites.len(), 1);
+        assert_eq!(invites[0].call_id, "call-1");
+        assert_eq!(invites[0].caller_name, "Alice");
+    }
+
+    #[tokio::test]
+    async fn pending_invite_queue_removes_invite() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        assert_eq!(service.pending_invite_count().await, 1);
+
+        service.remove_pending_invite("call-1").await;
+
+        assert_eq!(service.pending_invite_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn pending_invite_queue_clear_all() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        for i in 0..5 {
+            service
+                .queue_pending_invite(
+                    format!("call-{}", i),
+                    format!("caller-{}", i),
+                    format!("User {}", i),
+                    format!("entity-{}", i),
+                    CallType::Group,
+                )
+                .await;
+        }
+
+        assert_eq!(service.pending_invite_count().await, 5);
+
+        service.clear_pending_invites().await;
+
+        assert_eq!(service.pending_invite_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn pending_invite_queue_max_limit_fifo() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add 12 invites (more than MAX_PENDING_INVITES=10)
+        for i in 0..12 {
+            service
+                .queue_pending_invite(
+                    format!("call-{}", i),
+                    format!("caller-{}", i),
+                    format!("User {}", i),
+                    "entity-1".to_string(),
+                    CallType::Group,
+                )
+                .await;
+        }
+
+        // Should be capped at MAX_PENDING_INVITES
+        let invites = service.get_pending_invites().await;
+        assert_eq!(invites.len(), 10);
+
+        // Oldest should have been removed (FIFO)
+        // The first two (call-0, call-1) should be gone
+        assert!(!invites.iter().any(|i| i.call_id == "call-0"));
+        assert!(!invites.iter().any(|i| i.call_id == "call-1"));
+        assert!(invites.iter().any(|i| i.call_id == "call-11"));
+    }
+
+    #[tokio::test]
+    async fn pending_invite_queue_deduplicates() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add same call_id twice
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        // Should only have one
+        assert_eq!(service.pending_invite_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn pending_invite_get_specific() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        let invite = service.get_pending_invite("call-1").await;
+        assert!(invite.is_some());
+        assert_eq!(invite.unwrap().caller_name, "Alice");
+
+        let missing = service.get_pending_invite("call-nonexistent").await;
+        assert!(missing.is_none());
+    }
+
+    #[tokio::test]
+    async fn pending_invite_subscribe_broadcasts() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let mut rx = service.subscribe_pending_invites();
+
+        // Initial state should be empty
+        let snap = rx.borrow().clone();
+        assert!(snap.invites.is_empty());
+
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        // Wait for broadcast
+        rx.changed().await.expect("should receive update");
+
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.invites.len(), 1);
+        assert_eq!(snap.count, 1);
+    }
+
+    #[tokio::test]
+    async fn pending_invite_snapshot() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Group,
+            )
+            .await;
+
+        let snap = service.get_pending_invites_snapshot().await;
+        assert_eq!(snap.invites.len(), 1);
+        assert_eq!(snap.count, 1);
+        assert!(snap.has_invites());
+    }
+
+    #[tokio::test]
+    async fn pending_invite_process_on_reconnect() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service
+            .queue_pending_invite(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                "entity-1".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        service
+            .queue_pending_invite(
+                "call-2".to_string(),
+                "caller-2".to_string(),
+                "Bob".to_string(),
+                "entity-2".to_string(),
+                CallType::Group,
+            )
+            .await;
+
+        let invites = service.process_pending_invites_on_reconnect().await;
+        assert_eq!(invites.len(), 2);
     }
 }

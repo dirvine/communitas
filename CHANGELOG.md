@@ -4,6 +4,31 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.8.2] - 2026-01-25
+
+### M8 Production Readiness & UX Polish
+
+This release completes Milestone 8 with 50 tasks across 6 phases, adding production-grade observability, improved offline experience, and comprehensive test coverage.
+
+### Added
+- **OpenTelemetry Integration** (Phase 8.6): OTLP metrics export with sync latency histograms, error counters, queue depth gauges, and CRDT conflict tracking
+- **Grafana Dashboard Template**: Pre-built monitoring dashboard for production deployments
+- **WebDriverIO Test Suite** (Phase 8.5): 13 test specs covering smoke tests, accessibility, and offline scenarios
+- **Passkey/Biometric Authentication** (Phase 8.2): Platform-native biometric auth support
+- **Offline UX Indicators** (Phase 8.3): Visual feedback for offline state with automatic reconnection
+
+### Changed
+- **Call Service Integration** (Phase 8.1): Improved WebRTC call management
+- **Drive Resume API** (Phase 8.4): Resumable uploads that persist across app restarts
+
+### Technical
+- All phases reviewed with 11-agent code review (zero critical issues)
+- 7 new metrics unit tests
+- Feature-gated telemetry (`metrics` feature flag)
+- Zero compilation errors/warnings
+
+---
+
 ## [0.8.1] - 2026-01-24
 
 ### Patch Release

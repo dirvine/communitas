@@ -122,7 +122,7 @@ reed-solomon-erasure = "6.0.0"
 mime_guess = "2.0"
 
 # Local dependencies (version required for crates.io publishing)
-communitas-kanban = { version = "=0.8.1", path = "../communitas-kanban" }
+communitas-kanban = { version = "=0.8.2", path = "../communitas-kanban" }
 
 [features]
 default = []

@@ -840,6 +840,8 @@ impl DriveService {
             state: UploadState::Pending,
             started_at: now,
             checksum_verified: false,
+            transfer_id: None,
+            resumed_from_bytes: None,
         };
 
         // Store in active uploads
@@ -1083,6 +1085,8 @@ impl DriveService {
             state: UploadState::Pending,
             started_at: now,
             checksum_verified: false,
+            transfer_id: None,
+            resumed_from_bytes: None,
         };
 
         // Store in active uploads
@@ -1377,6 +1381,8 @@ impl DriveService {
             state: UploadState::Uploading,
             started_at: now,
             checksum_verified: false,
+            transfer_id: None,
+            resumed_from_bytes: None,
         };
 
         // Store in active uploads

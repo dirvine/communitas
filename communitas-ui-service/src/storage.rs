@@ -71,6 +71,16 @@ impl UiStorage {
     pub fn call_history_file(&self) -> PathBuf {
         self.root.join("call_history.json")
     }
+
+    /// Disk location for active uploads persistence (for resume support).
+    pub fn active_uploads_file(&self) -> PathBuf {
+        self.root.join("active_uploads.json")
+    }
+
+    /// Disk location for staging queue persistence (for offline upload queue).
+    pub fn staging_queue_file(&self) -> PathBuf {
+        self.root.join("staging_queue.json")
+    }
 }
 
 /// Shared storage error type.

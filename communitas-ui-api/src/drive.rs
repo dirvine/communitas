@@ -145,6 +145,12 @@ pub struct UploadProgress {
     pub started_at: i64,
     /// Whether checksum was verified after upload.
     pub checksum_verified: bool,
+    /// Link to core TransferState for resume support.
+    #[serde(default)]
+    pub transfer_id: Option<String>,
+    /// Resume point in bytes (if this upload was resumed).
+    #[serde(default)]
+    pub resumed_from_bytes: Option<u64>,
 }
 
 impl UploadProgress {
@@ -950,6 +956,8 @@ mod tests {
             state: UploadState::Uploading,
             started_at: 0,
             checksum_verified: false,
+            transfer_id: None,
+            resumed_from_bytes: None,
         };
         assert_eq!(progress.percent_complete(), 50);
     }
@@ -965,6 +973,8 @@ mod tests {
             state: UploadState::Complete,
             started_at: 0,
             checksum_verified: true,
+            transfer_id: None,
+            resumed_from_bytes: None,
         };
         assert_eq!(progress.percent_complete(), 0);
     }

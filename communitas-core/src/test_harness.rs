@@ -163,9 +163,12 @@ impl TestNode {
             let port = reserve_test_port()?;
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
 
-            match UdpTransportAdapter::with_config(UdpTransportAdapterConfig::new(addr, vec![]), None)
-                .await
-                .context("failed to create UdpTransportAdapter")
+            match UdpTransportAdapter::with_config(
+                UdpTransportAdapterConfig::new(addr, vec![]),
+                None,
+            )
+            .await
+            .context("failed to create UdpTransportAdapter")
             {
                 Ok(transport) => {
                     debug!("TestNode {} created on port {}", id, port);

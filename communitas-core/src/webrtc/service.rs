@@ -335,8 +335,10 @@ impl CommunitasWebRtcService {
             .await
             .map_err(|e| anyhow!("Failed to exchange capabilities: {}", e))?;
 
-        debug!("Exchanged capabilities for call {}: audio={}, video={}",
-            call_id, capabilities.audio, capabilities.video);
+        debug!(
+            "Exchanged capabilities for call {}: audio={}, video={}",
+            call_id, capabilities.audio, capabilities.video
+        );
 
         // Create session ID for signaling (using call_id as session_id)
         let session_id = call_id.to_string();
@@ -356,7 +358,10 @@ impl CommunitasWebRtcService {
             .await
             .map_err(|e| anyhow!("Failed to send capability exchange: {}", e))?;
 
-        info!("Sent capability exchange to {} for call {}", target, call_id);
+        info!(
+            "Sent capability exchange to {} for call {}",
+            target, call_id
+        );
 
         // Create call state for tracking (direct 1:1 call)
         let call_state = CallState::new_direct(call_id, target.clone(), constraints.clone());

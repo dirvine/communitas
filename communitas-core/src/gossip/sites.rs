@@ -24,7 +24,7 @@ use crate::gossip::RendezvousClient;
 use anyhow::{Context, Result};
 use blake3;
 use bytes::Bytes;
-use saorsa_gossip_transport::{UdpTransportAdapter, UdpTransportAdapterConfig, GossipStreamType};
+use saorsa_gossip_transport::{GossipStreamType, UdpTransportAdapter, UdpTransportAdapterConfig};
 use saorsa_gossip_types::PeerId;
 use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
 use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey};
@@ -534,10 +534,12 @@ impl SiteFetcher {
         let dummy_bind = "0.0.0.0:0"
             .parse()
             .context("Failed to parse dummy bind address")?;
-        let dummy =
-            UdpTransportAdapter::with_config(UdpTransportAdapterConfig::new(dummy_bind, vec![]), None)
-                .await
-                .context("Failed to create dummy transport")?;
+        let dummy = UdpTransportAdapter::with_config(
+            UdpTransportAdapterConfig::new(dummy_bind, vec![]),
+            None,
+        )
+        .await
+        .context("Failed to create dummy transport")?;
         let transport: super::transport_types::SharedTransport = Arc::new(dummy);
 
         Ok(Self {
@@ -780,7 +782,9 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
     use saorsa_gossip_pubsub::PubSub as PubSubTrait;
-    use saorsa_gossip_transport::{UdpTransportAdapter, UdpTransportAdapterConfig, GossipTransport};
+    use saorsa_gossip_transport::{
+        GossipTransport, UdpTransportAdapter, UdpTransportAdapterConfig,
+    };
     use saorsa_gossip_types::PeerId;
     use saorsa_pqc::ml_dsa_65::try_keygen_with_rng;
 
@@ -795,12 +799,14 @@ mod tests {
 
         let bind_a = "127.0.0.1:0".parse().expect("valid addr");
         let bind_b = "127.0.0.1:0".parse().expect("valid addr");
-        let qt1 = UdpTransportAdapter::with_config(UdpTransportAdapterConfig::new(bind_a, vec![]), None)
-            .await
-            .expect("transport");
-        let qt2 = UdpTransportAdapter::with_config(UdpTransportAdapterConfig::new(bind_b, vec![]), None)
-            .await
-            .expect("transport");
+        let qt1 =
+            UdpTransportAdapter::with_config(UdpTransportAdapterConfig::new(bind_a, vec![]), None)
+                .await
+                .expect("transport");
+        let qt2 =
+            UdpTransportAdapter::with_config(UdpTransportAdapterConfig::new(bind_b, vec![]), None)
+                .await
+                .expect("transport");
         let transport: Arc<RwLock<Box<dyn GossipTransport>>> = Arc::new(RwLock::new(Box::new(qt1)));
 
         // Create test identity for signing

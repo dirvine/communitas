@@ -26,7 +26,7 @@ use saorsa_gossip_membership::Membership;
 use saorsa_gossip_presence::PresenceManager; // Actual exports
 use saorsa_gossip_pubsub::PubSub;
 use saorsa_gossip_transport::{
-    UdpTransportAdapter, UdpTransportAdapterConfig, GossipStreamType, GossipTransport,
+    GossipStreamType, GossipTransport, UdpTransportAdapter, UdpTransportAdapterConfig,
 };
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};

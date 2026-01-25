@@ -22,7 +22,7 @@ use communitas_core::gossip::{
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use saorsa_gossip_transport::{UdpTransportAdapter, GossipTransport};
+use saorsa_gossip_transport::{GossipTransport, UdpTransportAdapter};
 use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey, try_keygen_with_rng};
 use std::net::SocketAddr;
 use std::sync::Arc;

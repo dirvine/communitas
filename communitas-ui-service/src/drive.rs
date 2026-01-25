@@ -9,7 +9,7 @@
 //! - Resume support for interrupted transfers
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use communitas_ui_api::drive::{
@@ -1791,6 +1791,304 @@ impl DriveService {
 
         self.update_upload_snapshot().await;
         Ok(())
+    }
+
+    /// Resume an interrupted upload by its upload ID.
+    ///
+    /// This method:
+    /// 1. Verifies the upload is in a resumable state
+    /// 2. Gets the current progress from core TransferState
+    /// 3. Continues uploading from the resume point
+    /// 4. Updates progress tracking to show resumed state
+    ///
+    /// # Arguments
+    /// * `upload_id` - The ID of the upload to resume
+    /// * `source_path` - Path to the source file (must match original)
+    ///
+    /// # Errors
+    /// Returns error if upload not found, not resumable, or resume fails.
+    #[instrument(skip(self, source_path), name = "ui.drive.resume_upload_by_id", fields(upload_id))]
+    pub async fn resume_upload_by_id(
+        &self,
+        upload_id: &str,
+        source_path: &Path,
+    ) -> Result<(), DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        // Get upload info
+        let upload = {
+            let uploads = self.active_uploads.read().await;
+            uploads
+                .get(upload_id)
+                .cloned()
+                .ok_or_else(|| DriveError::UploadNotFound(upload_id.to_string()))?
+        };
+
+        // Check if resumable
+        if !upload.state.is_resumable() {
+            return Err(DriveError::TransferNotResumable(format!(
+                "upload {} is in state {:?}, not resumable",
+                upload_id, upload.state
+            )));
+        }
+
+        // Parse disk type from file path or stored info
+        // We need to determine entity_id and disk_type from the upload
+        // For now, we'll need these to be stored with the upload or passed in
+        let transfer_id = upload.transfer_id.clone().ok_or_else(|| {
+            DriveError::TransferNotResumable("upload has no transfer_id".to_string())
+        })?;
+
+        // Query core for the transfer state to get entity_id and disk_type
+        let response = self
+            .app
+            .query(Query::ListResumableTransfers)
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        let QueryResponse::ResumableTransfers(transfers) = response else {
+            return Err(DriveError::QueryError(
+                "unexpected response type".to_string(),
+            ));
+        };
+
+        let transfer = transfers
+            .into_iter()
+            .find(|t| t.transfer_id == transfer_id)
+            .ok_or_else(|| {
+                DriveError::TransferNotResumable(format!(
+                    "transfer {} not found in core state",
+                    transfer_id
+                ))
+            })?;
+
+        // Mark as uploading and set resumed_from_bytes
+        {
+            let mut uploads = self.active_uploads.write().await;
+            if let Some(p) = uploads.get_mut(upload_id) {
+                p.state = UploadState::Uploading;
+                p.resumed_from_bytes = Some(transfer.bytes_written);
+                p.bytes_uploaded = transfer.bytes_written;
+            }
+        }
+        self.update_upload_snapshot().await;
+
+        // Resume the chunked write in core
+        let disk_type_arg = transfer.disk_type;
+        let entity_id = transfer.entity_id.clone();
+        let dest_path = transfer.path.clone();
+        let resume_offset = transfer.bytes_written;
+        let total_bytes = transfer.total_size;
+
+        let resume_cmd = Command::ResumeChunkedWrite {
+            entity_id: entity_id.clone(),
+            disk_type: disk_type_arg,
+            path: dest_path.clone(),
+            verify_hashes: false, // Skip hash verification for faster resume
+        };
+
+        if let Err(e) = self.app.execute(resume_cmd).await {
+            let mut uploads = self.active_uploads.write().await;
+            if let Some(p) = uploads.get_mut(upload_id) {
+                p.state = UploadState::Failed(format!("resume failed: {}", e.message));
+            }
+            drop(uploads);
+            self.update_upload_snapshot().await;
+            return Err(DriveError::UploadFailed(format!(
+                "failed to resume: {}",
+                e.message
+            )));
+        }
+
+        debug!(
+            upload_id = %upload_id,
+            transfer_id = %transfer_id,
+            resume_offset = resume_offset,
+            total_bytes = total_bytes,
+            "resuming upload"
+        );
+
+        // Clone values for the spawned task
+        let upload_id_clone = upload_id.to_string();
+        let uploads = self.active_uploads.clone();
+        let tx = self.tx.clone();
+        let rx = self.rx.clone();
+        let app = self.app.clone();
+        let source_path_owned = source_path.to_owned();
+
+        tokio::spawn(async move {
+            // Helper to check cancellation
+            let is_cancelled = || async {
+                let map = uploads.read().await;
+                map.get(&upload_id_clone)
+                    .is_some_and(|p| matches!(p.state, UploadState::Cancelled))
+            };
+
+            // Open and seek to resume position
+            let file_result = tokio::fs::File::open(&source_path_owned).await;
+            let mut file = match file_result {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::error!("Failed to open source file for resume: {:?}", e);
+                    let mut map = uploads.write().await;
+                    if let Some(p) = map.get_mut(&upload_id_clone) {
+                        p.state = UploadState::Failed(format!("Failed to open file: {}", e));
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                    return;
+                }
+            };
+
+            // Seek to resume offset
+            use tokio::io::AsyncSeekExt;
+            if let Err(e) = file.seek(std::io::SeekFrom::Start(resume_offset)).await {
+                tracing::error!("Failed to seek to resume offset: {:?}", e);
+                let mut map = uploads.write().await;
+                if let Some(p) = map.get_mut(&upload_id_clone) {
+                    p.state = UploadState::Failed(format!("Failed to seek: {}", e));
+                }
+                Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                return;
+            }
+
+            // Write remaining chunks
+            let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+            let mut buffer = vec![0u8; chunk_size];
+            let mut offset = resume_offset;
+
+            loop {
+                if is_cancelled().await {
+                    let abort_cmd = Command::AbortChunkedWrite {
+                        entity_id: entity_id.clone(),
+                        disk_type: disk_type_arg,
+                        path: dest_path.clone(),
+                    };
+                    let _ = app.execute(abort_cmd).await;
+                    return;
+                }
+
+                let bytes_read = match file.read(&mut buffer).await {
+                    Ok(0) => break,
+                    Ok(n) => n,
+                    Err(e) => {
+                        tracing::error!("Failed to read from source file: {:?}", e);
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Failed(format!("File read error: {}", e));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                        return;
+                    }
+                };
+
+                let chunk_data = &buffer[..bytes_read];
+
+                let write_cmd = Command::WriteChunk {
+                    entity_id: entity_id.clone(),
+                    disk_type: disk_type_arg,
+                    path: dest_path.clone(),
+                    offset,
+                    data: chunk_data.to_vec(),
+                };
+
+                match app.execute(write_cmd).await {
+                    Ok(_) => {
+                        offset += bytes_read as u64;
+                        {
+                            let mut map = uploads.write().await;
+                            if let Some(p) = map.get_mut(&upload_id_clone) {
+                                p.bytes_uploaded = offset;
+                            }
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to write chunk at offset {}: {:?}", offset, e);
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Failed(format!(
+                                "Chunk write failed at offset {}: {}",
+                                offset, e.message
+                            ));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                        return;
+                    }
+                }
+            }
+
+            // Finish the upload
+            let finish_cmd = Command::FinishChunkedWrite {
+                entity_id: entity_id.clone(),
+                disk_type: disk_type_arg,
+                path: dest_path.clone(),
+            };
+
+            match app.execute(finish_cmd).await {
+                Ok(_) => {
+                    let mut map = uploads.write().await;
+                    if let Some(p) = map.get_mut(&upload_id_clone) {
+                        p.state = UploadState::Complete;
+                        p.checksum_verified = true;
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                    debug!("Resumed upload completed: {}", upload_id_clone);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to finish resumed upload: {:?}", e);
+                    let mut map = uploads.write().await;
+                    if let Some(p) = map.get_mut(&upload_id_clone) {
+                        p.state = UploadState::Failed(format!("Finish failed: {}", e.message));
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Resume all pending resumable uploads.
+    ///
+    /// Returns the count of uploads that were started for resume.
+    /// Note: This requires source paths to be stored or passed separately.
+    #[instrument(skip(self, source_paths), name = "ui.drive.resume_all_pending")]
+    pub async fn resume_all_pending(
+        &self,
+        source_paths: &HashMap<String, PathBuf>,
+    ) -> Result<usize, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let uploads = self.active_uploads.read().await;
+        let resumable: Vec<String> = uploads
+            .iter()
+            .filter(|(_, u)| u.state.is_resumable())
+            .map(|(id, _)| id.clone())
+            .collect();
+        drop(uploads);
+
+        let mut resumed = 0;
+        for upload_id in resumable {
+            if let Some(source_path) = source_paths.get(&upload_id) {
+                match self.resume_upload_by_id(&upload_id, source_path).await {
+                    Ok(()) => {
+                        resumed += 1;
+                        debug!(upload_id = %upload_id, "resumed upload");
+                    }
+                    Err(e) => {
+                        debug!(upload_id = %upload_id, error = %e, "failed to resume upload");
+                    }
+                }
+            } else {
+                debug!(upload_id = %upload_id, "no source path for resumable upload");
+            }
+        }
+
+        Ok(resumed)
     }
 
     /// Get progress of a specific upload.

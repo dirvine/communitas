@@ -117,12 +117,19 @@ pub enum UploadState {
     Failed(String),
     /// Upload was cancelled by user.
     Cancelled,
+    /// Upload can be resumed (detected on app restart).
+    Resumable,
 }
 
 impl UploadState {
     /// Returns true if the upload is complete (successfully or not).
     pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Complete | Self::Failed(_) | Self::Cancelled)
+    }
+
+    /// Returns true if the upload can be resumed.
+    pub fn is_resumable(&self) -> bool {
+        matches!(self, Self::Resumable | Self::Failed(_))
     }
 }
 

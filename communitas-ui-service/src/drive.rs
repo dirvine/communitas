@@ -368,6 +368,121 @@ impl DriveService {
         }
     }
 
+    // ===== Resume Detection =====
+
+    /// Detect resumable transfers by cross-referencing persisted uploads with core state.
+    ///
+    /// This method should be called after service initialization to identify
+    /// uploads that were interrupted and can be resumed.
+    ///
+    /// Returns the count of uploads marked as resumable.
+    #[instrument(skip(self), name = "ui.drive.detect_resumable_transfers")]
+    pub async fn detect_resumable_transfers(&self) -> Result<usize, DriveError> {
+        // Query the core for active transfers
+        let response = self
+            .app
+            .query(Query::ListResumableTransfers)
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        let QueryResponse::ResumableTransfers(core_transfers) = response else {
+            return Err(DriveError::QueryError(
+                "unexpected response type from ListResumableTransfers".to_string(),
+            ));
+        };
+
+        // Build a map of core transfers by path for quick lookup
+        let mut core_transfer_map: HashMap<String, _> = HashMap::new();
+        for transfer in core_transfers {
+            let key = format!(
+                "{}:{}:{}",
+                transfer.entity_id,
+                match transfer.disk_type {
+                    DiskTypeArg::Private => "private",
+                    DiskTypeArg::Public => "public",
+                    DiskTypeArg::Shared => "shared",
+                },
+                transfer.path
+            );
+            core_transfer_map.insert(key, transfer);
+        }
+
+        let mut resumable_count = 0;
+
+        // Check each persisted upload against core state
+        let mut uploads = self.active_uploads.write().await;
+        for (upload_id, upload) in uploads.iter_mut() {
+            // Skip uploads that are already complete or cancelled
+            if upload.state.is_terminal() {
+                continue;
+            }
+
+            // Skip uploads already marked as resumable
+            if matches!(upload.state, UploadState::Resumable) {
+                resumable_count += 1;
+                continue;
+            }
+
+            // Skip if upload has a transfer_id but check if it still exists in core
+            if let Some(ref transfer_id) = upload.transfer_id {
+                // Look up by transfer_id
+                let found_in_core = core_transfer_map
+                    .values()
+                    .any(|t| t.transfer_id == *transfer_id);
+
+                if found_in_core {
+                    // Transfer exists in core - mark as resumable
+                    upload.state = UploadState::Resumable;
+                    resumable_count += 1;
+                    debug!(
+                        upload_id = %upload_id,
+                        transfer_id = %transfer_id,
+                        bytes_uploaded = upload.bytes_uploaded,
+                        total_bytes = upload.total_bytes,
+                        "detected resumable upload with transfer_id"
+                    );
+                } else {
+                    // Transfer no longer in core - mark as failed
+                    upload.state = UploadState::Failed("transfer state lost".to_string());
+                    debug!(
+                        upload_id = %upload_id,
+                        transfer_id = %transfer_id,
+                        "upload transfer state lost, marking as failed"
+                    );
+                }
+            } else if matches!(upload.state, UploadState::Uploading | UploadState::Pending) {
+                // No transfer_id means upload wasn't fully started
+                // Check if we can find a matching transfer by path
+                // For now, mark as failed since we can't reliably match
+                upload.state = UploadState::Failed("interrupted before transfer started".to_string());
+                debug!(
+                    upload_id = %upload_id,
+                    "upload interrupted before transfer started, marking as failed"
+                );
+            }
+        }
+
+        drop(uploads);
+
+        // Persist the updated state
+        self.persist_active_uploads().await;
+
+        // Notify subscribers
+        self.update_upload_snapshot().await;
+
+        debug!(resumable_count = resumable_count, "resume detection complete");
+        Ok(resumable_count)
+    }
+
+    /// Get the count of resumable uploads.
+    pub async fn resumable_upload_count(&self) -> usize {
+        let uploads = self.active_uploads.read().await;
+        uploads
+            .values()
+            .filter(|u| u.state.is_resumable())
+            .count()
+    }
+
     // ===== Disk Operations =====
 
     /// List all disks for an entity.

@@ -4,8 +4,3 @@
 # Increase stack size for tests to handle large Element clones in history operations
 # This is needed because debug builds have larger stack frames
 RUST_MIN_STACK = "8388608"
-
-# Local path overrides for development (uses sibling repos instead of git deps)
-# These paths are relative to this .cargo/config.toml file
-[patch."https://github.com/saorsa-labs/saorsa-canvas.git"]
-canvas-core = { path = "../saorsa-canvas/canvas-core" }

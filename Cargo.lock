@@ -1065,6 +1065,7 @@ dependencies = [
 [[package]]
 name = "canvas-core"
 version = "0.1.2"
+source = "git+https://github.com/saorsa-labs/saorsa-canvas.git#d92009caeb27b86ccd14ac21f30dfb33f9661685"
 dependencies = [
  "serde",
  "serde_json",

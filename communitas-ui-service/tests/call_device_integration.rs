@@ -10,11 +10,11 @@ use std::sync::Arc;
 
 use communitas_core::app::CommunitasApp;
 use communitas_ui_api::call::{DeviceType, MediaDevice, ScreenShareSource, ScreenShareSourceType};
+use communitas_ui_service::UiServices;
 use communitas_ui_service::call::{
     DeviceEnumerator, MockDeviceEnumerator, MockScreenSourceEnumerator, ScreenSourceEnumerator,
 };
 use communitas_ui_service::storage::UiStorage;
-use communitas_ui_service::UiServices;
 use tempfile::TempDir;
 
 /// Stack size for test threads (8MB) to handle large async state machines.
@@ -146,7 +146,11 @@ impl TestScreenSourceEnumerator {
 
     fn with_monitors_and_windows() -> Self {
         Self::new(vec![
-            ScreenShareSource::monitor("monitor-1".to_string(), "Primary Display".to_string(), true),
+            ScreenShareSource::monitor(
+                "monitor-1".to_string(),
+                "Primary Display".to_string(),
+                true,
+            ),
             ScreenShareSource::monitor(
                 "monitor-2".to_string(),
                 "External Display".to_string(),
@@ -183,9 +187,11 @@ async fn mock_device_enumerator_returns_all_types() {
     let devices = enumerator.enumerate_devices().await.unwrap();
 
     assert!(!devices.is_empty());
-    assert!(devices
-        .iter()
-        .any(|d| d.device_type == DeviceType::Microphone));
+    assert!(
+        devices
+            .iter()
+            .any(|d| d.device_type == DeviceType::Microphone)
+    );
     assert!(devices.iter().any(|d| d.device_type == DeviceType::Speaker));
     assert!(devices.iter().any(|d| d.device_type == DeviceType::Camera));
 }
@@ -196,12 +202,16 @@ async fn mock_screen_source_enumerator_returns_monitors_and_windows() {
     let sources = enumerator.enumerate_sources().await.unwrap();
 
     assert!(!sources.is_empty());
-    assert!(sources
-        .iter()
-        .any(|s| s.source_type == ScreenShareSourceType::Monitor));
-    assert!(sources
-        .iter()
-        .any(|s| s.source_type == ScreenShareSourceType::Window));
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.source_type == ScreenShareSourceType::Monitor)
+    );
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.source_type == ScreenShareSourceType::Window)
+    );
 }
 
 // ===== CallService Device Enumeration Tests =====
@@ -219,9 +229,11 @@ fn test_call_service_list_devices_uses_enumerator() {
             assert!(!devices.is_empty());
 
             // Verify device types are present
-            assert!(devices
-                .iter()
-                .any(|d| d.device_type == DeviceType::Microphone));
+            assert!(
+                devices
+                    .iter()
+                    .any(|d| d.device_type == DeviceType::Microphone)
+            );
             assert!(devices.iter().any(|d| d.device_type == DeviceType::Speaker));
             assert!(devices.iter().any(|d| d.device_type == DeviceType::Camera));
         });

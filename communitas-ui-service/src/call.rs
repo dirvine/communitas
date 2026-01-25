@@ -23,10 +23,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use communitas_ui_api::call::{
     CallHistory, CallHistoryEntry, CallInfo, CallOutcome, CallSettings, CallSnapshot, CallState,
-    CallType, ConnectionQuality, DeviceType, HistoryParticipant, MediaDevice, MediaError,
-    MediaErrorKind, MissedCallNotification, MissedCallsSnapshot, Participant, ParticipantQuality,
-    ParticipantRole, PendingCallInvite, PendingInvitesSnapshot, QualityMetrics, RecordingInfo,
-    RecordingState, ScreenShareInfo, ScreenShareSource, MAX_PENDING_INVITES,
+    CallType, ConnectionQuality, DeviceType, HistoryParticipant, MAX_PENDING_INVITES, MediaDevice,
+    MediaError, MediaErrorKind, MissedCallNotification, MissedCallsSnapshot, Participant,
+    ParticipantQuality, ParticipantRole, PendingCallInvite, PendingInvitesSnapshot, QualityMetrics,
+    RecordingInfo, RecordingState, ScreenShareInfo, ScreenShareSource,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, broadcast, watch};

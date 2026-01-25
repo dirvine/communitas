@@ -41,7 +41,11 @@ async fn mock_device_enumerator_returns_devices() {
 
     // Verify device types are present
     use communitas_ui_api::call::DeviceType;
-    assert!(devices.iter().any(|d| d.device_type == DeviceType::Microphone));
+    assert!(
+        devices
+            .iter()
+            .any(|d| d.device_type == DeviceType::Microphone)
+    );
     assert!(devices.iter().any(|d| d.device_type == DeviceType::Speaker));
     assert!(devices.iter().any(|d| d.device_type == DeviceType::Camera));
 }
@@ -78,12 +82,16 @@ async fn mock_screen_enumerator_returns_sources() {
 
     // Verify source types are present
     use communitas_ui_api::call::ScreenShareSourceType;
-    assert!(sources
-        .iter()
-        .any(|s| s.source_type == ScreenShareSourceType::Monitor));
-    assert!(sources
-        .iter()
-        .any(|s| s.source_type == ScreenShareSourceType::Window));
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.source_type == ScreenShareSourceType::Monitor)
+    );
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.source_type == ScreenShareSourceType::Window)
+    );
 }
 
 // ===== Real Hardware Tests (Skipped in CI) =====
@@ -228,13 +236,14 @@ async fn enumeration_to_selection_flow() {
     // Step 2: Find default microphone
     let default_mic = devices
         .iter()
-        .find(|d| {
-            d.device_type == communitas_ui_api::call::DeviceType::Microphone && d.is_default
-        })
+        .find(|d| d.device_type == communitas_ui_api::call::DeviceType::Microphone && d.is_default)
         .expect("should have a default microphone");
 
     // Step 3: Verify it's available
-    let is_available = enumerator.is_device_available(&default_mic.id).await.unwrap();
+    let is_available = enumerator
+        .is_device_available(&default_mic.id)
+        .await
+        .unwrap();
     assert!(is_available);
 }
 

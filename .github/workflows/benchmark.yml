@@ -35,8 +35,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h
 
+      - uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: |
@@ -107,34 +115,8 @@ jobs:
           print(json.dumps(results, indent=2))
           EOF
 
-      - name: Store benchmark result (main branch)
-        if: github.ref == 'refs/heads/main'
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: Communitas Benchmarks
-          tool: 'customSmallerIsBetter'
-          output-file-path: benchmark_results.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-          alert-threshold: '105%'
-          comment-on-alert: true
-          fail-on-alert: false
-          benchmark-data-dir-path: docs/performance/data
-
-      - name: Compare with baseline (PRs)
-        if: github.event_name == 'pull_request'
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: Communitas Benchmarks
-          tool: 'customSmallerIsBetter'
-          output-file-path: benchmark_results.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          alert-threshold: '105%'
-          comment-on-alert: true
-          fail-on-alert: true
-          comment-always: true
-          benchmark-data-dir-path: docs/performance/data
+      # Note: gh-pages publishing disabled - benchmarks stored as artifacts only
+      # Re-enable when gh-pages branch is created for performance tracking
 
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4

@@ -9,8 +9,16 @@ jobs:
   rust-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h
 
+      - uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: |
@@ -98,8 +106,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: WebDriver (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@v4
+      - name: Free disk space (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h
 
+      - uses: actions/checkout@v4
 
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'

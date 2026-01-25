@@ -26,7 +26,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libsoup-3.0-dev \
-            libxdo-dev
+            libxdo-dev \
+            libpipewire-0.3-dev
           sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
 
@@ -114,7 +115,8 @@ jobs:
             librsvg2-dev \
             libsoup-3.0-dev \
             webkit2gtk-driver \
-            libxdo-dev
+            libxdo-dev \
+            libpipewire-0.3-dev
           sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
 

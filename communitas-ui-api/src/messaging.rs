@@ -1,6 +1,6 @@
 //! Messaging and presence DTOs for thread lists, messages, and contact status.
 
-use crate::{UnifiedContact, UnifiedEntityType};
+use crate::{SyncState, UnifiedContact, UnifiedEntityType};
 
 /// Thread summary shown in thread list sidebar.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +31,8 @@ pub struct ThreadSummary {
     pub is_pinned: bool,
     /// Presence status for DM threads (None for entity threads).
     pub contact_presence: Option<PresenceStatus>,
+    /// Synchronization state for this thread.
+    pub sync_state: SyncState,
 }
 
 /// A message in a conversation thread.
@@ -184,6 +186,7 @@ mod tests {
             typing_users: vec![],
             is_pinned: false,
             contact_presence: None,
+            sync_state: SyncState::default(),
         };
         let t2 = t1.clone();
         assert_eq!(t1, t2);
@@ -205,6 +208,7 @@ mod tests {
             typing_users: vec![],
             is_pinned: false,
             contact_presence: Some(PresenceStatus::Online),
+            sync_state: SyncState::Synced,
         };
         assert!(dm.is_dm);
         assert!(dm.contact_id.is_some());

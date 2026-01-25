@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::SyncState;
+
 /// Summary of a board for list views.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BoardSummary {
@@ -85,6 +87,8 @@ pub struct CardView {
     pub linked_thread_id: Option<String>,
     /// Display name of the linked thread (if any).
     pub linked_thread_name: Option<String>,
+    /// Sync state of this card.
+    pub sync_state: SyncState,
 }
 
 /// Detailed card view with full content.
@@ -124,6 +128,8 @@ pub struct CardDetail {
     pub linked_thread_id: Option<String>,
     /// Display name of the linked thread (if any).
     pub linked_thread_name: Option<String>,
+    /// Sync state of this card.
+    pub sync_state: SyncState,
 }
 
 /// A tag for categorizing cards.
@@ -387,6 +393,7 @@ mod tests {
             position: 0,
             linked_thread_id: None,
             linked_thread_name: None,
+            sync_state: SyncState::Synced,
         };
         assert_eq!(card.tags.len(), 1);
         assert_eq!(card.tags[0].name, "urgent");

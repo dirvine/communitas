@@ -1,7 +1,7 @@
 //! Message list component for displaying conversation messages.
 
 use crate::tokens::colors;
-use communitas_ui_api::Message;
+use communitas_ui_api::{Message, MessageSendStatus, PendingMessage};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
@@ -467,6 +467,238 @@ fn format_date(timestamp_ms: u64) -> String {
     let month = (remaining / 30) + 1;
     let day = (remaining % 30) + 1;
     format!("{}/{}/{}", month.min(12), day.min(31), year)
+}
+
+/// Message send status indicator showing pending, sending, or failed state.
+///
+/// Displays a small icon next to messages that haven't been successfully sent yet.
+///
+/// # States
+///
+/// - **Sending**: Animated spinner while message is being sent
+/// - **Queued**: Clock icon for messages waiting to send (offline)
+/// - **Failed**: Red X with retry option
+/// - **Sent**: Checkmark (briefly shown then hidden)
+///
+/// # Example
+///
+/// ```ignore
+/// MessageSendIndicator {
+///     status: MessageSendStatus::Pending,
+///     on_retry: move |_| retry_message(),
+/// }
+/// ```
+#[derive(Props, Clone, PartialEq)]
+pub struct MessageSendIndicatorProps {
+    /// Current send status.
+    pub status: MessageSendStatus,
+    /// Callback when retry button is clicked (for failed messages).
+    #[props(default)]
+    pub on_retry: Option<EventHandler<()>>,
+}
+
+#[component]
+pub fn MessageSendIndicator(props: MessageSendIndicatorProps) -> Element {
+    let (icon, color, label, is_animating) = match &props.status {
+        MessageSendStatus::Sending => ("⟳", colors::INFO, "Sending", true),
+        MessageSendStatus::Pending => ("⏱", colors::WARNING, "Waiting to send", false),
+        MessageSendStatus::Failed(msg) => ("✕", colors::DANGER, msg.as_str(), false),
+    };
+
+    let animation_class = if is_animating { "animate-spin" } else { "" };
+    let is_failed = matches!(props.status, MessageSendStatus::Failed(_));
+    let on_retry = props.on_retry;
+
+    rsx! {
+        span {
+            class: "message-send-indicator inline-flex items-center gap-1 text-xs {animation_class}",
+            style: format!("color: {};", color),
+            title: "{label}",
+            aria_label: "{label}",
+            // Status icon
+            span {
+                class: "send-icon",
+                "{icon}"
+            }
+            // Retry button for failed messages
+            if is_failed {
+                if let Some(handler) = on_retry {
+                    button {
+                        r#type: "button",
+                        class: "retry-btn text-xs px-1.5 py-0.5 rounded",
+                        style: format!("background-color: {}20; color: {};", colors::DANGER, colors::DANGER),
+                        onclick: move |_| handler.call(()),
+                        "Retry"
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Indicator showing count of queued messages waiting to send.
+///
+/// Displayed in the message composer area when messages are pending.
+/// Provides visibility into offline queue status.
+///
+/// # Example
+///
+/// ```ignore
+/// QueuedMessagesIndicator {
+///     count: 5,
+///     on_view_queue: move |_| show_queue_panel(),
+/// }
+/// ```
+#[derive(Props, Clone, PartialEq)]
+pub struct QueuedMessagesIndicatorProps {
+    /// Number of messages in the queue.
+    #[props(default = 0)]
+    pub count: u32,
+    /// Callback when "view queue" is clicked.
+    #[props(default)]
+    pub on_view_queue: Option<EventHandler<()>>,
+}
+
+#[component]
+pub fn QueuedMessagesIndicator(props: QueuedMessagesIndicatorProps) -> Element {
+    // Don't show if no queued messages
+    if props.count == 0 {
+        return rsx! {};
+    }
+
+    let message_text = if props.count == 1 {
+        "1 message waiting to send".to_string()
+    } else {
+        format!("{} messages waiting to send", props.count)
+    };
+
+    let on_view_queue = props.on_view_queue;
+
+    rsx! {
+        div {
+            class: "queued-messages-indicator flex items-center gap-2 px-3 py-2 rounded-lg",
+            style: format!("background-color: {}20; color: {};", colors::WARNING, colors::WARNING),
+            role: "status",
+            aria_live: "polite",
+            // Clock icon
+            span {
+                class: "text-sm",
+                "⏱"
+            }
+            // Message count
+            span {
+                class: "text-sm flex-1",
+                "{message_text}"
+            }
+            // View queue button
+            if let Some(handler) = on_view_queue {
+                button {
+                    r#type: "button",
+                    class: "text-xs px-2 py-1 rounded",
+                    style: format!("background-color: {}; color: {};", colors::WARNING, colors::TEXT_INVERSE),
+                    onclick: move |_| handler.call(()),
+                    "View"
+                }
+            }
+        }
+    }
+}
+
+/// Pending message bubble for messages not yet sent.
+///
+/// Similar to regular MessageBubble but with send status indicator
+/// and retry capability for failed messages.
+#[derive(Props, Clone, PartialEq)]
+pub struct PendingMessageBubbleProps {
+    /// The pending message data.
+    pub message: PendingMessage,
+    /// Callback when retry is requested for failed messages.
+    #[props(default)]
+    pub on_retry: Option<EventHandler<String>>,
+    /// Callback when delete is requested.
+    #[props(default)]
+    pub on_delete: Option<EventHandler<String>>,
+}
+
+#[component]
+pub fn PendingMessageBubble(props: PendingMessageBubbleProps) -> Element {
+    let msg = props.message.clone();
+    let mut hovered = use_signal(|| false);
+
+    let opacity = match msg.status {
+        MessageSendStatus::Sending => "opacity-80",
+        MessageSendStatus::Pending => "opacity-60",
+        MessageSendStatus::Failed(_) => "opacity-90",
+    };
+
+    let has_reply = msg.reply_to_id.is_some();
+    let msg_text = msg.text.clone();
+    let status = msg.status.clone();
+    let msg_id = msg.id.clone();
+
+    // Build retry handler if provided
+    let on_retry_handler = props.on_retry.as_ref().map(|h| {
+        let msg_id = msg_id.clone();
+        let handler = *h;
+        EventHandler::new(move |_| handler.call(msg_id.clone()))
+    });
+
+    // Build delete handler if provided
+    let on_delete = props.on_delete;
+    let msg_id_for_delete = msg.id.clone();
+
+    rsx! {
+        div {
+            class: "pending-message-bubble group relative rounded-lg px-3 py-2 transition {opacity}",
+            style: if hovered() { format!("background-color: {}30;", colors::SURFACE_CARD) } else { String::new() },
+            role: "article",
+            aria_label: "Pending message",
+            onmouseenter: move |_| hovered.set(true),
+            onmouseleave: move |_| hovered.set(false),
+            // Reply-to indicator if present
+            if has_reply {
+                div {
+                    class: "text-xs mb-1 flex items-center gap-1",
+                    style: format!("color: {};", colors::TEXT_MUTED),
+                    span {
+                        style: format!("color: {};", colors::TEXT_MUTED),
+                        "↩"
+                    }
+                    "Replying to a message"
+                }
+            }
+            // Message text
+            div {
+                class: "whitespace-pre-wrap break-words",
+                style: format!("color: {};", colors::TEXT_PRIMARY),
+                "{msg_text}"
+            }
+            // Send status row
+            div {
+                class: "flex items-center justify-between mt-1",
+                // Status indicator
+                MessageSendIndicator {
+                    status: status.clone(),
+                    on_retry: on_retry_handler,
+                }
+                // Delete button (on hover)
+                if hovered() {
+                    if let Some(handler) = on_delete {
+                        button {
+                            r#type: "button",
+                            class: "text-xs px-1.5 py-0.5 rounded opacity-50 hover:opacity-100",
+                            style: format!("color: {};", colors::TEXT_MUTED),
+                            onclick: {
+                                let msg_id = msg_id_for_delete.clone();
+                                move |_| handler.call(msg_id.clone())
+                            },
+                            "✕"
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

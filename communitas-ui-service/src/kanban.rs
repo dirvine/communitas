@@ -16,7 +16,8 @@ pub use communitas_kanban::{
 };
 use communitas_ui_api::{
     ActivityEntry, BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView,
-    ChecklistProgress, ColumnView, CommentView, PriorityView, StepView, SwimlaneMode, TagView,
+    ChecklistProgress, ColumnView, CommentView, PriorityView, StepView, SwimlaneMode, SyncState,
+    TagView,
 };
 use std::time::Duration;
 use thiserror::Error;
@@ -892,6 +893,7 @@ impl KanbanService {
                 position: card.position,
                 linked_thread_id: None, // Thread linking via local CRDT only
                 linked_thread_name: None,
+                sync_state: SyncState::Synced, // Default to synced; updated by CRDT sync
             };
             cards_by_column
                 .entry(card.column_id)
@@ -1129,6 +1131,7 @@ impl KanbanService {
             activity,
             linked_thread_id: card.linked_thread_id.clone(),
             linked_thread_name: None, // Thread name resolved via messaging service
+            sync_state: SyncState::Synced, // CRDT cards are considered synced
         })
     }
 
@@ -1316,6 +1319,7 @@ impl KanbanService {
             position: card_position,
             linked_thread_id: None, // New cards have no linked thread
             linked_thread_name: None,
+            sync_state: SyncState::Queued, // New cards start queued for sync
         })
     }
 
@@ -2077,6 +2081,7 @@ impl KanbanService {
             position: card.position,
             linked_thread_id: card.linked_thread_id.clone(),
             linked_thread_name: None, // Thread name resolved via messaging service
+            sync_state: SyncState::Synced, // CRDT cards are considered synced
         }
     }
 

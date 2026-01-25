@@ -1,9 +1,10 @@
 //! File list component with list and grid views.
 
-use communitas_ui_api::DirectoryEntry;
+use communitas_ui_api::{DirectoryEntry, SyncState};
 use dioxus::prelude::*;
 
 use super::browser::{SortColumn, SortDirection, ViewMode};
+use crate::tokens::colors;
 
 /// File list props.
 #[derive(Props, Clone, PartialEq)]
@@ -349,7 +350,7 @@ fn ListView(props: ListViewProps) -> Element {
                                         aria_label: format!("Select {}", entry.name),
                                     }
                                 }
-                                // Name with icon
+                                // Name with icon and sync state
                                 td {
                                     class: "p-2",
                                     role: "gridcell",
@@ -364,6 +365,7 @@ fn ListView(props: ListViewProps) -> Element {
                                             class: if is_selected { "text-emerald-300" } else { "text-slate-200" },
                                             "{entry.name}"
                                         }
+                                        FileSyncIndicator { state: entry.sync_state }
                                     }
                                 }
                                 // Size
@@ -408,6 +410,40 @@ fn SortIndicator(props: SortIndicatorProps) -> Element {
                 SortDirection::Ascending => "↑",
                 SortDirection::Descending => "↓",
             }}
+        }
+    }
+}
+
+/// File sync state indicator for drive entries.
+#[derive(Props, Clone, PartialEq)]
+struct FileSyncIndicatorProps {
+    /// Sync state to display.
+    state: SyncState,
+}
+
+/// Displays sync state icon for file/directory entries.
+#[component]
+fn FileSyncIndicator(props: FileSyncIndicatorProps) -> Element {
+    // Don't show indicator for synced items
+    if props.state == SyncState::Synced {
+        return rsx! {};
+    }
+
+    let (icon, color, label) = match props.state {
+        SyncState::Synced => ("✓", colors::SUCCESS, "Synced"),
+        SyncState::Syncing => ("⟳", colors::INFO, "Syncing"),
+        SyncState::Queued => ("⏱", colors::WARNING, "Waiting to sync"),
+        SyncState::Conflict => ("⚠", colors::WARNING, "Has conflicts"),
+        SyncState::Error => ("✕", colors::ERROR, "Sync failed"),
+    };
+
+    rsx! {
+        span {
+            class: "ml-2 text-sm",
+            style: "color: {color}",
+            title: "{label}",
+            aria_label: "{label}",
+            "{icon}"
         }
     }
 }
@@ -596,11 +632,21 @@ fn GridView(props: GridViewProps) -> Element {
                                 evt.prevent_default();
                                 props.on_context_menu.call((entry_for_ctx.clone(), 0, 0));
                             },
-                            // Icon
+                            // Icon with sync indicator
                             div {
-                                class: "text-4xl mb-2",
-                                aria_hidden: "true",
-                                {file_icon(entry)}
+                                class: "relative",
+                                div {
+                                    class: "text-4xl mb-2",
+                                    aria_hidden: "true",
+                                    {file_icon(entry)}
+                                }
+                                // Sync indicator badge (positioned at corner)
+                                if entry.sync_state != SyncState::Synced {
+                                    div {
+                                        class: "absolute -top-1 -right-1",
+                                        FileSyncIndicator { state: entry.sync_state }
+                                    }
+                                }
                             }
                             // Name
                             p {
@@ -693,6 +739,7 @@ fn format_timestamp(timestamp_ms: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use communitas_ui_api::SyncState;
 
     #[test]
     fn format_size_bytes() {
@@ -718,6 +765,7 @@ mod tests {
             modified_at: 0,
             created_at: 0,
             checksum: None,
+            sync_state: SyncState::Synced,
         };
         assert_eq!(file_icon(&entry), "📁");
     }
@@ -733,6 +781,7 @@ mod tests {
             modified_at: 0,
             created_at: 0,
             checksum: None,
+            sync_state: SyncState::Synced,
         };
         assert_eq!(file_icon(&entry), "🖼️");
     }
@@ -876,6 +925,7 @@ mod tests {
             modified_at: 0,
             created_at: 0,
             checksum: None,
+            sync_state: SyncState::Synced,
         }];
 
         let to_delete = if !selected.is_empty() {
@@ -902,6 +952,7 @@ mod tests {
             modified_at: 0,
             created_at: 0,
             checksum: None,
+            sync_state: SyncState::Synced,
         }];
 
         let to_delete = if !selected.is_empty() {

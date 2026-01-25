@@ -18,6 +18,7 @@ use communitas_ui_api::drive::{
     ShareLinkConfig, ShareLinkStats, StagedUpload, StagedUploadState, StagingConflict,
     StagingEvent, StagingQueueStatus, UploadProgress, UploadState,
 };
+use communitas_ui_api::SyncState;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{RwLock, watch};
@@ -361,6 +362,7 @@ impl DriveService {
                 modified_at: info.modified_at,
                 created_at: info.modified_at,
                 checksum: None,
+                sync_state: SyncState::Synced, // Default to synced; will be updated by staging queue
             })
             .collect();
 
@@ -428,6 +430,7 @@ impl DriveService {
             modified_at: now,
             created_at: now,
             checksum: None,
+            sync_state: SyncState::Synced,
         };
 
         // Update watch channel - add new directory to current_directory
@@ -549,6 +552,7 @@ impl DriveService {
             modified_at: now,
             created_at: now,
             checksum: None,
+            sync_state: SyncState::Synced,
         };
 
         // Update watch channel - remove from source, add at destination
@@ -620,6 +624,7 @@ impl DriveService {
             modified_at: now,
             created_at: now,
             checksum: None,
+            sync_state: SyncState::Synced,
         };
 
         // Update watch channel - add copied file
@@ -769,6 +774,7 @@ impl DriveService {
             modified_at: now,
             created_at: now,
             checksum: Some(checksum),
+            sync_state: SyncState::Synced,
         };
 
         // Update watch channel with new file if we're viewing the parent directory

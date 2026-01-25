@@ -1,11 +1,14 @@
 //! Kanban card component with drag-and-drop support.
 
 use communitas_ui_api::kanban::{CardState, CardView, ChecklistProgress, PriorityView, TagView};
+use communitas_ui_api::SyncState;
 use communitas_ui_service::UiServices;
 use communitas_ui_service::kanban::MoveDirection;
 use dioxus::prelude::*;
 use std::sync::Arc;
 use tracing::info;
+
+use crate::tokens::colors;
 
 use super::{DragState, DraggingCard};
 
@@ -244,10 +247,15 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
             // Card content
             div {
                 class: "flex flex-col gap-2",
-                // Title
-                h4 {
-                    class: "font-medium text-white text-sm line-clamp-2",
-                    "{card.title}"
+                // Title with sync indicator
+                div {
+                    class: "flex items-start justify-between gap-1",
+                    h4 {
+                        class: "font-medium text-white text-sm line-clamp-2 flex-1",
+                        "{card.title}"
+                    }
+                    // Sync state indicator (shown when not synced)
+                    CardSyncIndicator { state: card.sync_state }
                 }
                 // Description preview (if exists)
                 if let Some(desc) = &card.description {
@@ -403,6 +411,39 @@ fn TagChip(props: TagChipProps) -> Element {
             class: "px-1.5 py-0.5 rounded text-[10px] font-medium text-white truncate max-w-16",
             style: "{bg_style}",
             "{tag.name}"
+        }
+    }
+}
+
+/// Card sync state indicator - small badge in card corner.
+#[derive(Props, Clone, PartialEq)]
+struct CardSyncIndicatorProps {
+    /// Sync state to display.
+    state: SyncState,
+}
+
+#[component]
+fn CardSyncIndicator(props: CardSyncIndicatorProps) -> Element {
+    // Don't show indicator for synced items
+    if props.state == SyncState::Synced {
+        return rsx! {};
+    }
+
+    let (icon, color, label) = match props.state {
+        SyncState::Synced => ("✓", colors::SUCCESS, "Synced"),
+        SyncState::Syncing => ("⟳", colors::INFO, "Syncing"),
+        SyncState::Queued => ("⏱", colors::WARNING, "Waiting to sync"),
+        SyncState::Conflict => ("⚠", colors::WARNING, "Has conflicts"),
+        SyncState::Error => ("✕", colors::ERROR, "Sync failed"),
+    };
+
+    rsx! {
+        span {
+            class: "text-xs flex-shrink-0",
+            style: "color: {color}",
+            title: "{label}",
+            aria_label: "{label}",
+            "{icon}"
         }
     }
 }

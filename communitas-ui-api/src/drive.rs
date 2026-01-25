@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::SyncState;
+
 /// Type of virtual disk (storage area).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DiskType {
@@ -64,6 +66,8 @@ pub struct DirectoryEntry {
     pub created_at: i64,
     /// BLAKE3 checksum (None for directories).
     pub checksum: Option<String>,
+    /// Sync state of this entry.
+    pub sync_state: SyncState,
 }
 
 /// Metadata for a file.

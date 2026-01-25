@@ -78,7 +78,8 @@ pub use layout::{
 // Re-export global offline state components (distinct from canvas-specific OfflineIndicator)
 #[allow(unused_imports)]
 pub use offline::{
-    ConnectionBadge, ConnectionState, OfflineBanner, SyncState, SyncStatusIndicator,
+    ConflictBanner, ConflictBannerVariant, ConnectionBadge, ConnectionState, OfflineBanner,
+    SyncState, SyncStatusIndicator, Toast, ToastContainer, ToastNotification, ToastVariant,
     use_connection_state,
 };
 // Re-export settings components for application preferences

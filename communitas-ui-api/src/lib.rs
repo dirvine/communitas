@@ -5,6 +5,7 @@ pub mod canvas;
 pub mod drive;
 pub mod kanban;
 pub mod messaging;
+pub mod sync;
 
 pub use call::{
     CallInfo, CallSettings, CallSnapshot, CallState, DeviceType, MediaDevice, MediaError,
@@ -28,6 +29,7 @@ pub use messaging::{
     ContactWithPresence, Message, MessageReaction, MessageSendStatus, PendingMessage,
     PresenceStatus, SearchResult, ThreadSummary,
 };
+pub use sync::{SyncMetadata, SyncProgress, SyncState, SyncSummary};
 
 /// Small helper used by the Dioxus prototype to display generated identity words.
 #[derive(Debug, Clone, PartialEq, Eq)]

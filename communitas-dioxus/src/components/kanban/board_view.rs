@@ -836,6 +836,7 @@ fn AddColumnForm(props: AddColumnFormProps) -> Element {
 mod tests {
     use super::*;
     use communitas_ui_api::kanban::{BoardSettings, ColumnView, TagView};
+    use communitas_ui_api::SyncState;
 
     fn make_test_card(id: &str, title: &str, state: CardState) -> CardView {
         CardView {
@@ -851,6 +852,7 @@ mod tests {
             position: 0,
             linked_thread_id: None,
             linked_thread_name: None,
+            sync_state: SyncState::Synced,
         }
     }
 

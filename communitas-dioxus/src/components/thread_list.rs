@@ -1,7 +1,7 @@
 //! Thread list sidebar component for messaging UI.
 
 use crate::tokens::colors;
-use communitas_ui_api::{ThreadSummary, UnifiedEntityType};
+use communitas_ui_api::{SyncState, ThreadSummary, UnifiedEntityType};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
@@ -221,12 +221,48 @@ fn ThreadListItem(props: ThreadListItemProps) -> Element {
                                 "{thread.last_message_preview}"
                             }
                         }
-                        if thread.unread_count > 0 {
-                            UnreadBadge { count: thread.unread_count }
+                        div {
+                            class: "flex items-center gap-1.5",
+                            SyncIndicator { state: thread.sync_state }
+                            if thread.unread_count > 0 {
+                                UnreadBadge { count: thread.unread_count }
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/// Sync state indicator showing synchronization status.
+#[derive(Props, Clone, PartialEq)]
+struct SyncIndicatorProps {
+    state: SyncState,
+}
+
+#[component]
+fn SyncIndicator(props: SyncIndicatorProps) -> Element {
+    // Only show indicator for non-synced states
+    if props.state == SyncState::Synced {
+        return rsx! {};
+    }
+
+    let (icon, color, label) = match props.state {
+        SyncState::Synced => ("✓", colors::SUCCESS, "Synced"),
+        SyncState::Syncing => ("⟳", colors::INFO, "Syncing"),
+        SyncState::Queued => ("⏱", colors::WARNING, "Waiting to sync"),
+        SyncState::Conflict => ("⚠", colors::WARNING, "Has conflicts"),
+        SyncState::Error => ("✕", colors::ERROR, "Sync failed"),
+    };
+
+    rsx! {
+        span {
+            class: "sync-indicator flex-shrink-0 text-xs",
+            style: format!("color: {};", color),
+            title: "{label}",
+            aria_label: "{label}",
+            "{icon}"
         }
     }
 }
@@ -519,6 +555,7 @@ mod tests {
             typing_users: vec![],
             is_pinned: false,
             contact_presence: None,
+            sync_state: SyncState::Synced,
         };
         assert_eq!(thread_type_icon(&thread), "#");
     }
@@ -539,6 +576,7 @@ mod tests {
             typing_users: vec![],
             is_pinned: false,
             contact_presence: None,
+            sync_state: SyncState::Synced,
         };
         assert_eq!(thread_type_icon(&thread), "👤");
     }
@@ -592,6 +630,7 @@ mod tests {
                 typing_users: vec![],
                 is_pinned: false,
                 contact_presence: None,
+                sync_state: SyncState::Synced,
             },
             ThreadSummary {
                 thread_id: "t2".to_string(),
@@ -607,6 +646,7 @@ mod tests {
                 typing_users: vec![],
                 is_pinned: false,
                 contact_presence: None,
+                sync_state: SyncState::Syncing,
             },
             ThreadSummary {
                 thread_id: "t3".to_string(),
@@ -622,6 +662,7 @@ mod tests {
                 typing_users: vec![],
                 is_pinned: false,
                 contact_presence: None,
+                sync_state: SyncState::Queued,
             },
         ]
     }

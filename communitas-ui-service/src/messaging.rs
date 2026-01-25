@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
-use communitas_ui_api::{Message, MessageSendStatus, PendingMessage, SearchResult, ThreadSummary};
+use communitas_ui_api::{
+    Message, MessageSendStatus, PendingMessage, SearchResult, SyncState, ThreadSummary,
+};
 
 use crate::presence::PresenceSnapshot;
 use serde::{Deserialize, Serialize};
@@ -521,6 +523,13 @@ impl MessagingService {
             };
 
             let thread_id = entity.id.clone();
+            // Determine sync state based on pending messages
+            let has_pending = false; // TODO: Wire to CRDT sync metadata when available
+            let sync_state = if has_pending {
+                SyncState::Queued
+            } else {
+                SyncState::Synced
+            };
             threads.push(ThreadSummary {
                 thread_id: thread_id.clone(),
                 entity_id: Some(entity.id),
@@ -535,6 +544,7 @@ impl MessagingService {
                 typing_users: typing_state.get_typing_users(&thread_id),
                 is_pinned: pinned_threads.is_pinned(&thread_id),
                 contact_presence: None,
+                sync_state,
             });
         }
 
@@ -574,6 +584,8 @@ impl MessagingService {
                 let thread_id = format!("dm:{contact_id}");
                 // Look up presence status for this contact
                 let contact_presence = presence_snapshot.statuses.get(&contact_id).copied();
+                // Determine sync state for DM thread
+                let sync_state = SyncState::Synced; // TODO: Wire to CRDT sync metadata when available
                 threads.push(ThreadSummary {
                     thread_id: thread_id.clone(),
                     entity_id: None,
@@ -588,6 +600,7 @@ impl MessagingService {
                     typing_users: typing_state.get_typing_users(&thread_id),
                     is_pinned: pinned_threads.is_pinned(&thread_id),
                     contact_presence,
+                    sync_state,
                 });
             }
         }
@@ -1883,6 +1896,7 @@ mod tests {
             typing_users: vec![],
             is_pinned: false,
             contact_presence: None,
+            sync_state: SyncState::Synced,
         }];
 
         service.set_threads(threads);
@@ -2116,6 +2130,7 @@ mod tests {
                 typing_users: vec![],
                 is_pinned: false,
                 contact_presence: None,
+                sync_state: SyncState::Synced,
             },
             ThreadSummary {
                 thread_id: "entity-2".to_string(),
@@ -2131,6 +2146,7 @@ mod tests {
                 typing_users: vec![],
                 is_pinned: false,
                 contact_presence: None,
+                sync_state: SyncState::Syncing,
             },
         ];
 

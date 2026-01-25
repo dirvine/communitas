@@ -23,6 +23,10 @@ pub mod colors {
     pub const WARNING: &str = "#f59e0b";
     /// Success color (green-500)
     pub const SUCCESS: &str = "#22c55e";
+    /// Info color (blue-500)
+    pub const INFO: &str = "#3b82f6";
+    /// Error color (red-500)
+    pub const ERROR: &str = "#ef4444";
 
     // Surface colors (dark theme)
     /// Main background (slate-900)
@@ -440,6 +444,8 @@ mod tests {
         assert!(colors::DANGER.starts_with('#'));
         assert!(colors::WARNING.starts_with('#'));
         assert!(colors::SUCCESS.starts_with('#'));
+        assert!(colors::INFO.starts_with('#'));
+        assert!(colors::ERROR.starts_with('#'));
         assert!(colors::SURFACE_BG.starts_with('#'));
         assert!(colors::SURFACE_CARD.starts_with('#'));
         assert!(colors::SURFACE_ELEVATED.starts_with('#'));

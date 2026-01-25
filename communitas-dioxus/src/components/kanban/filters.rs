@@ -765,6 +765,7 @@ fn PriorityFilterGroup(props: PriorityFilterGroupProps) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use communitas_ui_api::SyncState;
 
     #[test]
     fn board_filters_has_active_filters() {
@@ -865,6 +866,7 @@ mod tests {
             priority: None,
             linked_thread_id: None,
             linked_thread_name: None,
+            sync_state: SyncState::Synced,
         };
         // Empty filter matches all cards
         assert!(filters.matches_card(&card));
@@ -890,6 +892,7 @@ mod tests {
             priority: None,
             linked_thread_id: None,
             linked_thread_name: None,
+            sync_state: SyncState::Synced,
         };
 
         // Match in title
@@ -934,6 +937,7 @@ mod tests {
             priority: None,
             linked_thread_id: None,
             linked_thread_name: None,
+            sync_state: SyncState::Synced,
         };
 
         let card_without_date = CardView {
@@ -952,6 +956,7 @@ mod tests {
             priority: None,
             linked_thread_id: None,
             linked_thread_name: None,
+            sync_state: SyncState::Synced,
         };
 
         // Filter for cards with no due date

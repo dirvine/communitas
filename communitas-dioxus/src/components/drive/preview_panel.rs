@@ -762,7 +762,7 @@ fn format_date(timestamp_ms: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use communitas_ui_api::FileMetadata;
+    use communitas_ui_api::{FileMetadata, SyncState};
 
     fn make_entry(name: &str, is_dir: bool, mime: Option<&str>) -> DirectoryEntry {
         DirectoryEntry {
@@ -774,6 +774,7 @@ mod tests {
             modified_at: 0,
             created_at: 0,
             checksum: None,
+            sync_state: SyncState::Synced,
         }
     }
 

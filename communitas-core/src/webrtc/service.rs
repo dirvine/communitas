@@ -233,10 +233,14 @@ pub struct IncomingCallInfo {
     pub session_id: String,
     /// Caller identity
     pub caller: CommunitasIdentity,
-    /// SDP offer
-    pub sdp_offer: String,
-    /// Media constraints from the offer
+    /// Audio capability from caller
+    pub has_audio: bool,
+    /// Video capability from caller
     pub has_video: bool,
+    /// Data channel capability from caller
+    pub has_data_channel: bool,
+    /// Maximum bandwidth in kbps
+    pub max_bandwidth_kbps: u32,
 }
 
 impl CommunitasWebRtcService {
@@ -324,31 +328,35 @@ impl CommunitasWebRtcService {
             .await
             .map_err(|e| anyhow!("Failed to initiate call: {}", e))?;
 
-        // Generate SDP offer
-        let sdp_offer = self
+        // Exchange capabilities using QUIC-native call flow
+        let capabilities = self
             .call_manager
-            .create_offer(call_id)
+            .exchange_capabilities(call_id)
             .await
-            .map_err(|e| anyhow!("Failed to create SDP offer: {}", e))?;
+            .map_err(|e| anyhow!("Failed to exchange capabilities: {}", e))?;
 
-        debug!("Created SDP offer for call {}", call_id);
+        debug!("Exchanged capabilities for call {}: audio={}, video={}",
+            call_id, capabilities.audio, capabilities.video);
 
         // Create session ID for signaling (using call_id as session_id)
         let session_id = call_id.to_string();
 
-        // Send SDP offer via signaling transport
-        let offer_message = SignalingMessage::Offer {
+        // Send capability exchange via signaling transport (QUIC-native)
+        let capability_message = SignalingMessage::CapabilityExchange {
             session_id: session_id.clone(),
-            sdp: sdp_offer,
+            audio: capabilities.audio,
+            video: capabilities.video,
+            data_channel: capabilities.data_channel,
+            max_bandwidth_kbps: capabilities.max_bandwidth_kbps,
             quic_endpoint: None, // QUIC endpoint discovery handled by gossip
         };
 
         self.signaling_handler
-            .send_message(&target, offer_message)
+            .send_message(&target, capability_message)
             .await
-            .map_err(|e| anyhow!("Failed to send SDP offer: {}", e))?;
+            .map_err(|e| anyhow!("Failed to send capability exchange: {}", e))?;
 
-        info!("Sent SDP offer to {} for call {}", target, call_id);
+        info!("Sent capability exchange to {} for call {}", target, call_id);
 
         // Create call state for tracking (direct 1:1 call)
         let call_state = CallState::new_direct(call_id, target.clone(), constraints.clone());
@@ -473,23 +481,26 @@ impl CommunitasWebRtcService {
                 peer, call_id
             );
 
-            // Create SDP offer for this peer
+            // Send capability exchange for this peer (QUIC-native)
             // In a full implementation, this would create an actual peer connection
             let session_id = format!("{}:{}", call_id, peer.unique_id());
 
-            let offer_message = SignalingMessage::Offer {
+            let capability_message = SignalingMessage::CapabilityExchange {
                 session_id: session_id.clone(),
-                sdp: "group-call-offer".to_string(), // Placeholder SDP
+                audio: true,  // Group calls support audio by default
+                video: false, // Video on demand
+                data_channel: true,
+                max_bandwidth_kbps: 2000, // 2 Mbps default
                 quic_endpoint: None,
             };
 
             if let Err(e) = self
                 .signaling_handler
-                .send_message(peer, offer_message)
+                .send_message(peer, capability_message)
                 .await
             {
                 warn!(
-                    "Failed to send offer to peer {} for group call {}: {}",
+                    "Failed to send capability exchange to peer {} for group call {}: {}",
                     peer, call_id, e
                 );
             }
@@ -618,17 +629,20 @@ impl CommunitasWebRtcService {
                 .await
                 .map_err(|e| anyhow!("Failed to accept call: {}", e))?;
 
-            // Send SDP answer back to caller
-            let answer_message = SignalingMessage::Answer {
+            // Send connection confirmation back to caller (QUIC-native)
+            let confirm_message = SignalingMessage::ConnectionConfirm {
                 session_id: session_id.clone(),
-                sdp: info.sdp_offer.clone(), // In real impl, create actual answer SDP
+                audio: constraints.audio,
+                video: constraints.video,
+                data_channel: true,
+                max_bandwidth_kbps: info.max_bandwidth_kbps.min(2000), // Use minimum of both
                 quic_endpoint: None,
             };
 
             self.signaling_handler
-                .send_message(&info.caller, answer_message)
+                .send_message(&info.caller, confirm_message)
                 .await
-                .map_err(|e| anyhow!("Failed to send SDP answer: {}", e))?;
+                .map_err(|e| anyhow!("Failed to send connection confirmation: {}", e))?;
 
             // Create and store call state (direct 1:1 call)
             let call_state =
@@ -646,7 +660,7 @@ impl CommunitasWebRtcService {
             }
 
             info!(
-                "Call {} accepted, sent SDP answer to {}",
+                "Call {} accepted, sent connection confirmation to {}",
                 call_id, info.caller
             );
         } else {

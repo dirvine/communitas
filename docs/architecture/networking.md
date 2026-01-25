@@ -9,7 +9,7 @@
 Communitas uses a sophisticated multi-layered networking architecture built on QUIC for transport, with advanced NAT traversal, dual-stack IPv4/IPv6 support, and resilient connection management. The networking layer is designed for peer-to-peer communication in challenging network environments with no reliance on central servers.
 
 **Core Technologies**:
-- **Transport**: saorsa-gossip-transport (AntQuicTransport built on ant-quic)
+- **Transport**: saorsa-gossip-transport (UdpTransportAdapter built on ant-quic)
 - **Discovery**: Rendezvous shards (65k shards, DHT-free)
 - **NAT Traversal**: Coordinator-based hole punching and reflection
 - **Resilience**: Connection migration, automatic retry, offline fallback
@@ -86,8 +86,8 @@ pub struct GossipContext {
     pub identity: Identity,
     pub four_words: String,
 
-    /// Transport layer (AntQuicTransport via saorsa-gossip-transport)
-    pub transport: Arc<AntQuicTransport>,
+    /// Transport layer (UdpTransportAdapter via saorsa-gossip-transport)
+    pub transport: Arc<UdpTransportAdapter>,
 
     /// Membership (HyParView + SWIM)
     pub membership: Arc<RwLock<Box<dyn Membership>>>,

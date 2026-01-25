@@ -408,17 +408,17 @@ let suggestions = suggest_corrections("occean-forest-moon-star");
 
 ## saorsa-gossip-transport QUIC API
 
-Communitas uses `saorsa_gossip_transport::AntQuicTransport` (built on ant-quic).
+Communitas uses `saorsa_gossip_transport::UdpTransportAdapter` (built on ant-quic).
 For advanced QUIC primitives, use the re-exported module `saorsa_gossip_transport::quic`.
 
 ```rust
 use bytes::Bytes;
-use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, GossipStreamType};
+use saorsa_gossip_transport::{UdpTransportAdapter, UdpTransportAdapterConfig, GossipStreamType};
 use std::net::SocketAddr;
 
 let bind_addr: SocketAddr = "0.0.0.0:0".parse()?;
-let transport = AntQuicTransport::with_config(
-    AntQuicTransportConfig::new(bind_addr, vec![]),
+let transport = UdpTransportAdapter::with_config(
+    UdpTransportAdapterConfig::new(bind_addr, vec![]),
     None,
 )
 .await?;

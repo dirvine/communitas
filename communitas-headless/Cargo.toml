@@ -23,7 +23,7 @@ saorsa-gossip-coordinator.workspace = true
 saorsa-gossip-types.workspace = true
 saorsa-gossip-pubsub.workspace = true
 # Post-Quantum Cryptography (ML-DSA-87 for application identity)
-saorsa-pqc = "0.3.12"
+saorsa-pqc = "0.4.0"
 four-word-networking = "2.6"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 

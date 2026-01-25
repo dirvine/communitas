@@ -22,7 +22,7 @@ use communitas_core::gossip::{
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use saorsa_gossip_transport::{AntQuicTransport, GossipTransport};
+use saorsa_gossip_transport::{UdpTransportAdapter, GossipTransport};
 use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey, try_keygen_with_rng};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -104,7 +104,7 @@ async fn test_sites_listener_starts() {
     let publisher = Arc::new(SitePublisher::new(site_id));
 
     let bind: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
-    let qt = AntQuicTransport::new(bind, vec![])
+    let qt = UdpTransportAdapter::new(bind, vec![])
         .await
         .expect("transport");
     let transport: Arc<dyn GossipTransport + Send + Sync> = Arc::new(qt);

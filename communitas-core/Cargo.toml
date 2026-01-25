@@ -36,7 +36,7 @@ openh264-sys2.workspace = true
 
 # Post-quantum cryptography - saorsa-pqc re-exports fips203/fips204
 # Use saorsa_pqc::{ml_dsa_65, ml_kem_768, dsa_traits, kem_traits}
-saorsa-pqc = "0.3.14"
+saorsa-pqc = "0.4.0"
 
 # CRDT for document collaboration (Sprint 3.2)
 # sync feature enables Send + Sync traits for multithreaded environments

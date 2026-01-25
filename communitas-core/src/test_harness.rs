@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use rand::Rng;
 use saorsa_gossip_groups::GroupContext;
 use saorsa_gossip_presence::PresenceManager;
-use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig};
+use saorsa_gossip_transport::{UdpTransportAdapter, UdpTransportAdapterConfig};
 use saorsa_gossip_types::{PeerId, TopicId};
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -146,7 +146,7 @@ pub struct TestNode {
     pub core: Option<Arc<CoreContext>>,
     pub presence: Option<Arc<RwLock<PresenceManager>>>,
     pub groups: Arc<RwLock<HashMap<TopicId, GroupContext>>>,
-    pub transport: Arc<AntQuicTransport>,
+    pub transport: Arc<UdpTransportAdapter>,
 }
 
 impl TestNode {
@@ -163,9 +163,9 @@ impl TestNode {
             let port = reserve_test_port()?;
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
 
-            match AntQuicTransport::with_config(AntQuicTransportConfig::new(addr, vec![]), None)
+            match UdpTransportAdapter::with_config(UdpTransportAdapterConfig::new(addr, vec![]), None)
                 .await
-                .context("failed to create AntQuicTransport")
+                .context("failed to create UdpTransportAdapter")
             {
                 Ok(transport) => {
                     debug!("TestNode {} created on port {}", id, port);

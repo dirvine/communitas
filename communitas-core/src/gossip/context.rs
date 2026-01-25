@@ -26,7 +26,7 @@ use saorsa_gossip_membership::Membership;
 use saorsa_gossip_presence::PresenceManager; // Actual exports
 use saorsa_gossip_pubsub::PubSub;
 use saorsa_gossip_transport::{
-    AntQuicTransport, AntQuicTransportConfig, GossipStreamType, GossipTransport,
+    UdpTransportAdapter, UdpTransportAdapterConfig, GossipStreamType, GossipTransport,
 };
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
@@ -79,7 +79,7 @@ pub struct GossipContext {
     pub anti_entropy: Arc<AntiEntropyManager<OrSet<Vec<u8>>>>,
 
     /// Transport layer (QUIC via ant-quic)
-    pub transport: Arc<AntQuicTransport>,
+    pub transport: Arc<UdpTransportAdapter>,
 
     /// Pub/sub layer (Plumtree broadcast)
     pub pubsub: Arc<RwLock<Box<dyn PubSub>>>,
@@ -190,7 +190,7 @@ impl GossipContext {
                 .context("Failed to open bootstrap cache")?,
         );
 
-        // 3. Initialize QUIC transport (AntQuicTransport)
+        // 3. Initialize QUIC transport (UdpTransportAdapter)
         // Use listen_port if provided, otherwise bind to port 0 (OS-assigned)
         // Use Bootstrap role to allow starting without upstream bootstrap nodes
         let bind_port = listen_port.unwrap_or(0);
@@ -204,16 +204,16 @@ impl GossipContext {
         let pub_key_bytes = keypair.public_key().to_vec();
         let sec_key_bytes = keypair.secret_key().to_vec();
 
-        let transport_config = AntQuicTransportConfig::new(bind_addr, vec![])
+        let transport_config = UdpTransportAdapterConfig::new(bind_addr, vec![])
             .with_keypair(pub_key_bytes, sec_key_bytes);
 
         let transport =
-            AntQuicTransport::with_config(transport_config, Some(peer_cache.bootstrap_cache()))
+            UdpTransportAdapter::with_config(transport_config, Some(peer_cache.bootstrap_cache()))
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to create UdpTransportAdapter: {}", e))?;
         let transport = Arc::new(transport);
 
-        // No need to call listen() for AntQuicTransport as it binds on creation.
+        // No need to call listen() for UdpTransportAdapter as it binds on creation.
 
         // 4. Create membership layer (will be started in boot sequence)
         // HyParView parameters: active_degree (3-7), passive_degree (3x active)
@@ -314,8 +314,8 @@ impl GossipContext {
             };
 
             let sites_transport = Arc::new(
-                AntQuicTransport::with_config(
-                    AntQuicTransportConfig::new(sites_bind, vec![]),
+                UdpTransportAdapter::with_config(
+                    UdpTransportAdapterConfig::new(sites_bind, vec![]),
                     None,
                 )
                 .await

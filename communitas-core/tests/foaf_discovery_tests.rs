@@ -511,7 +511,7 @@ async fn test_introducer_config_empty_addresses() {
     };
 
     let bind: std::net::SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
-    let transport = AntQuicTransport::new(bind, vec![])
+    let transport = UdpTransportAdapter::new(bind, vec![])
         .await
         .expect("transport");
 
@@ -654,7 +654,7 @@ async fn test_discovery_fallback_chain() {
 use communitas_core::gossip::discovery::FoafTransport;
 use saorsa_gossip_groups::GroupContext;
 use saorsa_gossip_presence::PresenceManager;
-use saorsa_gossip_transport::AntQuicTransport;
+use saorsa_gossip_transport::UdpTransportAdapter;
 use saorsa_gossip_types::{FoafQuery, FoafResponse, PresenceRecord, TopicId};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -668,7 +668,7 @@ async fn create_mock_presence() -> (
     let peer_id = test_peer_id(1);
     let bind: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
     let transport = Arc::new(
-        AntQuicTransport::new(bind, vec![])
+        UdpTransportAdapter::new(bind, vec![])
             .await
             .expect("transport"),
     );

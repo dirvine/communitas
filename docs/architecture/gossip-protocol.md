@@ -70,7 +70,7 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
 ┌─────────────────────────────────────────────────────────────┐
 │         TRANSPORT LAYER                                     │
 │  - saorsa-gossip-transport (v0.2.2)                         │
-│  - AntQuicTransport + GossipTransport trait                 │
+│  - UdpTransportAdapter + GossipTransport trait                 │
 │  - Streams: Membership, PubSub, Bulk                        │
 │  - Bootstrap cache via ant-quic (CachedPeer, NAT, roles)     │
 └─────────────────────────────────────────────────────────────┘
@@ -113,7 +113,7 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
 // communitas-core/src/gossip/context.rs
 pub struct GossipContext {
     pub identity: Identity,
-    pub transport: Arc<AntQuicTransport>,
+    pub transport: Arc<UdpTransportAdapter>,
     pub membership: Arc<RwLock<Box<dyn Membership>>>,
     pub pubsub: Arc<RwLock<Box<dyn PubSub>>>,
     pub presence: Arc<RwLock<PresenceManager>>,
@@ -171,8 +171,8 @@ identity.verify(message_bytes, &signature)?;
 
 **Bootstrap Cache**:
 ```rust
-// AntQuicTransport accepts an optional bootstrap cache
-let transport = AntQuicTransport::with_config(config, Some(bootstrap_cache)).await?;
+// UdpTransportAdapter accepts an optional bootstrap cache
+let transport = UdpTransportAdapter::with_config(config, Some(bootstrap_cache)).await?;
 
 // CachedPeer entries include addresses, quality score, NAT hints, and roles.
 ```

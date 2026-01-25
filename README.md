@@ -115,7 +115,7 @@ To simulate authentication failures during QA, set `COMMUNITAS_UI_FORCE_AUTH_ERR
 - **Automatic Merge**: Conflict-free convergence without manual intervention or consensus protocols
 
 ### Decentralized Network Architecture
-- **QUIC Transport**: saorsa-gossip-transport (AntQuicTransport on ant-quic v0.18)
+- **QUIC Transport**: saorsa-gossip-transport (UdpTransportAdapter on ant-quic v0.18)
 - **Gossip Overlay (saorsa-gossip v0.2.0)**: HyParView membership + SWIM failure detection + Plumtree broadcast
 - **FOAF Discovery**: Friend-of-a-friend peer discovery without DHT or global indexing
 - **Rendezvous Shards**: 65,536-shard distributed discovery system for global user location

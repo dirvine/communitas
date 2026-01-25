@@ -240,7 +240,7 @@ See [Gossip Protocol](gossip-protocol.md) for details.
 ### Core
 - **Language**: Rust 2024 edition
 - **CRDT**: Yrs (Yjs Rust port)
-- **Networking**: saorsa-gossip (AntQuicTransport on ant-quic)
+- **Networking**: saorsa-gossip (UdpTransportAdapter on ant-quic)
 - **Crypto**: saorsa-pqc (post-quantum)
 
 ### Infrastructure

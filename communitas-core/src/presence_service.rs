@@ -408,7 +408,7 @@ impl PresenceService {
 mod tests {
     use super::*;
     use saorsa_gossip_identity::MlDsaKeyPair;
-    use saorsa_gossip_transport::AntQuicTransport;
+    use saorsa_gossip_transport::UdpTransportAdapter;
     use saorsa_gossip_types::TopicId;
     use std::net::SocketAddr;
 
@@ -638,7 +638,7 @@ mod tests {
     async fn build_test_pubsub(peer_id: PeerId) -> Arc<RwLock<Box<dyn PubSub>>> {
         let bind: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
         let transport = Arc::new(
-            AntQuicTransport::new(bind, vec![])
+            UdpTransportAdapter::new(bind, vec![])
                 .await
                 .expect("transport"),
         );

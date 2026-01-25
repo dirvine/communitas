@@ -308,7 +308,12 @@ pub struct CallService {
     /// Tracks whether a real (non-mock) device enumerator has been set.
     /// Used to avoid re-initializing the enumerator multiple times.
     has_real_enumerator: std::sync::atomic::AtomicBool,
-    screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
+    /// Screen source enumerator wrapped in std::sync::RwLock for lazy initialization.
+    /// Starts with MockScreenSourceEnumerator and can be updated to a real
+    /// platform enumerator when the screen share picker is accessed.
+    screen_source_enumerator: std::sync::RwLock<Arc<dyn ScreenSourceEnumerator>>,
+    /// Tracks whether a real (non-mock) screen source enumerator has been set.
+    has_real_screen_enumerator: std::sync::atomic::AtomicBool,
     /// Call history with persistence
     history: Arc<RwLock<CallHistory>>,
     /// Watch channel for history updates
@@ -491,7 +496,8 @@ impl CallService {
             state,
             device_enumerator: std::sync::RwLock::new(device_enumerator),
             has_real_enumerator: std::sync::atomic::AtomicBool::new(false),
-            screen_source_enumerator,
+            screen_source_enumerator: std::sync::RwLock::new(screen_source_enumerator),
+            has_real_screen_enumerator: std::sync::atomic::AtomicBool::new(false),
             history: history_arc,
             history_tx,
             missed_calls_tx,
@@ -535,6 +541,45 @@ impl CallService {
     #[must_use]
     pub fn has_real_device_enumerator(&self) -> bool {
         self.has_real_enumerator
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Update the screen source enumerator for lazy initialization.
+    ///
+    /// Call this when the user opens the screen share picker to switch from
+    /// the mock enumerator to a real platform-specific enumerator.
+    /// This enables faster app startup by deferring screen enumeration.
+    ///
+    /// # Arguments
+    ///
+    /// * `enumerator` - The platform-specific screen source enumerator to use
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // At app startup, CallService uses MockScreenSourceEnumerator
+    /// // When user opens screen share picker:
+    /// let real_enumerator = platform::create_screen_source_enumerator();
+    /// call_service.set_screen_source_enumerator(real_enumerator);
+    /// ```
+    pub fn set_screen_source_enumerator(&self, enumerator: Arc<dyn ScreenSourceEnumerator>) {
+        let mut guard = self
+            .screen_source_enumerator
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        *guard = enumerator;
+        self.has_real_screen_enumerator
+            .store(true, std::sync::atomic::Ordering::Release);
+        tracing::info!("Screen source enumerator updated for lazy initialization");
+    }
+
+    /// Check if the screen source enumerator has been lazily initialized.
+    ///
+    /// Returns `true` if a real platform enumerator has been set,
+    /// `false` if still using the default mock enumerator.
+    #[must_use]
+    pub fn has_real_screen_enumerator(&self) -> bool {
+        self.has_real_screen_enumerator
             .load(std::sync::atomic::Ordering::Acquire)
     }
 
@@ -2249,7 +2294,15 @@ impl CallService {
     /// Returns [`CallError::ScreenShareError`] if enumeration fails.
     #[instrument(skip(self), name = "ui.call.enumerate_screen_sources")]
     pub async fn enumerate_screen_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
-        let sources = self.screen_source_enumerator.enumerate_sources().await?;
+        // Get the enumerator from RwLock (supports lazy initialization)
+        let enumerator = {
+            let guard = self
+                .screen_source_enumerator
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            guard.clone()
+        };
+        let sources = enumerator.enumerate_sources().await?;
 
         // Cache sources in state for UI access
         {
@@ -2272,7 +2325,15 @@ impl CallService {
     /// Returns [`CallError::ScreenShareError`] if refresh fails.
     #[instrument(skip(self), name = "ui.call.refresh_screen_sources")]
     pub async fn refresh_screen_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
-        let sources = self.screen_source_enumerator.refresh_thumbnails().await?;
+        // Get the enumerator from RwLock (supports lazy initialization)
+        let enumerator = {
+            let guard = self
+                .screen_source_enumerator
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            guard.clone()
+        };
+        let sources = enumerator.refresh_thumbnails().await?;
 
         // Update cached sources
         {

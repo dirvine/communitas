@@ -7,7 +7,9 @@ use communitas_ui_api::call::{ScreenShareSource, ScreenShareSourceType};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{info, warn};
+
+use crate::platform;
 
 /// Props for the ScreenSharePicker component.
 #[derive(Props, Clone, PartialEq)]
@@ -31,6 +33,17 @@ pub fn ScreenSharePicker(props: ScreenSharePickerProps) -> Element {
     let mut share_audio = use_signal(|| false);
     let mut allow_control = use_signal(|| false);
     let mut starting = use_signal(|| false);
+
+    // Lazy-initialize the real screen source enumerator on first render
+    let call_for_init = call_service.clone();
+    use_effect(move || {
+        let call = call_for_init.clone();
+        if !call.has_real_screen_enumerator() {
+            let enumerator = platform::create_screen_source_enumerator();
+            call.set_screen_source_enumerator(enumerator);
+            info!(target: "ui.call", "Lazy-initialized real screen source enumerator");
+        }
+    });
 
     // Load sources on mount
     let call_for_effect = call_service.clone();

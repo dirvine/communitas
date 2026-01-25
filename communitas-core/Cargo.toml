@@ -70,6 +70,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 log = "0.4"
 
+# WebAuthn for passkey/biometric authentication
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+
 # Cryptography and security
 blake3 = "1.0"
 bip39 = { version = "2", default-features = false, features = ["std", "zeroize"] }

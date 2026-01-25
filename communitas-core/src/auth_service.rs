@@ -9,7 +9,7 @@
 //! - Auto-login functionality
 
 use crate::encrypted_storage::{
-    EncryptedStorageManager, PasskeyInfo, RecentIdentity, Session, VaultInfo,
+    EncryptedStorageManager, PasskeyInfo, RecentIdentity, Session, VaultInfo, WebAuthnHandler,
 };
 use crate::keystore::Keystore;
 use anyhow::{Result, anyhow};
@@ -44,14 +44,28 @@ impl From<Session> for SessionInfo {
 pub struct AuthService {
     storage_manager: EncryptedStorageManager,
     active_session: Option<Session>,
+    webauthn_handler: Option<WebAuthnHandler>,
 }
 
 impl AuthService {
     /// Create new auth service with storage manager
     pub fn new(storage_manager: EncryptedStorageManager) -> Self {
+        // Try to create WebAuthn handler, log if it fails
+        let webauthn_handler = match WebAuthnHandler::new() {
+            Ok(handler) => Some(handler),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to initialize WebAuthn handler: {}. Passkey registration will use legacy mode.",
+                    e
+                );
+                None
+            }
+        };
+
         Self {
             storage_manager,
             active_session: None,
+            webauthn_handler,
         }
     }
 
@@ -249,6 +263,67 @@ impl AuthService {
     // Passkey / Biometric Authentication Methods
     // ========================================================================
 
+    /// Start WebAuthn passkey registration
+    ///
+    /// Returns a registration challenge that should be passed to the authenticator
+    /// (browser WebAuthn API or platform biometric prompt).
+    ///
+    /// After the authenticator responds, call `passkey_finish_registration` with the response.
+    pub fn passkey_start_registration(
+        &self,
+        four_words: &str,
+        display_name: &str,
+    ) -> Result<webauthn_rs::prelude::CreationChallengeResponse> {
+        let handler = self
+            .webauthn_handler
+            .as_ref()
+            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
+
+        let (ccr, _state) = handler.start_registration(four_words, display_name, &[])?;
+
+        tracing::info!(
+            "AuthService: Started WebAuthn registration for {}",
+            four_words
+        );
+
+        Ok(ccr)
+    }
+
+    /// Finish WebAuthn passkey registration with authenticator response
+    ///
+    /// This completes the registration and stores the credential.
+    pub async fn passkey_finish_registration(
+        &mut self,
+        four_words: &str,
+        device_name: &str,
+        response: &webauthn_rs::prelude::RegisterPublicKeyCredential,
+        state: &webauthn_rs::prelude::PasskeyRegistration,
+    ) -> Result<PasskeyInfo> {
+        let handler = self
+            .webauthn_handler
+            .as_ref()
+            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
+
+        // Verify the registration response
+        let passkey = handler.finish_registration(response, state)?;
+
+        // Convert to our credential format
+        let credential = WebAuthnHandler::passkey_to_credential(&passkey);
+
+        // Store the credential
+        let info = self
+            .storage_manager
+            .passkey_register_webauthn(four_words, device_name, credential)
+            .await?;
+
+        tracing::info!(
+            "AuthService: Finished WebAuthn registration for {}",
+            four_words
+        );
+
+        Ok(info)
+    }
+
     /// Register a passkey for biometric authentication (legacy - without WebAuthn)
     ///
     /// This enables Touch ID, Face ID, or Windows Hello for the identity.
@@ -297,9 +372,95 @@ impl AuthService {
         Ok(info)
     }
 
-    /// Authenticate using passkey/biometric
+    /// Check if WebAuthn is available for passkey operations
+    pub fn webauthn_available(&self) -> bool {
+        self.webauthn_handler.is_some()
+    }
+
+    /// Start WebAuthn passkey authentication
+    ///
+    /// Returns an authentication challenge that should be passed to the authenticator.
+    /// After the authenticator responds, call `passkey_finish_authentication` with the response.
+    pub async fn passkey_start_authentication(
+        &self,
+        four_words: &str,
+    ) -> Result<(
+        webauthn_rs::prelude::RequestChallengeResponse,
+        webauthn_rs::prelude::PasskeyAuthentication,
+    )> {
+        let handler = self
+            .webauthn_handler
+            .as_ref()
+            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
+
+        // Get stored credential and convert to Passkey
+        let credential = self
+            .storage_manager
+            .passkey_get_info(four_words)
+            .await?
+            .webauthn_credential
+            .ok_or_else(|| anyhow!("No WebAuthn credential found for this identity"))?;
+
+        let passkey = WebAuthnHandler::credential_to_passkey(&credential)?;
+
+        let (rcr, state) = handler.start_authentication(&[passkey])?;
+
+        tracing::info!(
+            "AuthService: Started WebAuthn authentication for {}",
+            four_words
+        );
+
+        Ok((rcr, state))
+    }
+
+    /// Finish WebAuthn passkey authentication with authenticator response
+    ///
+    /// This completes the authentication and creates a session.
+    pub async fn passkey_finish_authentication(
+        &mut self,
+        four_words: &str,
+        response: &webauthn_rs::prelude::PublicKeyCredential,
+        state: &webauthn_rs::prelude::PasskeyAuthentication,
+    ) -> Result<SessionInfo> {
+        let handler = self
+            .webauthn_handler
+            .as_ref()
+            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
+
+        // Verify the authentication response
+        let auth_result = handler.finish_authentication(response, state)?;
+
+        tracing::info!(
+            "AuthService: WebAuthn authentication verified for {} (counter: {})",
+            four_words,
+            auth_result.counter
+        );
+
+        // Update the passkey's last used timestamp
+        self.storage_manager.passkey_get_info(four_words).await.ok(); // Just update timestamp, don't fail if this fails
+
+        // Use the password-based authentication to create the session
+        // (The keyring should have the password from previous login)
+        let session = self
+            .storage_manager
+            .passkey_authenticate(four_words)
+            .await?;
+
+        let session_info = SessionInfo::from(session.clone());
+        self.active_session = Some(session);
+
+        tracing::info!(
+            "AuthService: Finished WebAuthn authentication for {}",
+            four_words
+        );
+
+        Ok(session_info)
+    }
+
+    /// Authenticate using passkey/biometric (legacy - without WebAuthn verification)
     ///
     /// This retrieves the password from keyring and performs standard vault login.
+    /// For full WebAuthn flow, use passkey_start_authentication and passkey_finish_authentication.
     pub async fn passkey_authenticate(&mut self, four_words: &str) -> Result<SessionInfo> {
         tracing::info!("AuthService: Passkey authentication for {}", four_words);
 

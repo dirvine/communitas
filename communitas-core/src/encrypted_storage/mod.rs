@@ -43,6 +43,7 @@ pub mod passkey;
 pub mod platform_storage;
 pub mod session;
 pub mod vault;
+pub mod webauthn;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,7 @@ pub use passkey::*;
 pub use platform_storage::*;
 pub use session::*;
 pub use vault::*;
+pub use webauthn::*;
 
 /// Configuration for the encrypted storage system
 #[derive(Debug, Clone, Serialize, Deserialize)]

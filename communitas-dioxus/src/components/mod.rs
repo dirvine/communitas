@@ -1,6 +1,7 @@
 //! Dioxus UI components for Communitas.
 
 pub mod announcer;
+pub mod auth;
 pub mod call;
 pub mod canvas;
 mod composer;
@@ -92,3 +93,9 @@ pub use settings::UpdateCard;
 pub use settings::UpdateProgressBar;
 #[allow(unused_imports)]
 pub use settings::UpdateStatusBadge;
+// Re-export auth components for biometric/passkey authentication
+#[allow(unused_imports)]
+pub use auth::{
+    BiometricState, PasskeyButton, PasskeyPrompt, RecoverySetupModal, RecoveryWarningBadge,
+    RecoveryWarningBanner,
+};

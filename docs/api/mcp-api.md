@@ -622,8 +622,452 @@ Tests cover:
 - Error consistency checks
 - Auth state handling
 
+## MCP Apps (Interactive UIs)
+
+Communitas implements the [MCP Apps extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) (SEP-1865), enabling interactive UI widgets directly within AI conversations in Claude Desktop, ChatGPT, VS Code, and other MCP-compatible hosts.
+
+### Overview
+
+MCP Apps transforms the MCP server from a headless automation API into a full app platform. Interactive HTML/CSS/JS widgets render in sandboxed iframes within the MCP host, communicating with the server via postMessage JSON-RPC.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MCP Host Application                      │
+│                (Claude Desktop / ChatGPT / VS Code)          │
+├─────────────────────────────────────────────────────────────┤
+│    ┌──────────────────────────────────────────────────┐     │
+│    │              Sandboxed Iframe                     │     │
+│    │  ┌────────────────────────────────────────────┐  │     │
+│    │  │         Communitas UI Widget               │  │     │
+│    │  │  (contacts/messages/kanban/drive/canvas)   │  │     │
+│    │  └────────────────────────────────────────────┘  │     │
+│    └────────────────────┬─────────────────────────────┘     │
+│                         │ postMessage JSON-RPC              │
+└─────────────────────────┼───────────────────────────────────┘
+                          │
+┌─────────────────────────┴───────────────────────────────────┐
+│                   Communitas MCP Server                      │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              communitas-ui-service                   │    │
+│  │         (shared layer - ADR-019)                     │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### UI Resources
+
+UI widgets are exposed as resources with the `ui://` scheme. The server advertises these in `resources/list` and serves them via `resources/read`.
+
+#### Available Widgets
+
+| Resource URI | Widget | Description |
+|--------------|--------|-------------|
+| `ui://communitas/contacts` | Contacts | Interactive contact list with search and favorites |
+| `ui://communitas/messages` | Messages | Thread navigation and message composition |
+| `ui://communitas/kanban` | Kanban | Drag-drop project boards |
+| `ui://communitas/drive` | Drive | File browser with upload and preview |
+| `ui://communitas/canvas` | Canvas | Collaborative whiteboard viewer |
+
+#### Resource List Response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "resources": [
+      {
+        "uri": "ui://communitas/contacts",
+        "name": "Contacts",
+        "description": "Interactive contact list with search and favorites",
+        "mimeType": "text/html;profile=mcp-app",
+        "_meta": {
+          "ui": {
+            "csp": {
+              "connectDomains": [],
+              "resourceDomains": []
+            }
+          }
+        }
+      }
+    ]
+  },
+  "id": 1
+}
+```
+
+#### Reading UI Resources
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "resources/read",
+  "params": {
+    "uri": "ui://communitas/contacts"
+  },
+  "id": 2
+}
+
+// Response
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "contents": [
+      {
+        "uri": "ui://communitas/contacts",
+        "mimeType": "text/html;profile=mcp-app",
+        "text": "<!DOCTYPE html>..."
+      }
+    ]
+  },
+  "id": 2
+}
+```
+
+### Tool UI Enhancement
+
+Tools can return `_meta.ui` to indicate that an interactive UI should be rendered alongside the tool response.
+
+#### Tool Response with UI Metadata
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"contacts\": [{\"id\": \"abc\", \"name\": \"Alice\"}]}"
+      }
+    ],
+    "isError": false,
+    "_meta": {
+      "ui": {
+        "resourceUri": "ui://communitas/contacts",
+        "visibility": ["model", "app"]
+      }
+    }
+  },
+  "id": 1
+}
+```
+
+#### Visibility Scopes
+
+- `model`: The model can see and reference the UI content
+- `app`: The host application renders the UI to the user
+- Both: UI shown to user, model can reference it in conversation
+
+#### Enhanced Tools
+
+The following tools include `_meta.ui` to provide interactive rendering:
+
+| Tool | UI Resource | Behavior |
+|------|-------------|----------|
+| `list_contacts` | `ui://communitas/contacts` | Shows contact list widget |
+| `get_contact` | `ui://communitas/contacts` | Shows contact detail |
+| `list_threads` | `ui://communitas/messages` | Shows thread list widget |
+| `list_messages` | `ui://communitas/messages` | Shows message thread |
+| `send_message` | `ui://communitas/messages` | Shows updated thread |
+| `list_kanban_boards` | `ui://communitas/kanban` | Shows board selector |
+| `get_kanban_board` | `ui://communitas/kanban` | Shows full board |
+| `list_files` | `ui://communitas/drive` | Shows file browser |
+| `list_disks` | `ui://communitas/drive` | Shows disk selector |
+| `canvas_get_snapshot` | `ui://communitas/canvas` | Shows canvas viewer |
+| `canvas_get_history` | `ui://communitas/canvas` | Shows history timeline |
+
+### postMessage Protocol
+
+UI widgets communicate with the MCP server through the host application using JSON-RPC over postMessage.
+
+#### Initialization Handshake
+
+When a UI widget loads, it establishes a connection with the host:
+
+```javascript
+// Widget sends initialization
+window.parent.postMessage({
+  jsonrpc: '2.0',
+  method: 'ui/initialize',
+  params: {
+    resourceUri: 'ui://communitas/contacts',
+    capabilities: {
+      toolCalls: true,
+      resourceReads: true,
+      modelMessages: true
+    }
+  }
+}, '*');
+
+// Host responds with session info
+// (received via message event)
+{
+  jsonrpc: '2.0',
+  result: {
+    sessionId: 'session-123',
+    serverCapabilities: {
+      toolsAvailable: true,
+      resourcesAvailable: true
+    }
+  }
+}
+```
+
+#### Calling Tools from UI
+
+Widgets can invoke MCP tools through the bridge:
+
+```javascript
+// Request
+window.parent.postMessage({
+  jsonrpc: '2.0',
+  id: 'req-1',
+  method: 'tools/call',
+  params: {
+    name: 'list_contacts',
+    arguments: { limit: 50 }
+  }
+}, '*');
+
+// Response (via message event)
+{
+  jsonrpc: '2.0',
+  id: 'req-1',
+  result: {
+    content: [{ type: 'text', text: '{"contacts": [...]}' }]
+  }
+}
+```
+
+#### Reading Resources from UI
+
+```javascript
+// Request
+window.parent.postMessage({
+  jsonrpc: '2.0',
+  id: 'req-2',
+  method: 'resources/read',
+  params: {
+    uri: 'entity://group/abc123'
+  }
+}, '*');
+```
+
+#### Sending Messages to Model Context
+
+Widgets can update the model's context with relevant information:
+
+```javascript
+// Inform the model about user selection
+window.parent.postMessage({
+  jsonrpc: '2.0',
+  method: 'ui/message',
+  params: {
+    content: 'User selected contact: Alice (alice-123)'
+  }
+}, '*');
+```
+
+### MCP Bridge Library
+
+Communitas provides a JavaScript bridge library for widget development:
+
+```html
+<script src="../shared/mcp-bridge.js"></script>
+<script>
+const bridge = new McpBridge();
+
+// Wait for connection
+bridge.onReady(async () => {
+  // Call tools
+  const contacts = await bridge.callTool('list_contacts', { limit: 50 });
+
+  // Read resources
+  const entity = await bridge.readResource('entity://group/abc123');
+
+  // Update model context
+  bridge.sendMessage('User selected: Alice');
+});
+
+// Handle tool input events (when model calls tools)
+bridge.onToolInput((toolName, args) => {
+  console.log(`Model called ${toolName} with`, args);
+});
+
+// Handle tool results
+bridge.onToolResult((toolName, result) => {
+  console.log(`Tool ${toolName} returned`, result);
+});
+</script>
+```
+
+### Capability Negotiation
+
+The server advertises MCP Apps support in the initialize response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "initialize",
+  "params": {
+    "clientInfo": { "name": "claude-desktop", "version": "1.0" }
+  },
+  "id": 1
+}
+
+// Response
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "tools": { "listChanged": false },
+      "resources": { "subscribe": false, "listChanged": false }
+    },
+    "extensions": {
+      "io.modelcontextprotocol/ui": {
+        "mimeTypes": ["text/html;profile=mcp-app"]
+      }
+    },
+    "serverInfo": {
+      "name": "communitas-mcp",
+      "version": "0.1.0"
+    }
+  },
+  "id": 1
+}
+```
+
+### Content Security Policy (CSP)
+
+Each UI resource specifies its CSP requirements in the `_meta.ui.csp` field:
+
+```json
+{
+  "uri": "ui://communitas/contacts",
+  "mimeType": "text/html;profile=mcp-app",
+  "_meta": {
+    "ui": {
+      "csp": {
+        "connectDomains": [],
+        "resourceDomains": []
+      }
+    }
+  }
+}
+```
+
+Communitas widgets are self-contained with no external dependencies:
+- All resources embedded via `include_str!()`
+- No external network requests required
+- No external stylesheets or scripts
+
+This ensures widgets work in restrictive CSP environments.
+
+### Security Model
+
+1. **Iframe Sandboxing**: All widgets run in sandboxed iframes controlled by the MCP host
+2. **Origin Restriction**: postMessage communication restricted to parent window
+3. **CSP Enforcement**: Widgets declare required domains; hosts can reject overly permissive requests
+4. **Visibility Scopes**: Tools control whether UI is visible to model, app, or both
+5. **No Direct Network**: Widgets cannot make direct network requests; all data flows through MCP tools
+
+### Building Custom Widgets
+
+To create a new UI widget for Communitas:
+
+#### 1. Create the HTML Bundle
+
+```html
+<!-- communitas-mcp/ui-bundles/my-widget/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Widget</title>
+  <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+  <div id="app" class="loading">Loading...</div>
+
+  <script src="../shared/mcp-bridge.js"></script>
+  <script>
+    const bridge = new McpBridge();
+    const app = document.getElementById('app');
+
+    bridge.onReady(async () => {
+      app.classList.remove('loading');
+      // Initialize widget
+      const data = await bridge.callTool('my_tool', {});
+      renderWidget(data);
+    });
+
+    function renderWidget(data) {
+      app.innerHTML = `<div class="card">${data.content}</div>`;
+    }
+  </script>
+</body>
+</html>
+```
+
+#### 2. Register the UI Resource
+
+```rust
+// In ui_resources.rs
+impl UiResourceRegistry {
+    fn register_standard_widgets(&mut self) {
+        // ... existing widgets ...
+
+        self.register(UiResourceEntry::new_inline(
+            "ui://communitas/my-widget",
+            "My Widget",
+            "Description of my widget",
+            include_str!("../ui-bundles/my-widget/index.html"),
+        ));
+    }
+}
+```
+
+#### 3. Enhance Tools with UI Metadata
+
+```rust
+// In tools.rs
+fn handle_my_tool(&self, args: MyToolArgs) -> Result<ToolCallResult, Error> {
+    let result = self.service.do_something(args)?;
+
+    Ok(ToolCallResultWithMeta {
+        content: vec![TextContent::new(serde_json::to_string(&result)?)],
+        is_error: false,
+        meta: Some(ToolResultMeta {
+            ui: Some(McpUiToolMeta {
+                resource_uri: Some("ui://communitas/my-widget".to_string()),
+                visibility: vec!["model".to_string(), "app".to_string()],
+            }),
+        }),
+    })
+}
+```
+
+#### 4. Test the Widget
+
+```bash
+# Start MCP server
+cargo run -p communitas-mcp -- --http --demo
+
+# Test resource listing
+curl -X POST http://localhost:3040/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"resources/list"}'
+
+# Test resource reading
+curl -X POST http://localhost:3040/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"ui://communitas/my-widget"}}'
+```
+
 ## See Also
 
 - [Core API Documentation](core-api.md)
 - [MCP README](../../communitas-mcp/README.md)
 - [ADR-018: MCP External Integration](../architecture/adr-018-mcp-external-integration.md)
+- [ADR-022: MCP Apps Integration](../adr/ADR-022-mcp-apps-integration.md)

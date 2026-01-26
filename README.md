@@ -234,6 +234,21 @@ cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
 ```
 Complete guide: [communitas-mcp/README.md](communitas-mcp/README.md)
 
+### MCP Apps (Interactive UIs in AI Conversations)
+Communitas implements the [MCP Apps extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) (SEP-1865), enabling rich interactive UIs directly within AI conversations in Claude Desktop, ChatGPT, VS Code, and other MCP hosts.
+
+| Widget | Description | Features |
+|--------|-------------|----------|
+| **Contacts** | Interactive contact list | Search, favorites, presence indicators |
+| **Messages** | Thread navigation | Composition, reactions, read status |
+| **Kanban** | Project boards | Drag-drop cards, tags, due dates |
+| **Drive** | File browser | Upload, preview, quota meter |
+| **Canvas** | Whiteboard viewer | Layer toggles, history, remote cursors |
+
+**The MCP server IS the app.** Dioxus native and MCP Apps are both presentation layers over the same shared `communitas-ui-service` (ADR-019), ensuring identical behavior across AI agents and human users.
+
+See [ADR-022: MCP Apps Integration](docs/adr/ADR-022-mcp-apps-integration.md) for architecture details.
+
 ---
 
 ## Network & Identity

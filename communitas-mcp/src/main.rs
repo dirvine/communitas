@@ -31,6 +31,7 @@ mod protocol;
 mod server;
 mod tls;
 mod tools;
+mod ui_resources;
 
 use anyhow::Result;
 use clap::Parser;

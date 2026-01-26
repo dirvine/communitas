@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas Canvas</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            color: #999;
+        }
+        .canvas-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .toolbar {
+            padding: 8px 16px;
+            background: #2a2a2a;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .toolbar-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .tool-btn {
+            padding: 8px 12px;
+            background: #333;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .tool-btn:hover { background: #444; }
+        .tool-btn.active { background: #3b82f6; }
+        .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .canvas-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: #f8f9fa;
+        }
+        .layer-panel {
+            position: absolute;
+            right: 16px;
+            top: 16px;
+            width: 200px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .layer-panel h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #999;
+            margin-bottom: 8px;
+        }
+        .layer-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .layer-item:hover { background: #333; }
+        .layer-item input[type="checkbox"] {
+            accent-color: #3b82f6;
+        }
+        .remote-cursors {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        .remote-cursor {
+            position: absolute;
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+        }
+        .cursor-pointer {
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 10px solid;
+        }
+        .cursor-label {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        .history-controls {
+            display: flex;
+            gap: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">Loading canvas...</div>
+    </div>
+    <script src="../shared/mcp-bridge.js"></script>
+    <script>
+        // Canvas widget - Phase 2.5 implementation
+        const app = document.getElementById('app');
+        const bridge = new McpBridge();
+        let canvas, ctx;
+        let canvasData = null;
+        let layers = [];
+        let remoteCursors = {};
+
+        async function loadCanvas(canvasId) {
+            try {
+                const result = await bridge.callTool('canvas_get_snapshot', { canvas_id: canvasId });
+                const data = JSON.parse(result.content[0].text);
+                canvasData = data;
+                renderCanvas(data);
+                loadHistory(canvasId);
+                loadRemoteCursors(canvasId);
+            } catch (err) {
+                app.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
+            }
+        }
+
+        async function loadHistory(canvasId) {
+            const result = await bridge.callTool('canvas_get_history', { canvas_id: canvasId });
+            const data = JSON.parse(result.content[0].text);
+            updateHistoryButtons(data);
+        }
+
+        async function loadRemoteCursors(canvasId) {
+            try {
+                const result = await bridge.callTool('canvas_get_remote_cursors', { canvas_id: canvasId });
+                const data = JSON.parse(result.content[0].text);
+                renderRemoteCursors(data.cursors || []);
+            } catch (err) {
+                // Remote cursors optional
+            }
+        }
+
+        function renderCanvas(data) {
+            layers = data.layers || [{ id: 'default', name: 'Layer 1', visible: true }];
+
+            const html = `
+                <div class="canvas-container">
+                    <div class="toolbar">
+                        <div class="toolbar-group">
+                            <span style="color: #999">${data.name || 'Canvas'}</span>
+                        </div>
+                        <div class="toolbar-group history-controls">
+                            <button class="tool-btn" id="undo" disabled>↩ Undo</button>
+                            <button class="tool-btn" id="redo" disabled>↪ Redo</button>
+                        </div>
+                        <div class="toolbar-group">
+                            <button class="tool-btn" id="export">📥 Export</button>
+                        </div>
+                    </div>
+                    <div class="canvas-area">
+                        <canvas id="canvas"></canvas>
+                        <div class="remote-cursors" id="cursors"></div>
+                        <div class="layer-panel">
+                            <h3>Layers</h3>
+                            ${layers.map(l => `
+                                <div class="layer-item">
+                                    <input type="checkbox" ${l.visible ? 'checked' : ''} data-id="${l.id}">
+                                    <span>${l.name}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            app.innerHTML = html;
+
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            drawSnapshot(data);
+
+            window.addEventListener('resize', resizeCanvas);
+
+            document.getElementById('undo').addEventListener('click', () => {
+                bridge.callTool('canvas_undo', { canvas_id: canvasData.id });
+                loadCanvas(canvasData.id);
+            });
+
+            document.getElementById('redo').addEventListener('click', () => {
+                bridge.callTool('canvas_redo', { canvas_id: canvasData.id });
+                loadCanvas(canvasData.id);
+            });
+
+            document.getElementById('export').addEventListener('click', exportCanvas);
+
+            document.querySelectorAll('.layer-item input').forEach(cb => {
+                cb.addEventListener('change', e => {
+                    const layerId = e.target.dataset.id;
+                    const layer = layers.find(l => l.id === layerId);
+                    if (layer) {
+                        layer.visible = e.target.checked;
+                        drawSnapshot(canvasData);
+                    }
+                });
+            });
+        }
+
+        function resizeCanvas() {
+            const area = document.querySelector('.canvas-area');
+            if (area && canvas) {
+                canvas.width = area.clientWidth;
+                canvas.height = area.clientHeight;
+                if (canvasData) drawSnapshot(canvasData);
+            }
+        }
+
+        function drawSnapshot(data) {
+            if (!ctx) return;
+            ctx.fillStyle = '#f8f9fa';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw elements from visible layers
+            const elements = data.elements || [];
+            elements.forEach(el => {
+                const layer = layers.find(l => l.id === el.layer_id);
+                if (layer && !layer.visible) return;
+
+                ctx.save();
+                switch (el.type) {
+                    case 'rectangle':
+                        ctx.fillStyle = el.fill || '#3b82f6';
+                        ctx.fillRect(el.x, el.y, el.width, el.height);
+                        break;
+                    case 'circle':
+                        ctx.fillStyle = el.fill || '#3b82f6';
+                        ctx.beginPath();
+                        ctx.arc(el.x, el.y, el.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'text':
+                        ctx.fillStyle = el.color || '#1a1a1a';
+                        ctx.font = `${el.fontSize || 16}px sans-serif`;
+                        ctx.fillText(el.text, el.x, el.y);
+                        break;
+                    case 'line':
+                        ctx.strokeStyle = el.stroke || '#1a1a1a';
+                        ctx.lineWidth = el.lineWidth || 2;
+                        ctx.beginPath();
+                        ctx.moveTo(el.x1, el.y1);
+                        ctx.lineTo(el.x2, el.y2);
+                        ctx.stroke();
+                        break;
+                }
+                ctx.restore();
+            });
+        }
+
+        function updateHistoryButtons(historyData) {
+            const undoBtn = document.getElementById('undo');
+            const redoBtn = document.getElementById('redo');
+            if (undoBtn) undoBtn.disabled = !historyData.can_undo;
+            if (redoBtn) redoBtn.disabled = !historyData.can_redo;
+        }
+
+        function renderRemoteCursors(cursors) {
+            const container = document.getElementById('cursors');
+            if (!container) return;
+
+            container.innerHTML = cursors.map(c => `
+                <div class="remote-cursor" style="left: ${c.x}px; top: ${c.y}px;">
+                    <div class="cursor-pointer" style="border-bottom-color: ${c.color || '#3b82f6'}"></div>
+                    <span class="cursor-label" style="background: ${c.color || '#3b82f6'}; color: white">
+                        ${c.user_name || 'Anonymous'}
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        function exportCanvas() {
+            if (!canvas) return;
+            const link = document.createElement('a');
+            link.download = 'canvas-export.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        bridge.onReady(() => {
+            // Try to get canvasId from URL params or load default
+            const params = new URLSearchParams(window.location.search);
+            const canvasId = params.get('canvas_id');
+            if (canvasId) {
+                loadCanvas(canvasId);
+            } else {
+                app.innerHTML = '<div class="loading">No canvas selected</div>';
+            }
+        });
+    </script>
+</body>
+</html>

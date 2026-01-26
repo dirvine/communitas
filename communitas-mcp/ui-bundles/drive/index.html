@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas Drive</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #1a1a1a;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            color: #666;
+        }
+        .drive-header {
+            padding: 16px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .breadcrumb {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .breadcrumb span { cursor: pointer; color: #3b82f6; }
+        .breadcrumb span:last-child { color: #1a1a1a; cursor: default; }
+        .quota-bar {
+            width: 200px;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .quota-fill {
+            height: 100%;
+            background: #3b82f6;
+            transition: width 0.3s;
+        }
+        .drive-content {
+            display: flex;
+            min-height: calc(100vh - 60px);
+        }
+        .file-list {
+            flex: 1;
+            padding: 16px;
+        }
+        .file-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+        }
+        .file-item {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .file-item:hover { background: #f0f0f0; }
+        .file-item.selected { background: #dbeafe; }
+        .file-icon {
+            font-size: 40px;
+            margin-bottom: 8px;
+        }
+        .file-name {
+            font-size: 13px;
+            word-break: break-word;
+            line-height: 1.3;
+        }
+        .file-size {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+        .preview-panel {
+            width: 300px;
+            background: white;
+            border-left: 1px solid #e0e0e0;
+            padding: 16px;
+            display: none;
+        }
+        .preview-panel.open { display: block; }
+        .preview-image {
+            width: 100%;
+            height: 200px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        .preview-meta { font-size: 13px; }
+        .preview-meta dt { font-weight: 500; margin-top: 12px; }
+        .preview-meta dd { color: #666; }
+        .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-secondary { background: #e0e0e0; color: #333; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">Loading drive...</div>
+    </div>
+    <script src="../shared/mcp-bridge.js"></script>
+    <script>
+        // Drive widget - Phase 2.4 implementation
+        const app = document.getElementById('app');
+        const bridge = new McpBridge();
+        let currentDisk = null;
+        let currentPath = '/';
+        let selectedFile = null;
+
+        async function loadDrive() {
+            try {
+                const result = await bridge.callTool('list_disks', {});
+                const data = JSON.parse(result.content[0].text);
+                if (data.disks && data.disks.length > 0) {
+                    currentDisk = data.disks[0];
+                    loadFiles(currentDisk.id, '/');
+                } else {
+                    app.innerHTML = '<div class="loading">No disks available</div>';
+                }
+            } catch (err) {
+                app.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
+            }
+        }
+
+        async function loadFiles(diskId, path) {
+            currentPath = path;
+            const result = await bridge.callTool('list_files', { disk_id: diskId, path });
+            const data = JSON.parse(result.content[0].text);
+            renderFiles(data);
+        }
+
+        function renderFiles(data) {
+            const files = data.entries || [];
+            const usedPercent = data.quota ? (data.used / data.quota * 100) : 0;
+
+            const html = `
+                <div class="drive-header">
+                    <div class="breadcrumb">
+                        ${renderBreadcrumb(currentPath)}
+                    </div>
+                    <div class="quota-bar">
+                        <div class="quota-fill" style="width: ${usedPercent}%"></div>
+                    </div>
+                </div>
+                <div class="drive-content">
+                    <div class="file-list">
+                        <div class="file-grid">
+                            ${files.map(f => renderFileItem(f)).join('')}
+                            ${files.length === 0 ? '<div class="loading">Empty folder</div>' : ''}
+                        </div>
+                    </div>
+                    <div class="preview-panel" id="preview"></div>
+                </div>
+            `;
+            app.innerHTML = html;
+
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.addEventListener('click', () => selectFile(item.dataset.id, item.dataset.name, item.dataset.type));
+                item.addEventListener('dblclick', () => {
+                    if (item.dataset.type === 'directory') {
+                        loadFiles(currentDisk.id, `${currentPath}${item.dataset.name}/`);
+                    }
+                });
+            });
+        }
+
+        function renderBreadcrumb(path) {
+            const parts = path.split('/').filter(p => p);
+            let html = '<span data-path="/">Home</span>';
+            let accumulated = '/';
+            parts.forEach(part => {
+                accumulated += part + '/';
+                html += ` / <span data-path="${accumulated}">${part}</span>`;
+            });
+            return html;
+        }
+
+        function renderFileItem(file) {
+            const icon = file.is_directory ? '📁' : getFileIcon(file.name);
+            return `
+                <div class="file-item" data-id="${file.id}" data-name="${file.name}" data-type="${file.is_directory ? 'directory' : 'file'}">
+                    <div class="file-icon">${icon}</div>
+                    <div class="file-name">${file.name}</div>
+                    ${!file.is_directory ? `<div class="file-size">${formatSize(file.size)}</div>` : ''}
+                </div>
+            `;
+        }
+
+        function getFileIcon(name) {
+            const ext = name.split('.').pop().toLowerCase();
+            const icons = {
+                pdf: '📄', doc: '📝', docx: '📝', txt: '📄',
+                jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️',
+                mp3: '🎵', wav: '🎵', mp4: '🎬', mov: '🎬',
+                zip: '📦', rar: '📦', js: '📜', ts: '📜',
+            };
+            return icons[ext] || '📄';
+        }
+
+        function formatSize(bytes) {
+            if (!bytes) return '';
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let i = 0;
+            while (bytes >= 1024 && i < units.length - 1) {
+                bytes /= 1024;
+                i++;
+            }
+            return `${bytes.toFixed(1)} ${units[i]}`;
+        }
+
+        function selectFile(id, name, type) {
+            selectedFile = { id, name, type };
+            document.querySelectorAll('.file-item').forEach(i => i.classList.remove('selected'));
+            document.querySelector(`[data-id="${id}"]`)?.classList.add('selected');
+
+            const preview = document.getElementById('preview');
+            preview.classList.add('open');
+            preview.innerHTML = `
+                <div class="preview-image">${type === 'directory' ? '📁' : getFileIcon(name)}</div>
+                <dl class="preview-meta">
+                    <dt>Name</dt><dd>${name}</dd>
+                    <dt>Type</dt><dd>${type === 'directory' ? 'Folder' : 'File'}</dd>
+                </dl>
+                <div class="actions">
+                    ${type !== 'directory' ? '<button class="btn btn-primary">Download</button>' : ''}
+                    <button class="btn btn-secondary">Delete</button>
+                </div>
+            `;
+        }
+
+        bridge.onReady(loadDrive);
+    </script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas Messages</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            color: #666;
+        }
+        .thread-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        .thread-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .thread-item:hover { background: #f0f0f0; }
+        .thread-item.unread { border-left: 3px solid #3b82f6; }
+        .avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            color: #666;
+        }
+        .thread-info { flex: 1; min-width: 0; }
+        .thread-name { font-weight: 500; }
+        .thread-preview {
+            font-size: 13px;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .thread-time { font-size: 12px; color: #999; }
+        .message-view {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .message-header {
+            padding: 16px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .back-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+        }
+        .message-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            background: white;
+        }
+        .message.mine {
+            align-self: flex-end;
+            background: #3b82f6;
+            color: white;
+        }
+        .compose {
+            padding: 12px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 8px;
+        }
+        .compose input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .compose button {
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">Loading messages...</div>
+    </div>
+    <script src="../shared/mcp-bridge.js"></script>
+    <script>
+        // Messages widget - Phase 2.2 implementation
+        const app = document.getElementById('app');
+        const bridge = new McpBridge();
+        let currentThread = null;
+
+        async function loadThreads() {
+            try {
+                const result = await bridge.callTool('list_threads', {});
+                const data = JSON.parse(result.content[0].text);
+                renderThreads(data.threads || []);
+            } catch (err) {
+                app.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
+            }
+        }
+
+        function renderThreads(threads) {
+            if (threads.length === 0) {
+                app.innerHTML = '<div class="loading">No messages yet</div>';
+                return;
+            }
+
+            const html = `
+                <div class="thread-list">
+                    ${threads.map(t => `
+                        <div class="thread-item ${t.unread_count > 0 ? 'unread' : ''}" data-id="${t.entity_id}">
+                            <div class="avatar">${t.entity_name?.charAt(0) || '?'}</div>
+                            <div class="thread-info">
+                                <div class="thread-name">${t.entity_name || 'Unknown'}</div>
+                                <div class="thread-preview">${t.last_message_preview || 'No messages'}</div>
+                            </div>
+                            <div class="thread-time">${formatTime(t.last_message_time)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            app.innerHTML = html;
+
+            document.querySelectorAll('.thread-item').forEach(item => {
+                item.addEventListener('click', () => openThread(item.dataset.id));
+            });
+        }
+
+        async function openThread(entityId) {
+            currentThread = entityId;
+            // TODO: Load messages for thread
+            bridge.sendMessage({ action: 'thread_opened', entityId });
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            if (date.toDateString() === now.toDateString()) {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            return date.toLocaleDateString();
+        }
+
+        bridge.onReady(loadThreads);
+    </script>
+</body>
+</html>

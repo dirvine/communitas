@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas Kanban</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #1a1a1a;
+            overflow-x: auto;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            color: #666;
+        }
+        .board-header {
+            padding: 16px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .board-header h1 { font-size: 18px; }
+        .board {
+            display: flex;
+            gap: 16px;
+            padding: 16px;
+            min-height: calc(100vh - 60px);
+            overflow-x: auto;
+        }
+        .column {
+            min-width: 280px;
+            max-width: 280px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+        .column-header {
+            padding: 12px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .column-count {
+            background: #e0e0e0;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .column-cards {
+            flex: 1;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 100px;
+        }
+        .card {
+            background: white;
+            border-radius: 6px;
+            padding: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: grab;
+        }
+        .card:active { cursor: grabbing; }
+        .card.dragging { opacity: 0.5; }
+        .card-title { font-weight: 500; margin-bottom: 8px; }
+        .card-tags {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .tag {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #e0e0e0;
+        }
+        .tag.priority-high { background: #fecaca; color: #991b1b; }
+        .tag.priority-medium { background: #fef3c7; color: #92400e; }
+        .tag.priority-low { background: #d1fae5; color: #065f46; }
+        .card-meta {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+        }
+        .add-card {
+            padding: 8px 12px;
+            color: #666;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .add-card:hover { color: #333; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">Loading kanban board...</div>
+    </div>
+    <script src="../shared/mcp-bridge.js"></script>
+    <script>
+        // Kanban widget - Phase 2.3 implementation
+        const app = document.getElementById('app');
+        const bridge = new McpBridge();
+        let currentBoard = null;
+
+        async function loadBoard(boardId) {
+            try {
+                const result = await bridge.callTool('get_kanban_board', { board_id: boardId });
+                const data = JSON.parse(result.content[0].text);
+                currentBoard = data;
+                renderBoard(data);
+            } catch (err) {
+                // If no boardId, list boards first
+                const result = await bridge.callTool('list_kanban_boards', {});
+                const data = JSON.parse(result.content[0].text);
+                if (data.boards && data.boards.length > 0) {
+                    loadBoard(data.boards[0].id);
+                } else {
+                    app.innerHTML = '<div class="loading">No kanban boards found</div>';
+                }
+            }
+        }
+
+        function renderBoard(board) {
+            const html = `
+                <div class="board-header">
+                    <h1>${board.name || 'Kanban Board'}</h1>
+                </div>
+                <div class="board">
+                    ${(board.columns || []).map(col => `
+                        <div class="column" data-id="${col.id}">
+                            <div class="column-header">
+                                ${col.name}
+                                <span class="column-count">${(col.cards || []).length}</span>
+                            </div>
+                            <div class="column-cards" data-column="${col.id}">
+                                ${(col.cards || []).map(card => renderCard(card)).join('')}
+                            </div>
+                            <div class="add-card">+ Add card</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            app.innerHTML = html;
+            initDragDrop();
+        }
+
+        function renderCard(card) {
+            const priorityClass = card.priority ? `priority-${card.priority}` : '';
+            return `
+                <div class="card" draggable="true" data-id="${card.id}">
+                    <div class="card-title">${card.title}</div>
+                    <div class="card-tags">
+                        ${card.priority ? `<span class="tag ${priorityClass}">${card.priority}</span>` : ''}
+                        ${(card.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}
+                    </div>
+                    ${card.due_date ? `<div class="card-meta"><span>Due: ${formatDate(card.due_date)}</span></div>` : ''}
+                </div>
+            `;
+        }
+
+        function initDragDrop() {
+            const cards = document.querySelectorAll('.card');
+            const columns = document.querySelectorAll('.column-cards');
+
+            cards.forEach(card => {
+                card.addEventListener('dragstart', e => {
+                    card.classList.add('dragging');
+                    e.dataTransfer.setData('text/plain', card.dataset.id);
+                });
+                card.addEventListener('dragend', () => card.classList.remove('dragging'));
+            });
+
+            columns.forEach(column => {
+                column.addEventListener('dragover', e => e.preventDefault());
+                column.addEventListener('drop', async e => {
+                    e.preventDefault();
+                    const cardId = e.dataTransfer.getData('text/plain');
+                    const columnId = column.dataset.column;
+                    await bridge.callTool('move_kanban_card', {
+                        card_id: cardId,
+                        target_column_id: columnId
+                    });
+                    loadBoard(currentBoard.id);
+                });
+            });
+        }
+
+        function formatDate(dateStr) {
+            return new Date(dateStr).toLocaleDateString();
+        }
+
+        bridge.onReady(() => loadBoard());
+    </script>
+</body>
+</html>

@@ -9,11 +9,12 @@
 
 use crate::Args;
 use crate::protocol::{
-    InitializeParams, InitializeResult, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Resource,
-    ResourceContent, ResourceListResult, ResourceReadParams, ResourceReadResult,
-    ResourcesCapability, ServerCapabilities, ServerInfo, ToolCallParams, ToolListResult,
+    InitializeParams, InitializeResultWithExtensions, JsonRpcError, JsonRpcRequest,
+    JsonRpcResponse, Resource, ResourceContent, ResourceListResult, ResourceReadParams,
+    ResourceReadResult, ResourcesCapability, ServerInfo, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
+use crate::ui_resources::UiResourceRegistry;
 use crate::tools;
 use anyhow::Result;
 use communitas_core::app::CommunitasApp;
@@ -42,6 +43,8 @@ pub struct McpServer {
     demo_mode: bool,
     args: Args,
     token_manager: Option<TokenManager>,
+    /// UI resource registry for MCP Apps extension
+    ui_resources: UiResourceRegistry,
 }
 
 impl McpServer {
@@ -55,6 +58,7 @@ impl McpServer {
             demo_mode,
             args,
             token_manager: None,
+            ui_resources: UiResourceRegistry::with_standard_widgets(),
         }
     }
 
@@ -195,22 +199,19 @@ impl McpServer {
             self.initialize_demo_mode().await?;
         }
 
-        let result = InitializeResult {
-            protocol_version: "2024-11-05".to_string(),
-            capabilities: ServerCapabilities {
-                tools: Some(ToolsCapability {
-                    list_changed: false,
-                }),
-                resources: Some(ResourcesCapability {
-                    subscribe: false,
-                    list_changed: false,
-                }),
-            },
-            server_info: ServerInfo {
+        // Use extended initialize result with MCP Apps UI extension support
+        let result = InitializeResultWithExtensions::with_ui_support(
+            "2024-11-05",
+            ServerInfo {
                 name: "communitas-mcp".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
-        };
+            Some(ToolsCapability { list_changed: false }),
+            Some(ResourcesCapability {
+                subscribe: false,
+                list_changed: false,
+            }),
+        );
 
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
@@ -833,6 +834,16 @@ impl McpServer {
             mime_type: Some("application/json".to_string()),
         });
 
+        // Add UI resources from the MCP Apps registry
+        for ui_resource in self.ui_resources.list() {
+            resources.push(Resource {
+                uri: ui_resource.uri,
+                name: ui_resource.name,
+                description: ui_resource.description,
+                mime_type: ui_resource.mime_type,
+            });
+        }
+
         let result = ResourceListResult { resources };
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
@@ -967,6 +978,27 @@ impl McpServer {
                     "peer_count": peers.len()
                 }))
                 .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
+            }
+            uri if uri.starts_with("ui://") => {
+                // Handle MCP Apps UI resources
+                drop(app_lock); // Release the app lock since we don't need it for UI resources
+
+                let (content, mime_type) = self
+                    .ui_resources
+                    .read(uri)
+                    .ok_or_else(|| JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}")))?;
+
+                let result = ResourceReadResult {
+                    contents: vec![ResourceContent {
+                        uri: params.uri,
+                        mime_type: Some(mime_type),
+                        text: Some(content),
+                        blob: None,
+                    }],
+                };
+
+                return serde_json::to_value(result)
+                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()));
             }
             uri => {
                 return Err(JsonRpcError::invalid_params(&format!(

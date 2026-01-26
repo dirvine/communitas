@@ -9,13 +9,14 @@
 
 use crate::Args;
 use crate::protocol::{
-    InitializeParams, InitializeResult, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Resource,
-    ResourceContent, ResourceListResult, ResourceReadParams, ResourceReadResult,
-    ResourcesCapability, ServerCapabilities, ServerInfo, ToolCallParams, ToolListResult,
+    InitializeParams, InitializeResultWithExtensions, JsonRpcError, JsonRpcRequest,
+    JsonRpcResponse, Resource, ResourceContent, ResourceListResult, ResourceReadParams,
+    ResourceReadResult, ResourcesCapability, ServerInfo, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
 use crate::tls::{ServerTlsConfig, ServerTlsConfigBuilder, TlsConfigError};
 use crate::tools;
+use crate::ui_resources::UiResourceRegistry;
 use anyhow::Result;
 use axum::{
     Json, Router,
@@ -57,6 +58,8 @@ pub struct HttpServerState {
     protocol_initialized: RwLock<bool>,
     /// Token manager for delegate authentication
     token_manager: RwLock<Option<TokenManager>>,
+    /// UI resource registry for MCP Apps extension
+    ui_resources: UiResourceRegistry,
 }
 
 impl HttpServerState {
@@ -68,6 +71,7 @@ impl HttpServerState {
             args,
             protocol_initialized: RwLock::new(false),
             token_manager: RwLock::new(None),
+            ui_resources: UiResourceRegistry::with_standard_widgets(),
         }
     }
 
@@ -324,7 +328,7 @@ async fn handle_request_inner(
         }
         "tools/list" => handle_tools_list(state).await,
         "tools/call" => handle_tools_call(state, request.params).await,
-        "resources/list" => handle_resources_list().await,
+        "resources/list" => handle_resources_list(state).await,
         "resources/read" => handle_resources_read(state, request.params).await,
         "ping" => Ok(Value::Object(serde_json::Map::new())),
         method => {
@@ -438,22 +442,19 @@ async fn handle_initialize(
     let mut init_lock = state.protocol_initialized.write().await;
     *init_lock = true;
 
-    let result = InitializeResult {
-        protocol_version: "2024-11-05".to_string(),
-        capabilities: ServerCapabilities {
-            tools: Some(ToolsCapability {
-                list_changed: false,
-            }),
-            resources: Some(ResourcesCapability {
-                subscribe: false,
-                list_changed: false,
-            }),
-        },
-        server_info: ServerInfo {
+    // Use extended initialize result with MCP Apps UI extension support
+    let result = InitializeResultWithExtensions::with_ui_support(
+        "2024-11-05",
+        ServerInfo {
             name: "communitas-mcp-http".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
         },
-    };
+        Some(ToolsCapability { list_changed: false }),
+        Some(ResourcesCapability {
+            subscribe: false,
+            list_changed: false,
+        }),
+    );
 
     serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
 }
@@ -753,8 +754,8 @@ async fn handle_create_vault(state: &HttpServerState, args: Value) -> Result<Val
     }
 }
 
-async fn handle_resources_list() -> Result<Value, JsonRpcError> {
-    let resources = vec![
+async fn handle_resources_list(state: &HttpServerState) -> Result<Value, JsonRpcError> {
+    let mut resources = vec![
         Resource {
             uri: "communitas://identity".to_string(),
             name: "Current Identity".to_string(),
@@ -794,6 +795,16 @@ async fn handle_resources_list() -> Result<Value, JsonRpcError> {
             mime_type: Some("application/json".to_string()),
         },
     ];
+
+    // Add UI resources from the MCP Apps registry
+    for ui_resource in state.ui_resources.list() {
+        resources.push(Resource {
+            uri: ui_resource.uri,
+            name: ui_resource.name,
+            description: ui_resource.description,
+            mime_type: ui_resource.mime_type,
+        });
+    }
 
     let result = ResourceListResult { resources };
     serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -853,6 +864,27 @@ async fn handle_resources_read(
             "connection_info": null
         })
         .to_string(),
+        uri if uri.starts_with("ui://") => {
+            // Handle MCP Apps UI resources
+            drop(app_lock); // Release the app lock since we don't need it for UI resources
+
+            let (content, mime_type) = state
+                .ui_resources
+                .read(uri)
+                .ok_or_else(|| JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}")))?;
+
+            let result = ResourceReadResult {
+                contents: vec![ResourceContent {
+                    uri: params.uri,
+                    mime_type: Some(mime_type),
+                    text: Some(content),
+                    blob: None,
+                }],
+            };
+
+            return serde_json::to_value(result)
+                .map_err(|e| JsonRpcError::internal_error(&e.to_string()));
+        }
         uri => {
             return Err(JsonRpcError::invalid_params(&format!(
                 "Unknown resource: {uri}"

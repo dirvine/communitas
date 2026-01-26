@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas Contacts</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #1a1a1a;
+            padding: 16px;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            color: #666;
+        }
+        .contacts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .contact-item:hover { background: #f0f0f0; }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            color: #666;
+        }
+        .avatar.online::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 10px;
+            height: 10px;
+            background: #22c55e;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        .contact-info { flex: 1; }
+        .contact-name { font-weight: 500; }
+        .contact-status { font-size: 12px; color: #666; }
+        .favorite { color: #fbbf24; }
+        .search-box {
+            width: 100%;
+            padding: 10px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">Loading contacts...</div>
+    </div>
+    <script src="../shared/mcp-bridge.js"></script>
+    <script>
+        // Contacts widget - Phase 2.1 implementation
+        const app = document.getElementById('app');
+        const bridge = new McpBridge();
+
+        async function loadContacts() {
+            try {
+                const result = await bridge.callTool('list_contacts', { include_presence: true });
+                const data = JSON.parse(result.content[0].text);
+                renderContacts(data.contacts || []);
+            } catch (err) {
+                app.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
+            }
+        }
+
+        function renderContacts(contacts) {
+            if (contacts.length === 0) {
+                app.innerHTML = '<div class="loading">No contacts yet</div>';
+                return;
+            }
+
+            const html = `
+                <input type="text" class="search-box" placeholder="Search contacts..." id="search">
+                <div class="contacts-list" id="list">
+                    ${contacts.map(c => `
+                        <div class="contact-item" data-id="${c.id}">
+                            <div class="avatar ${c.is_online ? 'online' : ''}">${c.display_name?.charAt(0) || '?'}</div>
+                            <div class="contact-info">
+                                <div class="contact-name">${c.display_name || c.four_words}</div>
+                                <div class="contact-status">${c.is_online ? 'Online' : 'Offline'}</div>
+                            </div>
+                            ${c.is_favourite ? '<span class="favorite">★</span>' : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            app.innerHTML = html;
+
+            // Search functionality
+            document.getElementById('search').addEventListener('input', e => {
+                const query = e.target.value.toLowerCase();
+                document.querySelectorAll('.contact-item').forEach(item => {
+                    const name = item.querySelector('.contact-name').textContent.toLowerCase();
+                    item.style.display = name.includes(query) ? 'flex' : 'none';
+                });
+            });
+        }
+
+        bridge.onReady(loadContacts);
+    </script>
+</body>
+</html>

@@ -30,6 +30,8 @@ ADRs document significant architectural decisions made in the project. Each reco
 | [ADR-018](ADR-018-mcp-external-integration.md) | MCP External Integration Architecture | Accepted | 2025-01-15 |
 | [ADR-019](ADR-019-shared-rust-ui-service.md) | Shared Rust UI Service Layer | Accepted | 2026-01-18 |
 | [ADR-020](ADR-020-dioxus-desktop-adoption.md) | Dioxus Desktop Adoption | Accepted | 2026-01-18 |
+| [ADR-021](ADR-021-canvas-integration-strategy.md) | Canvas Integration Strategy | Accepted | 2026-01-20 |
+| [ADR-022](ADR-022-mcp-apps-integration.md) | MCP Apps Integration | Accepted | 2026-01-26 |
 
 ## Key ADR Relationships
 

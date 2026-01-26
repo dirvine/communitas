@@ -1,8 +1,67 @@
 <!DOCTYPE html>
+<!--
+  GAP ANALYSIS: Kanban Widget vs Dioxus Components
+  Date: 2026-01-26
+  Analyst: Claude Code (Phase 9.1 Task 9)
+
+  PRESENT IN WIDGET:
+  - [x] Board/column/card hierarchy
+  - [x] Basic drag-drop support (HTML5 API)
+  - [x] Priority tags (high/medium/low colors)
+  - [x] Tag display with colors
+  - [x] Due date display (basic formatting)
+  - [x] Column card counts
+  - [x] Add card placeholder
+
+  MISSING FROM WIDGET (to implement in Phase 9.1):
+  - [x] Drag-drop visual feedback - Priority: HIGH (Task 10) DONE
+        Dioxus ref: card.rs:111-145 (DragState, DraggingCard)
+        Added: .drop-zone-active, drag-over highlight, aria-grabbed, focus styles
+  - [x] Due date overdue styling - Priority: HIGH (Task 11) DONE
+        Dioxus ref: card.rs:79-95 (due_date_display)
+        Added: getDueDateInfo() with 5 states: overdue/today/tomorrow/soon/later
+  - [x] Filter bar with tags - Priority: MEDIUM (Task 12) DONE
+        Dioxus ref: board_view.rs:115-117 (show_filters, active_filters)
+        Added: Tag/priority filter bar, multi-select, clear filter, real-time filtering
+  - [ ] Swimlane view - Priority: LOW (Phase 9.2)
+        Dioxus ref: board_view.rs:283-293 (SwimlaneView)
+  - [ ] Accessibility labels - Priority: HIGH
+        Dioxus ref: card.rs:122-125 (role, aria-label, aria-grabbed)
+        Need: role="list", aria-label on cards/columns
+  - [ ] Keyboard navigation - Priority: MEDIUM
+        Dioxus ref: card.rs:152-245 (onkeydown handlers)
+        Need: Tab focus, Enter to open, Ctrl+Arrow to move
+  - [ ] Card detail modal - Priority: LOW (Phase 9.2)
+        Dioxus ref: card.rs:358-363 (CardDetailModal)
+  - [ ] Checklist progress - Priority: LOW
+        Dioxus ref: card.rs:349-352 (ChecklistProgressBadge)
+
+  NOT IN PHASE 9.1 SCOPE:
+  - [ ] Swimlane view (Phase 9.2)
+  - [ ] Card detail modal (Phase 9.2)
+  - [ ] Analytics dashboard (Phase 9.3)
+
+  PRIORITY ORDER FOR PHASE 9.1:
+  1. Task 9: This audit DONE
+  2. Task 10: Improve drag-drop with visual feedback
+  3. Task 11: Add due date proximity indicators
+  4. Task 12: Add tag filter bar
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Content Security Policy: Restrict resource loading to same origin -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                  script-src 'self' 'unsafe-inline';
+                  style-src 'self' 'unsafe-inline';
+                  img-src 'self' data: https:;
+                  connect-src 'self' ws://localhost:* wss://localhost:* wss://*.saorsalabs.com;
+                  object-src 'none';
+                  base-uri 'self';
+                  form-action 'self';
+                  frame-ancestors 'self';">
     <title>Communitas Kanban</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -99,6 +158,152 @@
             font-size: 14px;
         }
         .add-card:hover { color: #333; }
+        /* Drag-drop visual feedback - matches Dioxus DragState */
+        .card.dragging {
+            opacity: 0.5;
+            transform: rotate(2deg);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .column-cards.drop-zone-active {
+            background: rgba(59, 130, 246, 0.1);
+            border: 2px dashed #3b82f6;
+            border-radius: 8px;
+        }
+        .column-cards.drop-zone-hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+        /* Card focus state for keyboard navigation */
+        .card:focus {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+        .card:focus-visible {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+        /* Drop indicator line */
+        .drop-indicator {
+            height: 3px;
+            background: #3b82f6;
+            border-radius: 2px;
+            margin: 4px 0;
+            display: none;
+        }
+        .column-cards.drop-zone-hover .drop-indicator.active {
+            display: block;
+        }
+        /* Due date indicators - matches Dioxus card.rs:79-95 */
+        .due-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .due-badge::before {
+            content: '📅';
+            font-size: 10px;
+        }
+        .due-overdue {
+            background: rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+        }
+        .due-overdue::before { content: '⚠️'; }
+        .due-today {
+            background: rgba(245, 158, 11, 0.2);
+            color: #d97706;
+        }
+        .due-tomorrow {
+            background: rgba(16, 185, 129, 0.2);
+            color: #059669;
+        }
+        .due-soon {
+            background: rgba(100, 116, 139, 0.15);
+            color: #475569;
+        }
+        .due-later {
+            background: rgba(100, 116, 139, 0.1);
+            color: #64748b;
+        }
+        /* Filter bar - matches Dioxus filters.rs */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+        .filter-label {
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+        }
+        .filter-chips {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 1px solid #e0e0e0;
+            background: #f8f9fa;
+            color: #475569;
+        }
+        .filter-chip:hover {
+            background: #e0e0e0;
+        }
+        .filter-chip.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        .filter-chip.active:hover {
+            background: #2563eb;
+        }
+        .filter-chip .chip-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .clear-filters {
+            padding: 4px 10px;
+            font-size: 12px;
+            color: #64748b;
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .clear-filters:hover {
+            color: #1e293b;
+        }
+        /* Search input */
+        .filter-search {
+            padding: 6px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 13px;
+            min-width: 180px;
+        }
+        .filter-search:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        /* Card hidden by filter */
+        .card.filtered-out {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -111,6 +316,13 @@
         const app = document.getElementById('app');
         const bridge = new McpBridge();
         let currentBoard = null;
+
+        // Filter state
+        const activeFilters = {
+            tags: new Set(),
+            priorities: new Set(),
+            search: ''
+        };
 
         async function loadBoard(boardId) {
             try {
@@ -130,73 +342,433 @@
             }
         }
 
+        // Extract all unique tags and priorities from board
+        function extractFilterOptions(board) {
+            const tags = new Map(); // id -> {name, color}
+            const priorities = new Set();
+
+            (board.columns || []).forEach(col => {
+                (col.cards || []).forEach(card => {
+                    if (card.priority) {
+                        priorities.add(card.priority);
+                    }
+                    (card.tags || []).forEach(tag => {
+                        // Handle both string tags and object tags
+                        if (typeof tag === 'string') {
+                            tags.set(tag, { name: tag, color: null });
+                        } else if (tag.id) {
+                            tags.set(tag.id, { name: tag.name || tag.id, color: tag.color || null });
+                        }
+                    });
+                });
+            });
+
+            return {
+                tags: Array.from(tags.entries()).map(([id, info]) => ({ id, ...info })),
+                priorities: Array.from(priorities)
+            };
+        }
+
+        // Check if a card matches the active filters
+        function cardMatchesFilters(card) {
+            // Search filter
+            if (activeFilters.search) {
+                const searchLower = activeFilters.search.toLowerCase();
+                const titleMatch = (card.title || '').toLowerCase().includes(searchLower);
+                const descMatch = (card.description || '').toLowerCase().includes(searchLower);
+                if (!titleMatch && !descMatch) {
+                    return false;
+                }
+            }
+
+            // Tag filter (any match)
+            if (activeFilters.tags.size > 0) {
+                const cardTagIds = (card.tags || []).map(t => typeof t === 'string' ? t : t.id);
+                const hasMatch = cardTagIds.some(tagId => activeFilters.tags.has(tagId));
+                if (!hasMatch) {
+                    return false;
+                }
+            }
+
+            // Priority filter (any match)
+            if (activeFilters.priorities.size > 0) {
+                if (!card.priority || !activeFilters.priorities.has(card.priority)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Render filter bar
+        function renderFilterBar(filterOptions) {
+            const hasActiveFilters = activeFilters.tags.size > 0 || activeFilters.priorities.size > 0 || activeFilters.search;
+            const activeCount = activeFilters.tags.size + activeFilters.priorities.size + (activeFilters.search ? 1 : 0);
+
+            let html = `
+                <div class="filter-bar" role="region" aria-label="Board filters">
+                    <input type="search"
+                           class="filter-search"
+                           placeholder="Search cards..."
+                           value="${bridge.escapeHTML(activeFilters.search)}"
+                           aria-label="Search cards"
+                           id="filter-search">
+            `;
+
+            // Priority chips
+            if (filterOptions.priorities.length > 0) {
+                html += `<span class="filter-label">Priority:</span><div class="filter-chips">`;
+                filterOptions.priorities.forEach(priority => {
+                    const isActive = activeFilters.priorities.has(priority);
+                    const priorityColors = {
+                        high: '#ef4444',
+                        medium: '#f59e0b',
+                        low: '#22c55e',
+                        urgent: '#dc2626'
+                    };
+                    const color = priorityColors[priority.toLowerCase()] || '#64748b';
+                    html += `
+                        <button class="filter-chip ${isActive ? 'active' : ''}"
+                                data-filter-type="priority"
+                                data-filter-value="${priority}"
+                                aria-pressed="${isActive}">
+                            <span class="chip-dot" style="background: ${color}"></span>
+                            ${bridge.escapeHTML(priority)}
+                        </button>
+                    `;
+                });
+                html += `</div>`;
+            }
+
+            // Tag chips
+            if (filterOptions.tags.length > 0) {
+                html += `<span class="filter-label">Tags:</span><div class="filter-chips">`;
+                filterOptions.tags.forEach(tag => {
+                    const isActive = activeFilters.tags.has(tag.id);
+                    const colorStyle = tag.color ? `background: ${tag.color}` : 'background: #94a3b8';
+                    html += `
+                        <button class="filter-chip ${isActive ? 'active' : ''}"
+                                data-filter-type="tag"
+                                data-filter-value="${tag.id}"
+                                aria-pressed="${isActive}">
+                            <span class="chip-dot" style="${colorStyle}"></span>
+                            ${bridge.escapeHTML(tag.name)}
+                        </button>
+                    `;
+                });
+                html += `</div>`;
+            }
+
+            // Clear button
+            if (hasActiveFilters) {
+                html += `<button class="clear-filters" aria-label="Clear all filters">Clear (${activeCount})</button>`;
+            }
+
+            html += `</div>`;
+            return html;
+        }
+
+        // Apply filters to visible cards
+        function applyFilters() {
+            if (!currentBoard) return;
+
+            const cards = document.querySelectorAll('.card');
+            let visibleCount = 0;
+
+            // Build a lookup of card data by ID
+            const cardDataById = new Map();
+            (currentBoard.columns || []).forEach(col => {
+                (col.cards || []).forEach(card => {
+                    cardDataById.set(card.id, card);
+                });
+            });
+
+            cards.forEach(cardEl => {
+                const cardId = cardEl.dataset.id;
+                const cardData = cardDataById.get(cardId);
+
+                if (cardData && cardMatchesFilters(cardData)) {
+                    cardEl.classList.remove('filtered-out');
+                    visibleCount++;
+                } else {
+                    cardEl.classList.add('filtered-out');
+                }
+            });
+
+            // Update column counts to show filtered counts
+            document.querySelectorAll('.column').forEach(colEl => {
+                const visibleCards = colEl.querySelectorAll('.card:not(.filtered-out)').length;
+                const countEl = colEl.querySelector('.column-count');
+                if (countEl) {
+                    countEl.textContent = visibleCards;
+                    countEl.setAttribute('aria-label', `${visibleCards} cards visible`);
+                }
+            });
+        }
+
+        // Initialize filter handlers
+        function initFilters() {
+            // Search input
+            const searchInput = document.getElementById('filter-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    activeFilters.search = e.target.value;
+                    applyFilters();
+                });
+            }
+
+            // Filter chips
+            document.querySelectorAll('.filter-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const filterType = chip.dataset.filterType;
+                    const filterValue = chip.dataset.filterValue;
+
+                    if (filterType === 'tag') {
+                        if (activeFilters.tags.has(filterValue)) {
+                            activeFilters.tags.delete(filterValue);
+                        } else {
+                            activeFilters.tags.add(filterValue);
+                        }
+                    } else if (filterType === 'priority') {
+                        if (activeFilters.priorities.has(filterValue)) {
+                            activeFilters.priorities.delete(filterValue);
+                        } else {
+                            activeFilters.priorities.add(filterValue);
+                        }
+                    }
+
+                    // Update UI
+                    chip.classList.toggle('active');
+                    chip.setAttribute('aria-pressed', chip.classList.contains('active'));
+                    applyFilters();
+
+                    // Update clear button visibility
+                    const hasActiveFilters = activeFilters.tags.size > 0 || activeFilters.priorities.size > 0 || activeFilters.search;
+                    const clearBtn = document.querySelector('.clear-filters');
+                    if (clearBtn) {
+                        const activeCount = activeFilters.tags.size + activeFilters.priorities.size + (activeFilters.search ? 1 : 0);
+                        clearBtn.textContent = `Clear (${activeCount})`;
+                        clearBtn.style.display = hasActiveFilters ? 'inline' : 'none';
+                    }
+                });
+            });
+
+            // Clear button
+            const clearBtn = document.querySelector('.clear-filters');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    activeFilters.tags.clear();
+                    activeFilters.priorities.clear();
+                    activeFilters.search = '';
+
+                    // Reset UI
+                    document.querySelectorAll('.filter-chip').forEach(chip => {
+                        chip.classList.remove('active');
+                        chip.setAttribute('aria-pressed', 'false');
+                    });
+                    const searchInput = document.getElementById('filter-search');
+                    if (searchInput) {
+                        searchInput.value = '';
+                    }
+                    clearBtn.style.display = 'none';
+                    applyFilters();
+                });
+            }
+        }
+
         function renderBoard(board) {
+            const escapedName = bridge.escapeHTML(board.name || 'Kanban Board');
+            const filterOptions = extractFilterOptions(board);
             const html = `
                 <div class="board-header">
-                    <h1>${board.name || 'Kanban Board'}</h1>
+                    <h1>${escapedName}</h1>
                 </div>
-                <div class="board">
-                    ${(board.columns || []).map(col => `
-                        <div class="column" data-id="${col.id}">
+                ${renderFilterBar(filterOptions)}
+                <div class="board" role="list" aria-label="Kanban board columns">
+                    ${(board.columns || []).map(col => {
+                        const escapedColName = bridge.escapeHTML(col.name);
+                        const cardCount = (col.cards || []).length;
+                        return `
+                        <div class="column" data-id="${col.id}" role="listitem" aria-label="${escapedColName} column, ${cardCount} cards">
                             <div class="column-header">
-                                ${col.name}
-                                <span class="column-count">${(col.cards || []).length}</span>
+                                ${escapedColName}
+                                <span class="column-count" aria-label="${cardCount} cards">${cardCount}</span>
                             </div>
-                            <div class="column-cards" data-column="${col.id}">
+                            <div class="column-cards" data-column="${col.id}" role="list" aria-label="Cards in ${escapedColName}">
                                 ${(col.cards || []).map(card => renderCard(card)).join('')}
                             </div>
-                            <div class="add-card">+ Add card</div>
+                            <div class="add-card" role="button" tabindex="0" aria-label="Add card to ${escapedColName}">+ Add card</div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             `;
             app.innerHTML = html;
             initDragDrop();
+            initFilters();
+            applyFilters(); // Apply any persisted filters
         }
 
         function renderCard(card) {
             const priorityClass = card.priority ? `priority-${card.priority}` : '';
+            const escapedTitle = bridge.escapeHTML(card.title);
+
+            // Build due date info if present
+            let dueDateHtml = '';
+            let dueDateAriaText = '';
+            if (card.due_date) {
+                const dueInfo = getDueDateInfo(card.due_date);
+                dueDateHtml = `<div class="card-meta"><span class="due-badge ${dueInfo.cssClass}" aria-label="${dueInfo.ariaLabel}">${dueInfo.label}</span></div>`;
+                dueDateAriaText = `, ${dueInfo.ariaLabel}`;
+            }
+
+            const ariaLabel = `Card: ${escapedTitle}${card.priority ? `, ${card.priority} priority` : ''}${dueDateAriaText}`;
             return `
-                <div class="card" draggable="true" data-id="${card.id}">
-                    <div class="card-title">${card.title}</div>
+                <div class="card"
+                     draggable="true"
+                     data-id="${card.id}"
+                     role="listitem"
+                     tabindex="0"
+                     aria-label="${ariaLabel}"
+                     aria-grabbed="false">
+                    <div class="card-title">${escapedTitle}</div>
                     <div class="card-tags">
                         ${card.priority ? `<span class="tag ${priorityClass}">${card.priority}</span>` : ''}
-                        ${(card.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}
+                        ${(card.tags || []).map(t => `<span class="tag">${bridge.escapeHTML(t)}</span>`).join('')}
                     </div>
-                    ${card.due_date ? `<div class="card-meta"><span>Due: ${formatDate(card.due_date)}</span></div>` : ''}
+                    ${dueDateHtml}
                 </div>
             `;
         }
+
+        // Track dragging state globally
+        let draggingCardId = null;
 
         function initDragDrop() {
             const cards = document.querySelectorAll('.card');
             const columns = document.querySelectorAll('.column-cards');
 
             cards.forEach(card => {
+                // Drag start - visual feedback
                 card.addEventListener('dragstart', e => {
+                    draggingCardId = card.dataset.id;
                     card.classList.add('dragging');
+                    card.setAttribute('aria-grabbed', 'true');
                     e.dataTransfer.setData('text/plain', card.dataset.id);
+                    e.dataTransfer.effectAllowed = 'move';
+
+                    // Highlight all potential drop zones
+                    columns.forEach(col => col.classList.add('drop-zone-active'));
                 });
-                card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+                // Drag end - reset visual state
+                card.addEventListener('dragend', () => {
+                    draggingCardId = null;
+                    card.classList.remove('dragging');
+                    card.setAttribute('aria-grabbed', 'false');
+
+                    // Remove all drop zone highlights
+                    columns.forEach(col => {
+                        col.classList.remove('drop-zone-active', 'drop-zone-hover');
+                    });
+                });
+
+                // Keyboard support for cards
+                card.addEventListener('keydown', async (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        // Open card detail (future feature)
+                        bridge.sendMessage({ action: 'card_opened', cardId: card.dataset.id });
+                    }
+                });
             });
 
             columns.forEach(column => {
-                column.addEventListener('dragover', e => e.preventDefault());
+                // Drag over - show hover state
+                column.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    column.classList.add('drop-zone-hover');
+                });
+
+                // Drag leave - remove hover state
+                column.addEventListener('dragleave', e => {
+                    // Only remove if leaving the column (not entering a child)
+                    if (!column.contains(e.relatedTarget)) {
+                        column.classList.remove('drop-zone-hover');
+                    }
+                });
+
+                // Drop - perform move
                 column.addEventListener('drop', async e => {
                     e.preventDefault();
                     const cardId = e.dataTransfer.getData('text/plain');
                     const columnId = column.dataset.column;
-                    await bridge.callTool('move_kanban_card', {
-                        card_id: cardId,
-                        target_column_id: columnId
+
+                    // Remove visual states immediately
+                    columns.forEach(col => {
+                        col.classList.remove('drop-zone-active', 'drop-zone-hover');
                     });
-                    loadBoard(currentBoard.id);
+
+                    // Perform the move
+                    try {
+                        await bridge.callTool('move_kanban_card', {
+                            card_id: cardId,
+                            target_column_id: columnId
+                        });
+                        loadBoard(currentBoard.id);
+                    } catch (err) {
+                        console.error('Failed to move card:', err);
+                    }
                 });
             });
         }
 
-        function formatDate(dateStr) {
-            return new Date(dateStr).toLocaleDateString();
+        // Due date proximity calculation - matches Dioxus card.rs:79-95
+        function getDueDateInfo(dateStr) {
+            const dueDate = new Date(dateStr);
+            const now = new Date();
+
+            // Reset time parts for day comparison
+            const dueDateDay = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+            const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            const diffMs = dueDateDay.getTime() - todayDay.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 0) {
+                const daysOverdue = Math.abs(diffDays);
+                return {
+                    label: daysOverdue === 1 ? 'Overdue 1 day' : `Overdue ${daysOverdue} days`,
+                    cssClass: 'due-overdue',
+                    ariaLabel: `Overdue by ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}`
+                };
+            } else if (diffDays === 0) {
+                return {
+                    label: 'Due today',
+                    cssClass: 'due-today',
+                    ariaLabel: 'Due today'
+                };
+            } else if (diffDays === 1) {
+                return {
+                    label: 'Due tomorrow',
+                    cssClass: 'due-tomorrow',
+                    ariaLabel: 'Due tomorrow'
+                };
+            } else if (diffDays <= 7) {
+                return {
+                    label: `Due in ${diffDays} days`,
+                    cssClass: 'due-soon',
+                    ariaLabel: `Due in ${diffDays} days`
+                };
+            } else {
+                // Format as date for items more than a week away
+                const formatted = dueDate.toLocaleDateString();
+                return {
+                    label: `Due ${formatted}`,
+                    cssClass: 'due-later',
+                    ariaLabel: `Due on ${formatted}`
+                };
+            }
         }
 
         bridge.onReady(() => loadBoard());

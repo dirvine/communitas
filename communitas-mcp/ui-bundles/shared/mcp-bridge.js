@@ -23,11 +23,98 @@ class McpBridge {
         this.isReady = false;
         this.messageQueue = [];
 
+        // Configure allowed origins for postMessage validation
+        // In production, this should be configured based on the actual MCP host origin
+        this._allowedOrigins = this._initAllowedOrigins();
+
         // Set up message listener
         window.addEventListener('message', this._handleMessage.bind(this));
 
         // Initiate handshake with host
         this._sendHandshake();
+    }
+
+    /**
+     * HTML escape utility to prevent XSS
+     * @param {string} str - The string to escape
+     * @returns {string} - The escaped string safe for innerHTML
+     */
+    escapeHTML(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    /**
+     * Initialize allowed origins for postMessage validation
+     * @private
+     */
+    _initAllowedOrigins() {
+        const origins = new Set();
+
+        // Always allow same origin
+        origins.add(window.location.origin);
+
+        // Allow localhost for development (with various ports)
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            origins.add('http://localhost:8443');
+            origins.add('https://localhost:8443');
+            origins.add('http://127.0.0.1:8443');
+            origins.add('https://127.0.0.1:8443');
+        }
+
+        // Allow configured Saorsa Labs domains
+        const saorsaDomains = [
+            'https://saorsa-1.saorsalabs.com',
+            'https://saorsa-2.saorsalabs.com',
+            'https://saorsa-3.saorsalabs.com',
+            'https://saorsa-4.saorsalabs.com',
+            'https://saorsa-5.saorsalabs.com',
+            'https://saorsa-6.saorsalabs.com',
+            'https://saorsa-7.saorsalabs.com',
+            'https://saorsa-8.saorsalabs.com',
+            'https://saorsa-9.saorsalabs.com',
+            'https://saorsa-10.saorsalabs.com',
+        ];
+        saorsaDomains.forEach(domain => origins.add(domain));
+
+        // Allow parent window origin if it exists (for iframe embedding)
+        // This is safe because we're in an iframe and the parent is the MCP host
+        try {
+            if (window.parent && window.parent !== window) {
+                // We'll validate during message handling instead of here
+                // to avoid cross-origin access issues
+            }
+        } catch (e) {
+            // Cross-origin restriction - will validate per-message
+        }
+
+        return origins;
+    }
+
+    /**
+     * Validate postMessage origin
+     * @private
+     * @param {string} origin - The origin to validate
+     * @returns {boolean} True if origin is allowed
+     */
+    _isOriginAllowed(origin) {
+        if (!origin) return false;
+
+        // Check if origin is in allowed set
+        if (this._allowedOrigins.has(origin)) {
+            return true;
+        }
+
+        // For development, allow localhost on any port
+        if (origin.match(/^https?:\/\/localhost:\d+$/) || origin.match(/^https?:\/\/127\.0\.0\.1:\d+$/)) {
+            return true;
+        }
+
+        // Log rejected origin for security monitoring
+        console.error('MCP Bridge: Rejected message from untrusted origin:', origin);
+
+        return false;
     }
 
     /**
@@ -116,8 +203,12 @@ class McpBridge {
     }
 
     _handleMessage(event) {
-        // In production, validate origin
-        // For now, accept all messages from parent
+        // SECURITY: Validate origin before processing message
+        if (!this._isOriginAllowed(event.origin)) {
+            console.error('MCP Bridge: Rejected message from untrusted origin:', event.origin);
+            return;
+        }
+
         const message = event.data;
 
         if (!message || typeof message !== 'object') return;
@@ -186,8 +277,39 @@ class McpBridge {
     _postMessage(message) {
         // Post to parent window (MCP host)
         if (window.parent && window.parent !== window) {
-            window.parent.postMessage(message, '*');
+            // SECURITY: Use specific origin instead of wildcard
+            // For iframe communication, we use the parent's origin
+            // In production, this should be configured to the exact MCP host origin
+            const targetOrigin = this._getTargetOrigin();
+            window.parent.postMessage(message, targetOrigin);
         }
+    }
+
+    /**
+     * Get the target origin for postMessage
+     * @private
+     * @returns {string} The target origin
+     */
+    _getTargetOrigin() {
+        // Try to get parent window origin
+        try {
+            // In same-origin case, we can access parent.location.origin
+            if (window.parent && window.parent !== window && window.parent.location) {
+                return window.parent.location.origin;
+            }
+        } catch (e) {
+            // Cross-origin restriction - use configured origins
+        }
+
+        // For cross-origin iframe, use the first allowed origin that's not our own
+        for (const origin of this._allowedOrigins) {
+            if (origin !== window.location.origin) {
+                return origin;
+            }
+        }
+
+        // Fallback to same origin (should not happen in production)
+        return window.location.origin;
     }
 
     _nextId() {

@@ -1,8 +1,56 @@
 <!DOCTYPE html>
+<!--
+  GAP ANALYSIS: Contacts Widget vs Dioxus Components
+  Date: 2026-01-26
+  Analyst: Claude Code (Phase 9.1 Task 1)
+
+  PRESENT IN WIDGET:
+  - [x] Contact list display with MCP bridge
+  - [x] Avatar rendering with initials fallback
+  - [x] Click to view detail (data-id attribute ready)
+  - [x] Search/filter input - real-time filtering
+  - [x] Basic online/offline indicator (binary)
+  - [x] Favorite star display (read-only)
+
+  IMPLEMENTED IN PHASE 9.1:
+  - [x] Enhanced presence: Away, Busy, Unknown states - Task 3 DONE
+        Added getPresenceInfo() with 5 states matching Dioxus
+  - [x] In-call indicator (phone icon, pulsing) - Task 3 DONE
+        Added .in-call-dot with pulse animation
+  - [x] Accessibility labels (role="status", aria-label) - Task 3 DONE
+        Added to contacts-list, contact-item, presence-dot, favorite
+  - [x] Clickable favorite toggle - Task 4 DONE
+        Added .favorite-btn with optimistic UI update and MCP tool call
+
+  NOT IN PHASE 9.1 SCOPE (future work):
+  - [ ] Screen-sharing indicator - Priority: LOW
+  - [ ] Contact groups/categories filtering - Priority: LOW
+
+  DIOXUS FEATURES NOT APPLICABLE TO MCP WIDGET:
+  - Native keyboard shortcuts (limited in iframe sandbox)
+  - Tailwind CSS classes (widget uses inline CSS)
+  - Multiple size variants (widget has fixed size)
+
+  PRIORITY ORDER FOR PHASE 9.1:
+  1. Task 2: Already done - search implemented
+  2. Task 3: Add enhanced presence (5 states) + accessibility
+  3. Task 4: Add clickable favorite toggle with MCP call
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Content Security Policy: Restrict resource loading to same origin -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                  script-src 'self' 'unsafe-inline';
+                  style-src 'self' 'unsafe-inline';
+                  img-src 'self' data: https:;
+                  connect-src 'self' ws://localhost:* wss://localhost:* wss://*.saorsalabs.com;
+                  object-src 'none';
+                  base-uri 'self';
+                  form-action 'self';
+                  frame-ancestors 'self';">
     <title>Communitas Contacts</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,6 +83,10 @@
             transition: background 0.2s;
         }
         .contact-item:hover { background: #f0f0f0; }
+        .avatar-wrapper {
+            position: relative;
+            display: inline-block;
+        }
         .avatar {
             width: 40px;
             height: 40px;
@@ -46,21 +98,56 @@
             font-weight: 500;
             color: #666;
         }
-        .avatar.online::after {
-            content: '';
+        /* Presence indicator dot - positioned on avatar */
+        .presence-dot {
             position: absolute;
-            bottom: 2px;
-            right: 2px;
-            width: 10px;
-            height: 10px;
-            background: #22c55e;
+            bottom: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             border: 2px solid white;
+        }
+        /* 5 presence states matching Dioxus: online, away, busy, offline, unknown */
+        .presence-online { background: #22c55e; } /* emerald-400 */
+        .presence-away { background: #fbbf24; }   /* amber-400 */
+        .presence-busy { background: #f87171; }   /* red-400 */
+        .presence-offline { background: #64748b; } /* slate-500 */
+        .presence-unknown { background: #475569; } /* slate-600 */
+        /* In-call indicator (pulsing phone) */
+        .in-call-dot {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #8b5cf6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
         }
         .contact-info { flex: 1; }
         .contact-name { font-weight: 500; }
         .contact-status { font-size: 12px; color: #666; }
-        .favorite { color: #fbbf24; }
+        .favorite-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 4px;
+            color: #d1d5db;
+            transition: color 0.2s, transform 0.1s;
+        }
+        .favorite-btn:hover { transform: scale(1.2); }
+        .favorite-btn.is-favorite { color: #fbbf24; }
+        .favorite-btn:focus { outline: 2px solid #3b82f6; outline-offset: 2px; }
         .search-box {
             width: 100%;
             padding: 10px 16px;
@@ -87,8 +174,23 @@
                 const data = JSON.parse(result.content[0].text);
                 renderContacts(data.contacts || []);
             } catch (err) {
-                app.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
+                const errorMsg = bridge.escapeHTML(err.message || 'Unknown error');
+                app.innerHTML = `<div class="loading">Error: ${errorMsg}</div>`;
             }
+        }
+
+        // Map presence status to CSS class and label
+        function getPresenceInfo(contact) {
+            // Support both presence_status field and legacy is_online boolean
+            const status = contact.presence_status || (contact.is_online ? 'online' : 'offline');
+            const statusMap = {
+                'online': { class: 'presence-online', label: 'Online' },
+                'away': { class: 'presence-away', label: 'Away' },
+                'busy': { class: 'presence-busy', label: 'Busy' },
+                'offline': { class: 'presence-offline', label: 'Offline' },
+                'unknown': { class: 'presence-unknown', label: 'Unknown' }
+            };
+            return statusMap[status] || statusMap['unknown'];
         }
 
         function renderContacts(contacts) {
@@ -98,21 +200,67 @@
             }
 
             const html = `
-                <input type="text" class="search-box" placeholder="Search contacts..." id="search">
-                <div class="contacts-list" id="list">
-                    ${contacts.map(c => `
-                        <div class="contact-item" data-id="${c.id}">
-                            <div class="avatar ${c.is_online ? 'online' : ''}">${c.display_name?.charAt(0) || '?'}</div>
-                            <div class="contact-info">
-                                <div class="contact-name">${c.display_name || c.four_words}</div>
-                                <div class="contact-status">${c.is_online ? 'Online' : 'Offline'}</div>
+                <input type="text" class="search-box" placeholder="Search contacts..." id="search" aria-label="Search contacts">
+                <div class="contacts-list" id="list" role="list" aria-label="Contact list">
+                    ${contacts.map(c => {
+                        const presence = getPresenceInfo(c);
+                        const escapedName = bridge.escapeHTML(c.display_name || c.four_words || 'Unknown');
+                        const initial = escapedName.charAt(0).toUpperCase();
+                        return `
+                        <div class="contact-item" data-id="${c.id}" role="listitem" aria-label="${escapedName}, ${presence.label}">
+                            <div class="avatar-wrapper">
+                                <div class="avatar">${initial}</div>
+                                ${c.is_in_call
+                                    ? `<span class="in-call-dot" role="status" aria-label="In call" title="In call">📞</span>`
+                                    : `<span class="presence-dot ${presence.class}" role="status" aria-label="${presence.label}" title="${presence.label}"></span>`
+                                }
                             </div>
-                            ${c.is_favourite ? '<span class="favorite">★</span>' : ''}
+                            <div class="contact-info">
+                                <div class="contact-name">${escapedName}</div>
+                                <div class="contact-status">${c.is_in_call ? 'In call' : presence.label}</div>
+                            </div>
+                            <button class="favorite-btn ${c.is_favourite ? 'is-favorite' : ''}"
+                                    data-contact-id="${c.id}"
+                                    aria-label="${c.is_favourite ? 'Remove from favorites' : 'Add to favorites'}"
+                                    aria-pressed="${c.is_favourite ? 'true' : 'false'}"
+                                    title="${c.is_favourite ? 'Remove from favorites' : 'Add to favorites'}">
+                                ${c.is_favourite ? '★' : '☆'}
+                            </button>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             `;
             app.innerHTML = html;
+
+            // Favorite toggle handler
+            document.querySelectorAll('.favorite-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation(); // Prevent contact click
+                    const contactId = btn.dataset.contactId;
+                    const isCurrentlyFavorite = btn.classList.contains('is-favorite');
+                    const newState = !isCurrentlyFavorite;
+
+                    // Optimistic UI update
+                    btn.classList.toggle('is-favorite', newState);
+                    btn.textContent = newState ? '★' : '☆';
+                    btn.setAttribute('aria-pressed', String(newState));
+                    btn.setAttribute('aria-label', newState ? 'Remove from favorites' : 'Add to favorites');
+                    btn.setAttribute('title', newState ? 'Remove from favorites' : 'Add to favorites');
+
+                    try {
+                        await bridge.callTool('set_contact_favorite', {
+                            contact_id: contactId,
+                            is_favorite: newState
+                        });
+                    } catch (err) {
+                        // Revert on error
+                        btn.classList.toggle('is-favorite', !newState);
+                        btn.textContent = !newState ? '★' : '☆';
+                        btn.setAttribute('aria-pressed', String(!newState));
+                        console.error('Failed to toggle favorite:', err);
+                    }
+                });
+            });
 
             // Search functionality
             document.getElementById('search').addEventListener('input', e => {

@@ -37,6 +37,7 @@ use thiserror::Error;
 #[derive(Clone)]
 pub struct UiServices {
     storage: UiStorage,
+    app: Arc<CommunitasApp>,
     auth: Arc<AuthController>,
     navigation: Arc<NavigationStore>,
     directory: Arc<DirectoryService>,
@@ -146,6 +147,26 @@ impl UiServices {
             Self::new(storage, Arc::new(app))?
         };
 
+        // Auto-start networking unless COMMUNITAS_NO_AUTONET is set
+        if std::env::var("COMMUNITAS_NO_AUTONET").is_err() {
+            let _span = tracing::info_span!("auto_networking").entered();
+
+            // Check for preferred port from environment
+            let preferred_port = std::env::var("COMMUNITAS_PORT")
+                .ok()
+                .and_then(|p| p.parse::<u16>().ok());
+
+            if let Some(port) = preferred_port {
+                tracing::info!(port, "Auto-starting networking on specified port...");
+            } else {
+                tracing::info!("Auto-starting networking on random port...");
+            }
+
+            if let Err(e) = services.start_networking(preferred_port).await {
+                tracing::warn!(error = %e, "Failed to auto-start networking (non-fatal)");
+            }
+        }
+
         let elapsed = start.elapsed();
         tracing::info!(
             elapsed_ms = elapsed.as_millis(),
@@ -241,6 +262,7 @@ impl UiServices {
         let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
         Ok(Self {
             storage,
+            app,
             auth,
             navigation,
             directory,
@@ -305,6 +327,7 @@ impl UiServices {
         let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
         Ok(Self {
             storage,
+            app,
             auth,
             navigation,
             directory,
@@ -371,6 +394,7 @@ impl UiServices {
         let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
         Ok(Self {
             storage,
+            app,
             auth,
             navigation,
             directory,
@@ -586,6 +610,52 @@ impl UiServices {
     /// Security audit log service.
     pub fn audit(&self) -> Arc<AuditService> {
         self.audit.clone()
+    }
+
+    /// Access the underlying Communitas core application.
+    pub fn app(&self) -> Arc<CommunitasApp> {
+        self.app.clone()
+    }
+
+    /// Start networking and connect to bootstrap nodes.
+    ///
+    /// This connects the app to the P2P network. Networking is automatically
+    /// started during bootstrap unless `COMMUNITAS_NO_AUTONET` is set.
+    ///
+    /// # Arguments
+    /// * `preferred_port` - Optional port to bind to. If None, a random port is used.
+    ///
+    /// # Errors
+    /// Returns an error if networking is already active or fails to start.
+    pub async fn start_networking(
+        &self,
+        preferred_port: Option<u16>,
+    ) -> Result<(), UiServiceInitError> {
+        use communitas_core::command::Command;
+
+        self.app
+            .execute(Command::StartNetworking { preferred_port })
+            .await
+            .map_err(|e| UiServiceInitError::AppInit(format!("networking start failed: {e}")))?;
+
+        tracing::info!("Networking started successfully");
+        Ok(())
+    }
+
+    /// Stop networking and disconnect from the P2P network.
+    ///
+    /// # Errors
+    /// Returns an error if networking fails to stop.
+    pub async fn stop_networking(&self) -> Result<(), UiServiceInitError> {
+        use communitas_core::command::Command;
+
+        self.app
+            .execute(Command::StopNetworking)
+            .await
+            .map_err(|e| UiServiceInitError::AppInit(format!("networking stop failed: {e}")))?;
+
+        tracing::info!("Networking stopped");
+        Ok(())
     }
 }
 

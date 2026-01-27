@@ -119,11 +119,6 @@ pub fn ParticipantTile(props: ParticipantTileProps) -> Element {
                         }
                     }
                 }
-                p {
-                    class: "text-xs text-slate-500 truncate",
-                    title: "{p.four_words}",
-                    "{p.four_words}"
-                }
             }
         }
     }

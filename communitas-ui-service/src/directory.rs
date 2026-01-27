@@ -218,7 +218,12 @@ impl DirectoryService {
     }
 
     pub fn current_snapshot(&self) -> DirectorySnapshot {
-        self.inner.blocking_read().clone()
+        // Use try_read() to avoid blocking in async context (Dioxus renders within tokio runtime)
+        // Falls back to getting the most recent broadcast value from the watch channel
+        self.inner
+            .try_read()
+            .map(|guard| guard.clone())
+            .unwrap_or_else(|_| self.tx.borrow().clone())
     }
 
     /// Async-compatible snapshot (safe to call from within async context).

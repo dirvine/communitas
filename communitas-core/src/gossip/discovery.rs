@@ -302,16 +302,54 @@ pub struct IntroducerConfig {
 
 impl Default for IntroducerConfig {
     fn default() -> Self {
+        // Check for env var override (enables local testing with custom bootstrap nodes)
+        // Format: comma-separated addresses, e.g., "127.0.0.1:11000,127.0.0.1:11001"
+        let addresses = if let Ok(env_nodes) = std::env::var("COMMUNITAS_BOOTSTRAP") {
+            let nodes: Vec<String> = env_nodes
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !nodes.is_empty() {
+                tracing::info!(
+                    nodes = ?nodes,
+                    "Using custom bootstrap nodes from COMMUNITAS_BOOTSTRAP"
+                );
+                nodes
+            } else {
+                Self::production_nodes()
+            }
+        } else {
+            Self::production_nodes()
+        };
+
         Self {
-            // Production bootstrap nodes (saorsa network)
-            // saorsa-1 (77.42.75.115) is for dashboard/website, not bootstrap
-            addresses: vec![
-                "142.93.199.50:11000".to_string(),   // saorsa-2: DigitalOcean NYC1
-                "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3
-                "206.189.7.117:11000".to_string(),   // saorsa-4: DigitalOcean
-                "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean
-            ],
+            addresses,
             timeout_secs: 10,
+        }
+    }
+}
+
+impl IntroducerConfig {
+    /// Production bootstrap nodes (saorsa network)
+    fn production_nodes() -> Vec<String> {
+        // saorsa-1 (77.42.75.115) is for dashboard/website, not bootstrap
+        vec![
+            "142.93.199.50:11000".to_string(),   // saorsa-2: DigitalOcean NYC1
+            "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3
+            "206.189.7.117:11000".to_string(),   // saorsa-4: DigitalOcean
+            "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean
+        ]
+    }
+
+    /// Create config for local testing (peer-to-peer between instances)
+    pub fn local_testing() -> Self {
+        Self {
+            addresses: vec![
+                "127.0.0.1:11000".to_string(),
+                "127.0.0.1:11001".to_string(),
+            ],
+            timeout_secs: 5,
         }
     }
 }

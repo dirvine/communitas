@@ -21,8 +21,6 @@ pub enum BiometricState {
 /// Props for the PasskeyPrompt component.
 #[derive(Props, Clone, PartialEq)]
 pub struct PasskeyPromptProps {
-    /// Four-word identity being authenticated
-    pub four_words: String,
     /// Display name of the identity
     pub display_name: String,
     /// Current authentication state
@@ -77,8 +75,7 @@ pub fn PasskeyPrompt(props: PasskeyPromptProps) -> Element {
                 // Identity info
                 div {
                     class: "text-center mb-6",
-                    p { class: "text-sm text-slate-300", "{props.display_name}" }
-                    p { class: "text-xs text-slate-500", "{props.four_words}" }
+                    p { class: "text-sm text-slate-300 font-medium", "{props.display_name}" }
                 }
                 // State-specific content
                 match &props.state {

@@ -3,18 +3,18 @@
 
 mod components;
 pub mod contrast;
+pub mod design_tokens;
 pub mod hooks;
 pub mod onboarding;
+pub mod pages;
 mod platform;
 pub mod styles;
+pub mod styles_v2;
 pub mod tokens;
 pub mod version;
 
-use communitas_core::generate_id_words;
-
 use communitas_ui_api::{
-    OrganizationCategory, PresenceStatus, SampleWords, UnifiedContact, UnifiedEntity,
-    UnifiedEntityType,
+    OrganizationCategory, PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType,
 };
 use communitas_ui_service::{
     UiServices,
@@ -449,7 +449,18 @@ fn LoginRoute() -> Element {
         navigator.replace(Route::DashboardRoute {});
     }
 
-    let mut four_words = use_signal(String::new);
+    // Fetch available vaults for selection
+    let vaults = use_resource({
+        let auth_service = auth_service.clone();
+        move || {
+            let auth_service = auth_service.clone();
+            async move {
+                auth_service.list_vaults().await.ok()
+            }
+        }
+    });
+
+    let mut selected_vault = use_signal(|| None::<(String, String)>); // (four_words, display_name)
     let mut password = use_signal(String::new);
 
     let login_action = {
@@ -478,10 +489,14 @@ fn LoginRoute() -> Element {
     let error_msg = auth.read().error.clone();
     let mut auth_for_validation = auth;
 
+    // Check if vaults are loading
+    let vaults_loading = vaults.read().as_ref().is_none();
+    let vaults_list = vaults.read().clone().flatten().unwrap_or_default();
+
     rsx! {
         AuthLayout {
             title: "Welcome back",
-            subtitle: "Unlock your Communitas vault with your connection words and passphrase.",
+            subtitle: "Select your vault and enter your passphrase to unlock.",
             error: error_msg,
             footer: Some(rsx! {
                 div {
@@ -510,31 +525,62 @@ fn LoginRoute() -> Element {
                 onsubmit: move |evt| {
                     evt.prevent_default();
                     // Validate empty fields
-                    if four_words().trim().is_empty() || password().is_empty() {
+                    let selected = selected_vault();
+                    let Some((four_words, _)) = selected else {
                         auth_for_validation.with_mut(|state| {
-                            state.error = Some("Please enter your four words and password".into());
+                            state.error = Some("Please select a vault".into());
+                        });
+                        return;
+                    };
+                    if password().is_empty() {
+                        auth_for_validation.with_mut(|state| {
+                            state.error = Some("Please enter password".into());
                         });
                         return;
                     }
                     login_action.send(LoginRequest {
-                        four_words: four_words().trim().to_string(),
+                        four_words,
                         password: password().clone(),
                     });
                 },
+                // Vault selector
                 label { class: "flex flex-col gap-2",
                     span {
                         class: "text-sm font-medium",
                         style: format!("color: {};", colors::TEXT_PRIMARY),
-                        "Four words"
+                        "Vault"
                     }
-                    input {
-                        r#type: "text",
-                        class: "rounded-lg px-4 py-3 focus:outline-none",
-                        style: input::default(),
-                        placeholder: "forest-ocean-light-house",
-                        disabled: busy,
-                        value: "{four_words}",
-                        oninput: move |evt| four_words.set(evt.value()),
+                    if vaults_loading {
+                        div { class: "rounded-lg px-4 py-3 bg-slate-800 animate-pulse",
+                            "Loading vaults..."
+                        }
+                    } else if vaults_list.is_empty() {
+                        div { class: "rounded-lg px-4 py-3 bg-slate-800 text-slate-400",
+                            "No vaults found. Create a new identity to get started."
+                        }
+                    } else {
+                        select {
+                            class: "rounded-lg px-4 py-3 focus:outline-none bg-slate-800 text-white",
+                            style: input::default(),
+                            disabled: busy,
+                            onchange: move |evt| {
+                                let value = evt.value();
+                                if value.is_empty() {
+                                    selected_vault.set(None);
+                                } else {
+                                    // Find the vault by display_name
+                                    if let Some(vault) = vaults_list.iter().find(|v| v.display_name == value) {
+                                        selected_vault.set(Some((vault.four_words.clone(), vault.display_name.clone())));
+                                    }
+                                }
+                            },
+                            option { value: "", "Select a vault..." }
+                            {vaults_list.iter().map(|vault| {
+                                rsx! {
+                                    option { value: "{vault.display_name}", "{vault.display_name}" }
+                                }
+                            })}
+                        }
                     }
                 }
                 label { class: "flex flex-col gap-2",
@@ -578,7 +624,6 @@ fn CreateIdentityRoute() -> Element {
     let mut display_name = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut confirm = use_signal(String::new);
-    let mut preview_words = use_signal(sample_words_from_core);
 
     let create_action = {
         let mut auth = auth;
@@ -607,7 +652,7 @@ fn CreateIdentityRoute() -> Element {
     rsx! {
         AuthLayout {
             title: "Create identity",
-            subtitle: "Choose a display name and passphrase. Four words are auto-generated from the Rust core.",
+            subtitle: "Choose a display name and passphrase. A connection address will be generated for sharing with friends.",
             error: error_msg,
             footer: Some(rsx! {
                 div {
@@ -637,7 +682,6 @@ fn CreateIdentityRoute() -> Element {
                     create_action.send(CreateRequest {
                         display_name: display_name().trim().to_string(),
                         password: password().clone(),
-                        four_words: preview_words().as_str().to_string(),
                     });
                 },
                 label { class: "flex flex-col gap-2",
@@ -654,32 +698,6 @@ fn CreateIdentityRoute() -> Element {
                         disabled: busy,
                         value: "{display_name}",
                         oninput: move |evt| display_name.set(evt.value()),
-                    }
-                }
-                div {
-                    class: "rounded-lg border p-4",
-                    style: format!(
-                        "background-color: {}; border-color: {};",
-                        colors::SURFACE_BG,
-                        colors::BORDER_DEFAULT
-                    ),
-                    span {
-                        class: "text-xs uppercase tracking-[0.4em]",
-                        style: format!("color: {};", colors::TEXT_MUTED),
-                        "four words"
-                    }
-                    p {
-                        class: "mt-2 font-mono text-lg break-words",
-                        style: format!("color: {};", colors::PRIMARY),
-                        "{preview_words().as_str()}"
-                    }
-                    button {
-                        class: "mt-3 text-sm font-semibold",
-                        style: format!("color: {};", colors::PRIMARY),
-                        r#type: "button",
-                        disabled: busy,
-                        onclick: move |_| preview_words.set(sample_words_from_core()),
-                        "Refresh words"
                     }
                 }
                 label { class: "flex flex-col gap-2",
@@ -1574,7 +1592,7 @@ fn EntityMemberList(props: EntityMemberListProps) -> Element {
                             }
                             p {
                                 class: "text-xs text-slate-500",
-                                "four-word-identity"
+                                "connection-address"
                             }
                         }
                         // Presence dot placeholder
@@ -2177,12 +2195,12 @@ mod tests {
 
     #[test]
     #[ignore = "requires UiServices test infrastructure update"]
-    fn create_identity_route_shows_generated_words() {
+    fn create_identity_route_shows_display_name_field() {
         let env = TestEnv::new();
         let html = render_route_html("/create", env.services(), AuthState::default());
         assert!(
-            html.contains("Create identity") && html.contains("four words"),
-            "create identity layout missing copy:\n{html}"
+            html.contains("Create identity") && html.contains("Display name"),
+            "create identity layout missing display name field:\n{html}"
         );
     }
 
@@ -2504,16 +2522,6 @@ fn AuthLayout(props: AuthLayoutProps) -> Element {
     }
 }
 
-fn sample_words_from_core() -> SampleWords {
-    match generate_id_words() {
-        Ok(words) => SampleWords::new(words),
-        Err(err) => {
-            error!("failed to generate id words: {err}");
-            SampleWords::new(format!("identity error: {err}"))
-        }
-    }
-}
-
 // --- Skeleton loading components ---
 
 #[component]
@@ -2595,7 +2603,6 @@ struct LoginRequest {
 struct CreateRequest {
     display_name: String,
     password: String,
-    four_words: String,
 }
 
 struct RecoverRequest {
@@ -2640,7 +2647,6 @@ async fn process_create(
     let CreateRequest {
         display_name,
         password,
-        four_words,
     } = payload;
     auth.with_mut(|state| {
         state.phase = AuthPhase::Authenticating;
@@ -2648,7 +2654,7 @@ async fn process_create(
     });
 
     let session = auth_service
-        .create_identity(four_words.trim(), display_name.trim(), password.as_str())
+        .create_identity(display_name.trim(), password.as_str())
         .await
         .map_err(|err| err.to_string())?;
 

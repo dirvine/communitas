@@ -68,7 +68,7 @@ The following tools are available before authentication:
 | Tool | Description |
 |------|-------------|
 | `authenticate` | Authenticate with four-word connection address and password |
-| `create_vault` | Create a new identity vault with connection address |
+| `create_vault` | Create a new identity vault with four-word connection address |
 | `authenticate_token` | Authenticate using a delegate token (for AI agents) |
 | `health_check` | Check server health |
 | `list_vaults` | List available vaults on this device |
@@ -79,6 +79,46 @@ All other tools require authentication. The recommended flow for AI agents:
 
 1. Use `authenticate_token` with a pre-generated delegate token
 2. Or use `create_vault` followed by `authenticate`
+
+#### Example: Authenticate
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "authenticate",
+    "arguments": {
+      "four_words": "ocean-forest-moon-star",
+      "password": "your-password"
+    }
+  },
+  "id": 1
+}
+```
+
+**Note**: The `four_words` parameter is your four-word connection address, not your identity. It encodes the network location (IP:port) for peer discovery.
+
+## Identity Model
+
+Communitas uses a three-part identity model that separates WHO you are, WHERE you can be reached, and what's SHOWN in the UI:
+
+| Concept | Field | Format | Purpose |
+|---------|-------|--------|---------|
+| **WHO** (Identity) | `pubkey_hex` | 3904 hex chars | Your cryptographic identity (ML-DSA-65 public key) |
+| **WHERE** (Connection) | `four_words` | 4 words (e.g., "ocean-forest-moon-star") | Network address encoding (IP:port) |
+| **SHOWN** (Display) | `display_name` | Any string | Human-friendly label shown in UI |
+
+### Key Points
+
+- **`four_words` is NOT your identity** - it's a network address that changes when your IP changes
+- **`pubkey_hex` IS your identity** - it's permanent and cryptographically unique
+- **`display_name` is just a label** - multiple users can have the same display name
+- When authenticating, you provide `four_words` to identify which vault to unlock on this device
+
+### Identity Verification
+
+To verify someone's identity, compare their `pubkey_hex` fingerprint (first 16 characters), not their display name or four-words.
 
 ## Tool Categories
 

@@ -2,15 +2,19 @@
 
 pub mod announcer;
 pub mod auth;
+pub mod auth_v2;
+pub mod app_shell;
 pub mod call;
 pub mod canvas;
 mod composer;
 pub mod drive;
+pub mod entity_view;
 pub mod error_boundary;
 mod identity_switcher;
 pub mod kanban;
 pub mod layout;
 mod message_list;
+pub mod messaging_v2;
 pub mod offline;
 mod presence_badge;
 mod search_bar;
@@ -99,4 +103,32 @@ pub use settings::UpdateStatusBadge;
 pub use auth::{
     BiometricState, PasskeyButton, PasskeyPrompt, RecoverySetupModal, RecoveryWarningBadge,
     RecoveryWarningBanner,
+};
+
+// Re-export enhanced auth components (v2 - Digital Forest Sanctuary theme)
+#[allow(unused_imports)]
+pub use auth_v2::{
+    AuthBackground, AuthLayoutV2, ErrorBanner as ErrorBannerV2, FormField, FormSelect,
+    FormTextarea, Logo, PasswordStrength, PrimaryButton, SecondaryButton, TextLink,
+};
+
+// Re-export app shell components for main layout
+#[allow(unused_imports)]
+pub use app_shell::{
+    AppShell, ContactNavItem, EntityNavItem, ProfileHeader, QuickActionButton, SidebarSearch,
+    SidebarSection,
+};
+
+// Re-export entity view components
+#[allow(unused_imports)]
+pub use entity_view::{
+    EmptyState, EntityDetailView, EntityHeader, EntitySkeleton, EntityTab, EntityTabBar,
+    HeaderAction,
+};
+
+// Re-export enhanced messaging components (v2)
+#[allow(unused_imports)]
+pub use messaging_v2::{
+    ChatView, DateSeparator, MessageBubble, MessageComposerV2, MessageDisplay, MessageListContainer,
+    NewMessageIndicator, ReactionChip, ReactionDisplay, TypingIndicatorV2,
 };

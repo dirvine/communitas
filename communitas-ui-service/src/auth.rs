@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use communitas_core::ui_core::{
-    CommunitasApi, UiRecentIdentity, UiSessionInfo, recover_identity_from_mnemonic,
+    generate_id_words, CommunitasApi, UiRecentIdentity, UiSessionInfo,
+    recover_identity_from_mnemonic,
 };
 use std::env;
 use thiserror::Error;
@@ -76,6 +77,14 @@ pub struct RecentIdentity {
     pub has_passkey: bool,
 }
 
+/// Information about an available vault for login selection.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VaultInfo {
+    pub four_words: String,
+    pub display_name: String,
+    pub last_accessed: u64,
+}
+
 impl From<UiRecentIdentity> for RecentIdentity {
     fn from(ui: UiRecentIdentity) -> Self {
         Self {
@@ -111,7 +120,6 @@ pub trait AuthService: Send + Sync {
     async fn login(&self, four_words: &str, password: &str) -> Result<AuthSession, AuthError>;
     async fn create_identity(
         &self,
-        four_words: &str,
         display_name: &str,
         password: &str,
     ) -> Result<AuthSession, AuthError>;
@@ -159,6 +167,10 @@ pub trait AuthService: Send + Sync {
 
     /// Remove a recent identity from the list (does not delete the vault)
     async fn remove_recent_identity(&self, four_words: &str) -> Result<(), AuthError>;
+
+    /// List available vaults for login selection (by display_name).
+    /// Returns vaults sorted by last accessed time, most recent first.
+    async fn list_vaults(&self) -> Result<Vec<VaultInfo>, AuthError>;
 }
 
 struct AuthInner {
@@ -211,15 +223,18 @@ impl AuthController {
         inner.session = Some(session);
     }
 
-    async fn start_network(api: &CommunitasApi) {
-        if let Err(err) = api.gossip_start(None).await {
-            warn!(
-                target = "ui.auth",
-                "failed to start gossip (non-fatal): {err}"
-            );
-        } else {
-            info!(target = "ui.auth", "gossip runtime started");
-        }
+    /// Spawn network start in background (non-blocking)
+    fn spawn_network_start(api: CommunitasApi) {
+        tokio::spawn(async move {
+            if let Err(err) = api.gossip_start(None).await {
+                warn!(
+                    target = "ui.auth",
+                    "failed to start gossip (non-fatal): {err}"
+                );
+            } else {
+                info!(target = "ui.auth", "gossip runtime started");
+            }
+        });
     }
 
     fn ensure_four_words<'a>(&self, value: &'a str) -> Result<&'a str, AuthError> {
@@ -340,7 +355,8 @@ impl AuthService for AuthController {
             .await
             .map_err(AuthError::Core)?;
 
-        Self::start_network(&api).await;
+        // Spawn network start in background (non-blocking)
+        Self::spawn_network_start(api.clone());
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
         let expires_soon = session.expires_soon();
@@ -353,22 +369,22 @@ impl AuthService for AuthController {
         Ok(session)
     }
 
-    #[instrument(name = "ui.auth.create", skip(self, password), fields(identity = %redact_identity(four_words), display_name))]
+    #[instrument(name = "ui.auth.create", skip(self, password), fields(display_name))]
     async fn create_identity(
         &self,
-        four_words: &str,
         display_name: &str,
         password: &str,
     ) -> Result<AuthSession, AuthError> {
         self.fail_if_requested()?;
-        let four_words = self.ensure_four_words(four_words)?;
+        // Generate four_words automatically for connection bootstrap
+        let four_words = generate_id_words().map_err(|e| AuthError::Core(e.to_string()))?;
         let display_name = self.ensure_display_name(display_name)?;
         let password = self.ensure_password(password)?;
 
         self.set_state(AuthStateSnapshot::Authenticating);
 
         let api = CommunitasApi::create(
-            four_words.to_string(),
+            four_words.clone(),
             display_name.to_string(),
             self.device_name.clone(),
             self.storage_path()?,
@@ -377,7 +393,7 @@ impl AuthService for AuthController {
         .map_err(AuthError::Core)?;
 
         api.auth_create_vault(
-            four_words.to_string(),
+            four_words.clone(),
             display_name.to_string(),
             password.to_string(),
         )
@@ -385,11 +401,12 @@ impl AuthService for AuthController {
         .map_err(AuthError::Core)?;
 
         let session_info = api
-            .auth_login(four_words.to_string(), password.to_string())
+            .auth_login(four_words, password.to_string())
             .await
             .map_err(AuthError::Core)?;
 
-        Self::start_network(&api).await;
+        // Spawn network start in background (non-blocking)
+        Self::spawn_network_start(api.clone());
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
         let expires_soon = session.expires_soon();
@@ -398,7 +415,7 @@ impl AuthService for AuthController {
             session: session.clone(),
             expires_soon,
         });
-        info!(target = "ui.auth", "identity created");
+        info!(target: "ui.auth", "identity created");
         Ok(session)
     }
 
@@ -452,7 +469,8 @@ impl AuthService for AuthController {
             .await
             .map_err(AuthError::Core)?;
 
-        Self::start_network(&api).await;
+        // Spawn network start in background (non-blocking)
+        Self::spawn_network_start(api.clone());
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
         let expires_soon = session.expires_soon();
@@ -624,7 +642,8 @@ impl AuthService for AuthController {
                 .await
                 .map_err(AuthError::Core)?;
 
-                Self::start_network(&real_api).await;
+                // Spawn network start in background (non-blocking)
+                Self::spawn_network_start(real_api.clone());
 
                 let session = AuthSession::from((session_info, self.device_name.clone()));
                 let expires_soon = session.expires_soon();
@@ -707,6 +726,35 @@ impl AuthService for AuthController {
 
         info!(target = "ui.auth", "removed recent identity");
         Ok(())
+    }
+
+    #[instrument(name = "ui.auth.list_vaults", skip(self))]
+    async fn list_vaults(&self) -> Result<Vec<VaultInfo>, AuthError> {
+        // Create a temporary API instance to list vaults since we're not logged in
+        let api = CommunitasApi::create(
+            "temp-list-vaults".to_string(),
+            "Vault Lister".to_string(),
+            self.device_name.clone(),
+            self.storage_path()?,
+        )
+        .await
+        .map_err(AuthError::Core)?;
+
+        let vaults = api.auth_list_vaults().await.map_err(AuthError::Core)?;
+
+        // Convert to VaultInfo and sort by last_accessed (most recent first)
+        let mut vault_infos: Vec<VaultInfo> = vaults
+            .into_iter()
+            .map(|v| VaultInfo {
+                four_words: v.four_words,
+                display_name: v.display_name,
+                last_accessed: v.last_accessed,
+            })
+            .collect();
+
+        vault_infos.sort_by(|a, b| b.last_accessed.cmp(&a.last_accessed));
+
+        Ok(vault_infos)
     }
 }
 

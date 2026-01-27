@@ -6,7 +6,7 @@ This guide shows how to connect your Communitas MCP server to Claude Desktop for
 
 The Model Context Protocol (MCP) allows AI assistants like Claude to interact with external tools and services. Communitas provides an MCP server that exposes:
 
-- **187 tools** for contacts, messaging, kanban, drive, canvas, and more
+- **197 tools** for contacts, messaging, kanban, drive, canvas, and more
 - **Interactive UI widgets** via MCP Apps extension
 - **Real-time collaboration** through the Communitas platform
 

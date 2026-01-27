@@ -26,7 +26,7 @@ In Claude Desktop, start a conversation and ask:
 What MCP tools are available from Communitas?
 ```
 
-Claude should list 187 tools including contacts, messaging, kanban, etc.
+Claude should list 197 tools including contacts, messaging, kanban, etc.
 
 ### 3. Test Each Widget
 

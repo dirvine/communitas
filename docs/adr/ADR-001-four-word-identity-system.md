@@ -168,6 +168,32 @@ The `four-word-networking` crate provides address encoding:
 - Display names provide human-friendly presentation
 - Pubkey fingerprints (first 8 chars) can be compared for verification
 
+## FAQ
+
+### Q: Are four-word phrases my identity?
+
+**No.** Four-word phrases encode network addresses (IP:port), not your identity. Your identity is your cryptographic public key (pubkey_hex).
+
+### Q: If someone knows my four-word phrase, can they impersonate me?
+
+**No.** The four-word phrase only tells them WHERE to find you on the network. To impersonate you, they would need your private key, which is never shared.
+
+### Q: Why does the login screen ask for "four words"?
+
+The login screen asks for your **connection address** (four words) to identify which vault to unlock. The vault contains your private key, which proves your identity.
+
+### Q: How do I verify someone's identity?
+
+Compare their **pubkey fingerprint** (the first 16 characters of their pubkey_hex). Display names can be changed or duplicated; pubkey fingerprints cannot.
+
+### Q: Can two people have the same four-word phrase?
+
+**Yes**, if they're on different network addresses at different times. Four-word phrases are ephemeral connection addresses, not permanent identities. Two people cannot have the same pubkey_hex.
+
+### Q: What happens if I change my IP address?
+
+Your four-word connection address changes (it's based on your IP:port), but your identity (pubkey_hex) remains the same. Contacts find you via identity, then update your connection address.
+
 ## References
 
 - New identity model: [ADR-006 Post-Quantum Cryptography](ADR-006-post-quantum-cryptography.md)

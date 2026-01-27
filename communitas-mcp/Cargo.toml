@@ -72,3 +72,6 @@ proptest = "1.5"
 tower = { version = "0.5", features = ["util"] }
 http = "1.0"
 http-body-util = "0.1"
+# For coverage tracking
+regex = "1.10"
+chrono = "0.4"

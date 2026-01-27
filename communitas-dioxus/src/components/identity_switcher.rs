@@ -269,7 +269,8 @@ pub fn IdentitySwitcher(props: IdentitySwitcherProps) -> Element {
                                 PasskeyBadge {}
                             }
                         }
-                        p { class: "text-xs text-slate-500", "{session.four_words}" }
+                        // Note: four_words are connection address for sharing, not shown in UI
+                        // Users identify vaults by display_name only
                     }
                     // Dropdown arrow
                     svg {
@@ -435,9 +436,8 @@ pub fn IdentitySwitcher(props: IdentitySwitcherProps) -> Element {
 
             // Biometric authentication prompt
             if biometric_prompt_open() {
-                if let Some((target_four_words, target_display_name)) = biometric_target() {
+                if let Some((_target_four_words, target_display_name)) = biometric_target() {
                     PasskeyPrompt {
-                        four_words: target_four_words.clone(),
                         display_name: target_display_name.clone(),
                         state: biometric_state(),
                         on_authenticate: move |_| {
@@ -534,8 +534,8 @@ fn IdentityItem(props: IdentityItemProps) -> Element {
                     }
                 }
                 div { class: "flex items-center gap-2",
-                    p { class: "text-xs text-slate-500", "{props.identity.four_words}" }
-                    span { class: "text-xs text-slate-600", "\u{2022}" }
+                    // Four-words are connection address for sharing with friends, NOT shown in UI
+                    // Users identify vaults by display_name only
                     p { class: "text-xs text-slate-600", "{last_used_text}" }
                 }
             }
@@ -632,6 +632,11 @@ fn PasskeyManagementModal(props: PasskeyManagementModalProps) -> Element {
         .find(|i| i.four_words == props.current_four_words)
         .is_some_and(|i| i.has_passkey);
 
+    let current_identity = props
+        .identities
+        .iter()
+        .find(|i| i.four_words == props.current_four_words);
+
     rsx! {
         // Backdrop
         div {
@@ -668,7 +673,13 @@ fn PasskeyManagementModal(props: PasskeyManagementModalProps) -> Element {
                         "Current Identity"
                     }
                     div { class: "flex items-center justify-between",
-                        span { class: "text-sm text-slate-300", "{props.current_four_words}" }
+                        span { class: "text-sm text-slate-300",
+                            if let Some(identity) = current_identity {
+                                "{identity.display_name}"
+                            } else {
+                                "Unknown"
+                            }
+                        }
                         if current_has_passkey {
                             button {
                                 class: "rounded-lg border border-red-900 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-900/20",

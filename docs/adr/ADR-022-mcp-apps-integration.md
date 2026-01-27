@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Communitas has a comprehensive MCP (Model Context Protocol) server with 187 tools exposing all platform functionality to AI agents. The MCP server supports both stdio and HTTPS transports with ML-DSA-65 post-quantum TLS.
+Communitas has a comprehensive MCP (Model Context Protocol) server with 197 tools exposing all platform functionality to AI agents. The MCP server supports both stdio and HTTPS transports with ML-DSA-65 post-quantum TLS.
 
 On January 26, 2026, the Model Context Protocol team announced [MCP Apps](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/), an extension that allows MCP servers to provide interactive UI components that render within MCP host applications (Claude Desktop, ChatGPT, VS Code Copilot).
 

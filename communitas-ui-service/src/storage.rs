@@ -13,8 +13,23 @@ pub struct UiStorage {
 }
 
 impl UiStorage {
-    /// Locate the Communitas application data directory (prefers OS-specific data dir, falls back to home).
+    /// Locate the Communitas application data directory.
+    ///
+    /// The directory is determined in the following order:
+    /// 1. `COMMUNITAS_DATA_DIR` environment variable (if set)
+    /// 2. OS-specific data directory (e.g., `~/Library/Application Support` on macOS)
+    /// 3. Home directory fallback
+    ///
+    /// This allows running multiple instances with separate data directories by setting
+    /// different `COMMUNITAS_DATA_DIR` values for each instance.
     pub fn discover() -> Result<Self, StorageError> {
+        // Check for env var override first (enables running multiple instances)
+        if let Ok(custom_path) = std::env::var("COMMUNITAS_DATA_DIR") {
+            let path = std::path::PathBuf::from(custom_path);
+            tracing::info!(path = %path.display(), "Using custom data directory from COMMUNITAS_DATA_DIR");
+            return Self::from_path(path);
+        }
+
         let base = dirs::data_dir()
             .or_else(dirs::home_dir)
             .ok_or(StorageError::MissingBaseDir)?;

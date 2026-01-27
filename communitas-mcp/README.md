@@ -5,7 +5,7 @@ Model Context Protocol (MCP) server for AI agents and automation. Communicates v
 ## Features
 
 - **187 MCP tools** covering all Communitas functionality
-- **MCP Apps extension (SEP-1865)** with 5 interactive UI widgets
+- **MCP Apps extension (SEP-1865)** with 8 interactive UI widgets
 - JSON-RPC 2.0 over stdio (default) or HTTP/HTTPS
 - TLS with ML-DSA-65 post-quantum raw public keys
 - Demo mode for testing without real identities
@@ -61,6 +61,9 @@ Communitas implements the [MCP Apps extension](https://blog.modelcontextprotocol
 | `ui://communitas/kanban` | Kanban | Drag-drop project boards |
 | `ui://communitas/drive` | Drive | File browser with upload and preview |
 | `ui://communitas/canvas` | Canvas | Collaborative whiteboard viewer |
+| `ui://communitas/settings` | Settings | User preferences and configuration |
+| `ui://communitas/search` | Search | Global search across all entities |
+| `ui://communitas/notifications` | Notifications | Activity feed and alerts |
 
 ### Capability Negotiation
 
@@ -143,7 +146,8 @@ See [docs/api/mcp-api.md](../docs/api/mcp-api.md) for full API documentation.
 │    │              Sandboxed Iframe                     │     │
 │    │  ┌────────────────────────────────────────────┐  │     │
 │    │  │         Communitas UI Widget               │  │     │
-│    │  │  (contacts/messages/kanban/drive/canvas)   │  │     │
+│    │  │  (contacts/messages/kanban/drive/canvas/  │  │     │
+│    │  │   settings/search/notifications)          │  │     │
 │    │  └────────────────────────────────────────────┘  │     │
 │    └────────────────────┬─────────────────────────────┘     │
 │                         │ postMessage JSON-RPC              │

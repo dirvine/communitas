@@ -459,7 +459,7 @@
     </div>
     <script src="../shared/mcp-bridge.js"></script>
     <script>
-        // Drive widget - Phase 2.4 implementation
+        // Drive widget - Phase 2.4 implementation + Phase 9.3 AI Context
         const app = document.getElementById('app');
         const bridge = new McpBridge();
         let currentDisk = null;
@@ -469,6 +469,13 @@
         // Upload state - matches Dioxus upload_progress.rs
         const uploads = new Map(); // id -> {id, fileName, progress, total, state}
         let uploadPanelVisible = false;
+
+        // Set initial context on widget load (Phase 9.3)
+        function initContext() {
+            bridge.setCurrentView('drive', {
+                view_mode: 'loading'
+            });
+        }
 
         // Upload states
         const UploadState = {
@@ -497,10 +504,26 @@
             };
             uploads.set(uploadId, upload);
             uploadPanelVisible = true;
+
+            // Track pending uploads (Phase 9.3)
+            updateUploadContext();
+
             renderUploadPanel();
 
             // Start upload
             await performUpload(upload);
+        }
+
+        // Update upload context for AI (Phase 9.3)
+        function updateUploadContext() {
+            const activeUploads = Array.from(uploads.values()).filter(
+                u => u.state === UploadState.UPLOADING || u.state === UploadState.PENDING
+            );
+            if (activeUploads.length > 0) {
+                bridge.setPendingActions('upload', activeUploads.map(u => u.id));
+            } else {
+                bridge.clearPendingActions();
+            }
         }
 
         // Perform the actual upload via MCP
@@ -533,6 +556,7 @@
 
                         upload.state = UploadState.COMPLETE;
                         upload.progress = 100;
+                        updateUploadContext(); // Update pending actions (Phase 9.3)
                         renderUploadPanel();
 
                         // Refresh file list
@@ -540,6 +564,11 @@
                     } catch (err) {
                         upload.state = UploadState.FAILED;
                         upload.error = err.message;
+                        updateUploadContext(); // Update pending actions (Phase 9.3)
+                        bridge.setErrorState('internal', `Upload failed: ${err.message}`, {
+                            recoverable: true,
+                            recovery_hint: 'Try uploading the file again'
+                        });
                         renderUploadPanel();
                     }
                 };
@@ -561,6 +590,7 @@
             const upload = uploads.get(uploadId);
             if (upload && upload.state === UploadState.UPLOADING) {
                 upload.state = UploadState.CANCELLED;
+                updateUploadContext(); // Update pending actions (Phase 9.3)
                 renderUploadPanel();
             }
         }
@@ -571,6 +601,7 @@
             if (uploads.size === 0) {
                 uploadPanelVisible = false;
             }
+            updateUploadContext(); // Update pending actions (Phase 9.3)
             renderUploadPanel();
         }
 
@@ -701,21 +732,54 @@
                 const data = JSON.parse(result.content[0].text);
                 if (data.disks && data.disks.length > 0) {
                     currentDisk = data.disks[0];
+
+                    // Clear any previous error state (Phase 9.3)
+                    bridge.clearErrorState();
+
                     loadFiles(currentDisk.id, '/');
                 } else {
                     app.innerHTML = '<div class="loading">No disks available</div>';
+                    bridge.setCurrentView('drive', { view_mode: 'empty' });
                 }
             } catch (err) {
                 const errorMsg = bridge.escapeHTML(err.message || 'Unknown error');
                 app.innerHTML = `<div class="loading">Error: ${errorMsg}</div>`;
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('network', err.message || 'Failed to load disks', {
+                    recoverable: true,
+                    recovery_hint: 'Try refreshing or check your network connection'
+                });
             }
         }
 
         async function loadFiles(diskId, path) {
             currentPath = path;
-            const result = await bridge.callTool('list_files', { disk_id: diskId, path });
-            const data = JSON.parse(result.content[0].text);
-            renderFiles(data);
+            try {
+                const result = await bridge.callTool('list_files', { disk_id: diskId, path });
+                const data = JSON.parse(result.content[0].text);
+
+                // Update AI context with current location (Phase 9.3)
+                bridge.setCurrentView('drive', {
+                    view_mode: 'browser',
+                    view_id: diskId,
+                    path: path,
+                    file_count: (data.entries || []).length
+                });
+                bridge.clearSelectionState();
+                bridge.clearErrorState();
+
+                renderFiles(data);
+            } catch (err) {
+                const errorMsg = bridge.escapeHTML(err.message || 'Unknown error');
+                app.innerHTML = `<div class="loading">Error: ${errorMsg}</div>`;
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('network', err.message || 'Failed to load files', {
+                    recoverable: true,
+                    recovery_hint: 'Try navigating to a different folder or refresh'
+                });
+            }
         }
 
         function renderFiles(data) {
@@ -855,6 +919,17 @@
             selectedFile = { id, name, type };
             document.querySelectorAll('.file-item').forEach(i => i.classList.remove('selected'));
             document.querySelector(`[data-id="${id}"]`)?.classList.add('selected');
+
+            // Update AI context with selected file (Phase 9.3)
+            bridge.setSelectionState(type === 'directory' ? 'folder' : 'file', [id]);
+            bridge.setCurrentView('drive', {
+                view_mode: 'preview',
+                view_id: currentDisk?.id,
+                path: currentPath,
+                selected_file: name,
+                selected_type: type
+            });
+            bridge.sendMessageWithContext(`User selected ${type}: ${name}`);
 
             const preview = document.getElementById('preview');
             preview.classList.add('open');
@@ -999,35 +1074,77 @@
             preview.innerHTML = '';
             selectedFile = null;
             document.querySelectorAll('.file-item').forEach(i => i.classList.remove('selected'));
+
+            // Clear selection context (Phase 9.3)
+            bridge.clearSelectionState();
+            bridge.setCurrentView('drive', {
+                view_mode: 'browser',
+                view_id: currentDisk?.id,
+                path: currentPath
+            });
         }
 
         async function downloadFile(name) {
+            // Track pending download action (Phase 9.3)
+            bridge.setPendingActions('download', [selectedFile?.id || name]);
+
             try {
                 const result = await bridge.callTool('download_file', {
                     disk_id: currentDisk.id,
                     path: currentPath + name
                 });
-                bridge.sendMessage({ action: 'file_downloaded', fileName: name });
+
+                // Clear pending action on success (Phase 9.3)
+                bridge.clearPendingActions();
+
+                bridge.sendMessageWithContext(`Downloaded file: ${name}`);
             } catch (err) {
                 console.error('Download failed:', err);
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('internal', `Download failed: ${err.message}`, {
+                    recoverable: true,
+                    recovery_hint: 'Check your network connection and try again'
+                });
+                bridge.clearPendingActions();
             }
         }
 
         async function deleteFile(name) {
             if (!confirm(`Delete "${name}"?`)) return;
+
+            // Track pending delete action (Phase 9.3)
+            bridge.setPendingActions('delete', [selectedFile?.id || name]);
+
             try {
                 await bridge.callTool('delete_file', {
                     disk_id: currentDisk.id,
                     path: currentPath + name
                 });
+
+                // Clear pending action on success (Phase 9.3)
+                bridge.clearPendingActions();
+                bridge.clearErrorState();
+
                 closePreview();
                 loadFiles(currentDisk.id, currentPath);
             } catch (err) {
                 console.error('Delete failed:', err);
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('internal', `Failed to delete: ${err.message}`, {
+                    recoverable: true,
+                    recovery_hint: 'Check permissions or try again'
+                });
+                bridge.clearPendingActions();
             }
         }
 
-        bridge.onReady(loadDrive);
+        // Initialize context and load drive (Phase 9.3)
+        bridge.onReady(() => {
+            initContext();
+            loadDrive();
+        });
     </script>
 </body>
 </html>

@@ -667,6 +667,9 @@ UI widgets are exposed as resources with the `ui://` scheme. The server advertis
 | `ui://communitas/kanban` | Kanban | Drag-drop project boards |
 | `ui://communitas/drive` | Drive | File browser with upload and preview |
 | `ui://communitas/canvas` | Canvas | Collaborative whiteboard viewer |
+| `ui://communitas/settings` | Settings | User preferences and configuration |
+| `ui://communitas/search` | Search | Global search across all entities |
+| `ui://communitas/notifications` | Notifications | Activity feed and alerts |
 
 #### Resource List Response
 
@@ -899,6 +902,200 @@ bridge.onToolResult((toolName, result) => {
 });
 </script>
 ```
+
+### AI Context in Tool Responses
+
+Tool responses include contextual information in `_meta.ui.context` to help AI models understand the current application state. This enables more intelligent, context-aware assistance.
+
+#### Context Schema
+
+```json
+{
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://communitas/contacts",
+      "visibility": ["user", "assistant"],
+      "context": {
+        "current_view": {
+          "widget": "contacts",
+          "view_mode": "detail",
+          "view_id": "contact-abc123"
+        },
+        "selection_state": {
+          "type": "contact",
+          "ids": ["contact-abc123"]
+        },
+        "pending_actions": {
+          "type": "edit",
+          "ids": ["contact-abc123"]
+        },
+        "error_state": {
+          "type": "network",
+          "message": "Connection timeout",
+          "recoverable": true,
+          "recovery_hint": "Try again or check your network connection"
+        }
+      }
+    }
+  }
+}
+```
+
+#### Context Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `current_view` | object | What the user is currently viewing |
+| `selection_state` | object | What items the user has selected |
+| `pending_actions` | object | Actions in progress (editing, uploading, etc.) |
+| `error_state` | object | Current error state, if any |
+
+#### current_view
+
+Describes what the user is currently viewing in the widget.
+
+```json
+{
+  "widget": "kanban",           // Widget type: contacts, messages, kanban, drive, canvas
+  "view_mode": "board",         // Widget-specific view mode
+  "view_id": "board-123",       // ID of the item being viewed (optional)
+  "board_name": "Sprint 1",     // Additional context (widget-specific)
+  "column_count": 4,
+  "card_count": 15
+}
+```
+
+**View modes by widget:**
+
+| Widget | View Modes |
+|--------|------------|
+| `contacts` | `list`, `detail`, `search` |
+| `messages` | `thread_list`, `message_view` |
+| `kanban` | `board`, `filtered`, `empty` |
+| `drive` | `browser`, `preview`, `empty` |
+| `canvas` | `editor`, `empty`, `loading` |
+
+#### selection_state
+
+Describes what items the user has selected.
+
+```json
+{
+  "type": "card",               // Selection type: contact, thread, card, file, layer
+  "ids": ["card-123", "card-456"]  // Selected item IDs
+}
+```
+
+#### pending_actions
+
+Describes actions that are currently in progress.
+
+```json
+{
+  "type": "upload",             // Action type: edit, delete, upload, download, move, undo, redo
+  "ids": ["upload-123"]         // IDs of items involved
+}
+```
+
+**Action types:**
+
+| Type | Description |
+|------|-------------|
+| `edit` | User is editing an item (e.g., toggling favorite) |
+| `delete` | Item deletion in progress |
+| `upload` | File upload in progress |
+| `download` | File download in progress |
+| `move` | Item move in progress (e.g., drag-drop card) |
+| `draft` | User has unsaved draft content |
+| `undo` | Undo operation in progress |
+| `redo` | Redo operation in progress |
+| `scrub` | History scrubbing in progress (canvas) |
+
+#### error_state
+
+Describes current error state for AI troubleshooting assistance.
+
+```json
+{
+  "type": "network",            // Error type: network, validation, permission, internal
+  "message": "Connection timeout",
+  "recoverable": true,          // Whether the error can be recovered from
+  "recovery_hint": "Try refreshing or check your network connection"
+}
+```
+
+**Error types:**
+
+| Type | Description |
+|------|-------------|
+| `network` | Network connectivity issues |
+| `validation` | Input validation errors |
+| `permission` | Authorization/permission errors |
+| `internal` | Internal errors (failed operations) |
+
+#### UI Methods for Context Tracking
+
+Widgets use the MCP Bridge to track context:
+
+```javascript
+const bridge = new McpBridge();
+
+// Set current view
+bridge.setCurrentView('kanban', {
+  view_mode: 'board',
+  view_id: 'board-123',
+  board_name: 'Sprint 1'
+});
+
+// Track selection
+bridge.setSelectionState('card', ['card-123']);
+bridge.clearSelectionState();
+
+// Track pending actions
+bridge.setPendingActions('upload', ['upload-123']);
+bridge.clearPendingActions();
+
+// Set error state
+bridge.setErrorState('network', 'Connection timeout', {
+  recoverable: true,
+  recovery_hint: 'Check your network connection'
+});
+bridge.clearErrorState();
+
+// Send message with full context
+bridge.sendMessageWithContext('User selected contact: Alice');
+```
+
+#### Example: Context-Aware AI Interaction
+
+When a user asks "help me with this card", the AI receives context showing:
+- They're viewing the Kanban board
+- Card "Fix login bug" is selected
+- No pending actions or errors
+
+```json
+{
+  "content": [{"type": "text", "text": "{\"card\": {...}}"}],
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://communitas/kanban",
+      "context": {
+        "current_view": {
+          "widget": "kanban",
+          "view_mode": "board",
+          "view_id": "board-123"
+        },
+        "selection_state": {
+          "type": "card",
+          "ids": ["card-456"]
+        }
+      }
+    }
+  }
+}
+```
+
+The AI can now provide specific help for the selected card without asking "which card?".
 
 ### Capability Negotiation
 

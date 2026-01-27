@@ -28,6 +28,40 @@ use axum::{
 use base64::Engine;
 use communitas_core::app::CommunitasApp;
 use communitas_core::identity::generate_id_words;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
+
+/// Prometheus metrics collection for MCP server
+#[derive(Clone)]
+pub struct Metrics {
+    /// Total HTTP requests
+    pub total_requests: Arc<AtomicU64>,
+    /// MCP requests by method
+    pub mcp_requests: Arc<AtomicU64>,
+    /// Health check requests
+    pub health_requests: Arc<AtomicU64>,
+    /// Tool calls
+    pub tool_calls: Arc<AtomicU64>,
+    /// Errors
+    pub errors: Arc<AtomicU64>,
+    /// Request latency in milliseconds (simplified)
+    pub request_latency_ms: Arc<AtomicU64>,
+}
+
+impl Metrics {
+    pub fn new() -> Self {
+        Self {
+            total_requests: Arc::new(AtomicU64::new(0)),
+            mcp_requests: Arc::new(AtomicU64::new(0)),
+            health_requests: Arc::new(AtomicU64::new(0)),
+            tool_calls: Arc::new(AtomicU64::new(0)),
+            errors: Arc::new(AtomicU64::new(0)),
+            request_latency_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+}
 use communitas_mcp::auth::{
     AuthState, AuthenticatedSession, DelegateSession, DemoSession, requires_auth,
 };
@@ -36,7 +70,6 @@ use communitas_ui_service::UiServices;
 use communitas_ui_service::storage::UiStorage;
 use serde_json::Value;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
@@ -60,6 +93,8 @@ pub struct HttpServerState {
     token_manager: RwLock<Option<TokenManager>>,
     /// UI resource registry for MCP Apps extension
     ui_resources: UiResourceRegistry,
+    /// Prometheus metrics collection
+    metrics: Metrics,
 }
 
 impl HttpServerState {
@@ -72,6 +107,7 @@ impl HttpServerState {
             protocol_initialized: RwLock::new(false),
             token_manager: RwLock::new(None),
             ui_resources: UiResourceRegistry::with_standard_widgets(),
+            metrics: Metrics::new(),
         }
     }
 
@@ -245,11 +281,44 @@ pub fn create_tls_config(args: &Args) -> Result<ServerTlsConfig, TlsConfigError>
     builder.build()
 }
 
+/// Handle Prometheus metrics request
+async fn handle_metrics(State(state): State<Arc<HttpServerState>>) -> String {
+    let metrics = state.metrics.clone();
+
+    format!(
+        "# HELP communitas_mcp_total_requests Total HTTP requests received
+# TYPE communitas_mcp_total_requests counter
+communitas_mcp_total_requests {}\n
+# HELP communitas_mcp_mcp_requests Number of MCP JSON-RPC requests
+# TYPE communitas_mcp_mcp_requests counter
+communitas_mcp_mcp_requests {}\n
+# HELP communitas_mcp_health_requests Number of health check requests
+# TYPE communitas_mcp_health_requests counter
+communitas_mcp_health_requests {}\n
+# HELP communitas_mcp_tool_calls Number of tool calls executed
+# TYPE communitas_mcp_tool_calls counter
+communitas_mcp_tool_calls {}\n
+# HELP communitas_mcp_errors Number of error responses
+# TYPE communitas_mcp_errors counter
+communitas_mcp_errors {}\n
+# HELP communitas_mcp_request_latency_ms Average request latency in milliseconds
+# TYPE communitas_mcp_request_latency_ms gauge
+communitas_mcp_request_latency_ms {}\n",
+        metrics.total_requests.load(Ordering::Relaxed),
+        metrics.mcp_requests.load(Ordering::Relaxed),
+        metrics.health_requests.load(Ordering::Relaxed),
+        metrics.tool_calls.load(Ordering::Relaxed),
+        metrics.errors.load(Ordering::Relaxed),
+        metrics.request_latency_ms.load(Ordering::Relaxed)
+    )
+}
+
 /// Create the Axum router
 fn create_router(state: Arc<HttpServerState>) -> Router {
     Router::new()
         .route("/mcp", post(handle_mcp_request))
         .route("/health", axum::routing::get(handle_health))
+        .route("/metrics", axum::routing::get(handle_metrics))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(
             CorsLayer::new()
@@ -265,9 +334,14 @@ async fn handle_mcp_request(
     State(state): State<Arc<HttpServerState>>,
     body: Bytes,
 ) -> (StatusCode, Json<JsonRpcResponse>) {
+    // Track metrics
+    state.metrics.total_requests.fetch_add(1, Ordering::Relaxed);
+    state.metrics.mcp_requests.fetch_add(1, Ordering::Relaxed);
+
     let value: Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
         Err(_) => {
+            state.metrics.errors.fetch_add(1, Ordering::Relaxed);
             return (
                 StatusCode::OK,
                 Json(JsonRpcResponse::error(None, JsonRpcError::parse_error())),
@@ -278,6 +352,7 @@ async fn handle_mcp_request(
     let request: JsonRpcRequest = match serde_json::from_value(value) {
         Ok(request) => request,
         Err(err) => {
+            state.metrics.errors.fetch_add(1, Ordering::Relaxed);
             return (
                 StatusCode::OK,
                 Json(JsonRpcResponse::error(
@@ -297,10 +372,13 @@ async fn handle_mcp_request(
                 Json(JsonRpcResponse::success(None, Value::Null)),
             )
         }
-        Err(error) => (
-            StatusCode::OK, // JSON-RPC errors use 200 status
-            Json(JsonRpcResponse::error(None, error)),
-        ),
+        Err(error) => {
+            state.metrics.errors.fetch_add(1, Ordering::Relaxed);
+            (
+                StatusCode::OK, // JSON-RPC errors use 200 status
+                Json(JsonRpcResponse::error(None, error)),
+            )
+        }
     }
 }
 
@@ -316,7 +394,14 @@ struct HealthResponse {
 static SERVER_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 
 /// Handle health check - returns JSON with status, version, and uptime
-async fn handle_health() -> Json<HealthResponse> {
+async fn handle_health(State(state): State<Arc<HttpServerState>>) -> Json<HealthResponse> {
+    // Track health check requests
+    state.metrics.total_requests.fetch_add(1, Ordering::Relaxed);
+    state
+        .metrics
+        .health_requests
+        .fetch_add(1, Ordering::Relaxed);
+
     let start = SERVER_START.get_or_init(std::time::Instant::now);
     let uptime = start.elapsed().as_secs();
 
@@ -490,6 +575,9 @@ async fn handle_tools_call(
     state: &HttpServerState,
     params: Option<Value>,
 ) -> Result<Value, JsonRpcError> {
+    // Track tool calls
+    state.metrics.tool_calls.fetch_add(1, Ordering::Relaxed);
+
     let is_initialized = *state.protocol_initialized.read().await;
     if !is_initialized {
         return Err(JsonRpcError::invalid_request("Server not initialized"));

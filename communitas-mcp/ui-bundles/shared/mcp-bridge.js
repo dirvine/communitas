@@ -19,9 +19,20 @@ class McpBridge {
             toolInput: [],
             toolResult: [],
             ready: [],
+            contextChange: [],
+            message: [],
         };
         this.isReady = false;
         this.messageQueue = [];
+
+        // AI context state (Phase 9.3)
+        // This tracks the current UI state to help AI understand context
+        this._uiContext = {
+            current_view: null,
+            selection_state: null,
+            pending_actions: null,
+            error_state: null,
+        };
 
         // Configure allowed origins for postMessage validation
         // In production, this should be configured based on the actual MCP host origin
@@ -185,6 +196,200 @@ class McpBridge {
         }
     }
 
+    /**
+     * Register handler for context change events
+     * Called when the AI context is updated
+     * @param {function} callback - Handler function(context)
+     */
+    onContextChange(callback) {
+        this.eventHandlers.contextChange.push(callback);
+    }
+
+    /**
+     * Register handler for incoming messages from the MCP host
+     * Called when the host sends a message to the UI (e.g., typing indicators)
+     * @param {function} callback - Handler function(message)
+     */
+    onMessage(callback) {
+        this.eventHandlers.message.push(callback);
+    }
+
+    // ==========================================================================
+    // AI Context Methods (Phase 9.3)
+    // ==========================================================================
+    // These methods track the current UI state to help AI hosts understand
+    // what the user is viewing, what's selected, pending changes, and errors.
+
+    /**
+     * Get the current UI context
+     * @returns {object} The current context object
+     */
+    getContext() {
+        // Return a clean copy without null values
+        const ctx = {};
+        if (this._uiContext.current_view) ctx.current_view = this._uiContext.current_view;
+        if (this._uiContext.selection_state) ctx.selection_state = this._uiContext.selection_state;
+        if (this._uiContext.pending_actions) ctx.pending_actions = this._uiContext.pending_actions;
+        if (this._uiContext.error_state) ctx.error_state = this._uiContext.error_state;
+        return ctx;
+    }
+
+    /**
+     * Set the current view context
+     * Call this when the user navigates to a different view
+     *
+     * @param {string} widget - Widget name (e.g., 'kanban', 'contacts', 'drive')
+     * @param {object} [options] - Additional view options
+     * @param {string} [options.view_id] - Specific view/board/folder ID
+     * @param {string} [options.view_mode] - View mode (e.g., 'board', 'list', 'grid')
+     * @param {string} [options.filter] - Active filter description
+     */
+    setCurrentView(widget, options = {}) {
+        this._uiContext.current_view = {
+            widget: widget,
+            view_id: options.view_id || null,
+            view_mode: options.view_mode || null,
+            filter: options.filter || null,
+        };
+        this._notifyContextChange('current_view');
+    }
+
+    /**
+     * Clear the current view context
+     */
+    clearCurrentView() {
+        this._uiContext.current_view = null;
+        this._notifyContextChange('current_view');
+    }
+
+    /**
+     * Set the selection state context
+     * Call this when the user selects or deselects items
+     *
+     * @param {string} selectionType - Type of items (e.g., 'card', 'contact', 'file')
+     * @param {string[]} selectedIds - Array of selected item IDs
+     */
+    setSelectionState(selectionType, selectedIds = []) {
+        if (selectedIds.length === 0) {
+            this._uiContext.selection_state = null;
+        } else {
+            this._uiContext.selection_state = {
+                selected_ids: selectedIds,
+                selection_type: selectionType,
+                count: selectedIds.length,
+            };
+        }
+        this._notifyContextChange('selection_state');
+    }
+
+    /**
+     * Clear the selection state
+     */
+    clearSelectionState() {
+        this._uiContext.selection_state = null;
+        this._notifyContextChange('selection_state');
+    }
+
+    /**
+     * Set the pending actions context
+     * Call this when there are unsaved changes
+     *
+     * @param {string} actionType - Type of action ('edit', 'create', 'delete', 'move', 'draft')
+     * @param {string[]} [unsavedItems] - Array of item IDs with unsaved changes
+     */
+    setPendingActions(actionType, unsavedItems = []) {
+        this._uiContext.pending_actions = {
+            has_unsaved: true,
+            unsaved_items: unsavedItems,
+            action_type: actionType,
+        };
+        this._notifyContextChange('pending_actions');
+    }
+
+    /**
+     * Clear pending actions (e.g., after save)
+     */
+    clearPendingActions() {
+        this._uiContext.pending_actions = null;
+        this._notifyContextChange('pending_actions');
+    }
+
+    /**
+     * Set the error state context
+     * Call this when an error occurs that the AI should know about
+     *
+     * @param {string} errorType - Error type ('network', 'validation', 'permission', 'timeout', 'internal', 'not_found', 'quota_exceeded', 'sync')
+     * @param {string} errorMessage - Human-readable error message
+     * @param {object} [options] - Additional options
+     * @param {boolean} [options.recoverable=true] - Whether the error can be recovered from
+     * @param {string} [options.recovery_hint] - Hint for how to recover
+     */
+    setErrorState(errorType, errorMessage, options = {}) {
+        this._uiContext.error_state = {
+            has_error: true,
+            error_type: errorType,
+            error_message: errorMessage,
+            recoverable: options.recoverable !== false,
+            recovery_hint: options.recovery_hint || null,
+        };
+        this._notifyContextChange('error_state');
+    }
+
+    /**
+     * Clear the error state
+     */
+    clearErrorState() {
+        this._uiContext.error_state = null;
+        this._notifyContextChange('error_state');
+    }
+
+    /**
+     * Send context update to the MCP host
+     * This notifies the host that the UI context has changed
+     * @private
+     */
+    _notifyContextChange(changedField) {
+        // Notify local handlers
+        const context = this.getContext();
+        this.eventHandlers.contextChange.forEach(cb => cb(context, changedField));
+
+        // Send context update to MCP host
+        this._postMessage({
+            jsonrpc: '2.0',
+            method: 'ui/context',
+            params: {
+                context: context,
+                changed: changedField,
+            },
+        });
+    }
+
+    /**
+     * Send a message to update the model context with current UI context
+     * This allows the UI to provide information back to the conversation
+     * Enhanced in Phase 9.3 to include AI context automatically
+     * @param {object|string} content - Message content
+     * @param {boolean} [includeContext=true] - Whether to include UI context
+     */
+    sendMessageWithContext(content, includeContext = true) {
+        const params = {
+            content: typeof content === 'string' ? content : JSON.stringify(content),
+        };
+
+        if (includeContext) {
+            const context = this.getContext();
+            if (Object.keys(context).length > 0) {
+                params.context = context;
+            }
+        }
+
+        this._postMessage({
+            jsonrpc: '2.0',
+            method: 'ui/message',
+            params: params,
+        });
+    }
+
     // Private methods
 
     _sendHandshake() {
@@ -242,6 +447,10 @@ class McpBridge {
 
             case 'ui/toolResult':
                 this.eventHandlers.toolResult.forEach(cb => cb(message.params));
+                break;
+
+            case 'ui/message':
+                this.eventHandlers.message.forEach(cb => cb(message.params));
                 break;
         }
     }

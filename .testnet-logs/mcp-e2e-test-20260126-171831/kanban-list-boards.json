@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"boards\": [\n    {\n      \"entity_id\": \"026a49b2-947d-4422-be2e-3bd6daf0e90b\",\n      \"id\": \"19295845-2db7-4b63-a9a8-980499a64ea6\",\n      \"name\": \"\"\n    }\n  ],\n  \"count\": 1\n}","type":"text"}],"isError":false}}

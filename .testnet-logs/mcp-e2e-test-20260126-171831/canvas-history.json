@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"can_redo\": false,\n  \"can_undo\": false,\n  \"count\": 0,\n  \"entries\": []\n}","type":"text"}],"isError":false}}

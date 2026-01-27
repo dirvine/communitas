@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"contact_id\": \"43838249-7b5e-4fb4-a0a7-0f83d38150d3\",\n  \"display_name\": \"Alice Test\",\n  \"four_words\": \"alice-bravo-charlie-delta\",\n  \"message\": \"Contact created\",\n  \"success\": true\n}","type":"text"}],"isError":false}}

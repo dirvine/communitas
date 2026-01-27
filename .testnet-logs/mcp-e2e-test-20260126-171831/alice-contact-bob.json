@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"contact_id\": \"49501e0f-a366-4c37-ad89-0486c3aec9b8\",\n  \"display_name\": \"Bob Test\",\n  \"four_words\": \"echo-foxtrot-golf-hotel\",\n  \"message\": \"Contact created\",\n  \"success\": true\n}","type":"text"}],"isError":false}}

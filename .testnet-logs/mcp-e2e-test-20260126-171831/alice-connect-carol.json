@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"address\": \"116.203.101.172:62044\",\n  \"message\": \"Connected to peer\",\n  \"peer_identity\": \"116.203.101.172:62044\",\n  \"success\": true\n}","type":"text"}],"isError":false}}

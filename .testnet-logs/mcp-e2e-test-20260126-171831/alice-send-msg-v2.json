@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"Failed to send message: message send failed: Message sync error: Message must have text or attachments","type":"text"}],"isError":true}}

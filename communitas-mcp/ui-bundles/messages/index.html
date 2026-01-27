@@ -306,19 +306,41 @@
     </div>
     <script src="../shared/mcp-bridge.js"></script>
     <script>
-        // Messages widget - Phase 2.2 implementation
+        // Messages widget - Phase 2.2 implementation + Phase 9.3 AI Context
         const app = document.getElementById('app');
         const bridge = new McpBridge();
         let currentThread = null;
+        let hasDraftMessage = false;
+
+        // Initialize AI context on widget load (Phase 9.3)
+        function initContext() {
+            bridge.setCurrentView('messages', {
+                view_mode: 'thread_list'
+            });
+        }
 
         async function loadThreads() {
             try {
                 const result = await bridge.callTool('list_threads', {});
                 const data = JSON.parse(result.content[0].text);
                 renderThreads(data.threads || []);
+
+                // Clear any previous error state on success (Phase 9.3)
+                bridge.clearErrorState();
+
+                // Update context to thread list view (Phase 9.3)
+                bridge.setCurrentView('messages', {
+                    view_mode: 'thread_list'
+                });
             } catch (err) {
                 const errorMsg = bridge.escapeHTML(err.message || 'Unknown error');
                 app.innerHTML = `<div class="loading">Error: ${errorMsg}</div>`;
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('network', err.message || 'Failed to load threads', {
+                    recoverable: true,
+                    recovery_hint: 'Try refreshing or check your network connection'
+                });
             }
         }
 
@@ -369,8 +391,19 @@
 
         async function openThread(entityId) {
             currentThread = entityId;
+
+            // Update AI context with thread selection (Phase 9.3)
+            bridge.setSelectionState('thread', [entityId]);
+            bridge.setCurrentView('messages', {
+                view_mode: 'message_view',
+                view_id: entityId
+            });
+
+            // Send context-aware message to AI
+            bridge.sendMessageWithContext(`User opened message thread: ${entityId}`);
+
             // TODO: Load messages for thread
-            bridge.sendMessage({ action: 'thread_opened', entityId });
+            loadMessages(entityId);
         }
 
         function formatTime(timestamp) {
@@ -500,8 +533,17 @@
                 const result = await bridge.callTool('list_messages', { thread_id: entityId });
                 const data = JSON.parse(result.content[0].text);
                 renderMessages(data.messages || [], data.my_user_id);
+
+                // Clear error state on success (Phase 9.3)
+                bridge.clearErrorState();
             } catch (err) {
                 console.error('Failed to load messages:', err);
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('network', err.message || 'Failed to load messages', {
+                    recoverable: true,
+                    recovery_hint: 'Try reopening the thread or check your connection'
+                });
             }
         }
 
@@ -625,15 +667,48 @@
             }, 2000);
         }
 
-        // Set up compose input typing detection
+        // Set up compose input typing detection and draft tracking (Phase 9.3)
         function setupComposeTyping() {
             const composeInput = document.querySelector('.compose input');
             if (composeInput) {
-                composeInput.addEventListener('input', notifyTyping);
+                composeInput.addEventListener('input', (e) => {
+                    notifyTyping();
+
+                    // Track draft state for AI context (Phase 9.3)
+                    const hasContent = e.target.value.trim().length > 0;
+                    if (hasContent && !hasDraftMessage) {
+                        hasDraftMessage = true;
+                        bridge.setPendingActions('draft', [currentThread]);
+                    } else if (!hasContent && hasDraftMessage) {
+                        hasDraftMessage = false;
+                        bridge.clearPendingActions();
+                    }
+                });
             }
         }
 
-        bridge.onReady(loadThreads);
+        // Handle back button to return to thread list (Phase 9.3)
+        function handleBackToThreads() {
+            currentThread = null;
+            hasDraftMessage = false;
+
+            // Clear selection and pending state
+            bridge.clearSelectionState();
+            bridge.clearPendingActions();
+
+            // Update view context
+            bridge.setCurrentView('messages', {
+                view_mode: 'thread_list'
+            });
+
+            loadThreads();
+        }
+
+        // Initialize context and load data
+        bridge.onReady(() => {
+            initContext();
+            loadThreads();
+        });
     </script>
 </body>
 </html>

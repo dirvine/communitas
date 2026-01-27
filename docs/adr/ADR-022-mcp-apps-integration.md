@@ -26,12 +26,15 @@ We will implement the MCP Apps extension (SEP-1865) to provide interactive UI wi
 
 4. **postMessage Bridge**: JavaScript library for bidirectional JSON-RPC communication between UI and MCP server
 
-5. **Five Initial Widgets**:
+5. **Eight Interactive Widgets**:
    - Contacts: Interactive contact list with search and favorites
    - Messages: Thread navigation and message composition
    - Kanban: Drag-drop project boards
    - Drive: File browser with upload and preview
    - Canvas: Collaborative whiteboard viewer
+   - Settings: User preferences and configuration
+   - Search: Global search across all entities
+   - Notifications: Activity feed and alerts
 
 ### Architecture
 
@@ -45,7 +48,8 @@ We will implement the MCP Apps extension (SEP-1865) to provide interactive UI wi
 │    │              Sandboxed Iframe                     │     │
 │    │  ┌────────────────────────────────────────────┐  │     │
 │    │  │         Communitas UI Widget               │  │     │
-│    │  │  (contacts/messages/kanban/drive/canvas)   │  │     │
+│    │  │  (contacts/messages/kanban/drive/canvas/  │  │     │
+│    │  │   settings/search/notifications)          │  │     │
 │    │  └────────────────────────────────────────────┘  │     │
 │    └────────────────────┬─────────────────────────────┘     │
 │                         │ postMessage                        │
@@ -170,7 +174,7 @@ The server advertises MCP Apps support in the initialize response:
 
 ### Phase 2: UI Widgets
 - Create `mcp-bridge.js` postMessage library
-- Build five initial widgets (contacts, messages, kanban, drive, canvas)
+- Build eight widgets (contacts, messages, kanban, drive, canvas, settings, search, notifications)
 - Embed bundles via `include_str!()`
 
 ### Phase 3: Documentation

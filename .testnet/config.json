@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "project": "communitas",
+  "test_id": "integration-20260126",
+  "binary": {
+    "headless": {
+      "name": "communitas-headless",
+      "source": "local_build",
+      "local_path": "target/x86_64-unknown-linux-gnu/release/communitas-headless",
+      "vps_path": "/opt/saorsa-test/communitas-headless",
+      "port": 9000
+    },
+    "mcp": {
+      "name": "communitas-mcp",
+      "source": "local_build",
+      "local_path": "target/x86_64-unknown-linux-gnu/release/communitas-mcp",
+      "vps_path": "/opt/saorsa-test/communitas-mcp",
+      "port": 8080
+    }
+  },
+  "nodes": [
+    {
+      "name": "saorsa-2",
+      "ip": "142.93.199.50",
+      "role": "bootstrap",
+      "nat_type": "none",
+      "region": "NYC1, US",
+      "provider": "DigitalOcean",
+      "binaries": ["headless"]
+    },
+    {
+      "name": "saorsa-3",
+      "ip": "147.182.234.192",
+      "role": "bootstrap",
+      "nat_type": "none",
+      "region": "SFO3, US",
+      "provider": "DigitalOcean",
+      "binaries": ["headless"]
+    },
+    {
+      "name": "saorsa-4",
+      "ip": "206.189.7.117",
+      "role": "nat_test",
+      "nat_type": "full_cone",
+      "region": "AMS3, NL",
+      "provider": "DigitalOcean",
+      "binaries": ["headless"]
+    },
+    {
+      "name": "saorsa-5",
+      "ip": "144.126.230.161",
+      "role": "nat_test",
+      "nat_type": "addr_restricted",
+      "region": "LON1, UK",
+      "provider": "DigitalOcean",
+      "binaries": ["headless"]
+    },
+    {
+      "name": "saorsa-6",
+      "ip": "65.21.157.229",
+      "role": "nat_test",
+      "nat_type": "port_restricted",
+      "region": "Helsinki, FI",
+      "provider": "Hetzner",
+      "binaries": ["headless"]
+    },
+    {
+      "name": "saorsa-7",
+      "ip": "116.203.101.172",
+      "role": "mcp_server",
+      "nat_type": "none",
+      "region": "Nuremberg, DE",
+      "provider": "Hetzner",
+      "binaries": ["headless", "mcp"]
+    },
+    {
+      "name": "saorsa-8",
+      "ip": "149.28.156.231",
+      "role": "high_latency",
+      "nat_type": "none",
+      "region": "Singapore, SG",
+      "provider": "Vultr",
+      "binaries": ["headless"]
+    },
+    {
+      "name": "saorsa-9",
+      "ip": "45.77.176.184",
+      "role": "high_latency",
+      "nat_type": "none",
+      "region": "Tokyo, JP",
+      "provider": "Vultr",
+      "binaries": ["headless"]
+    },
+    {
+      "name": "saorsa-10",
+      "ip": "77.42.39.239",
+      "role": "nat_test",
+      "nat_type": "symmetric",
+      "region": "Falkenstein, DE",
+      "provider": "Hetzner",
+      "binaries": ["headless"]
+    }
+  ],
+  "test": {
+    "type": "integration",
+    "duration_minutes": 120,
+    "success_criteria": [
+      "all_nodes_connected",
+      "nat_traversal_working",
+      "gossip_propagation",
+      "mcp_server_functional"
+    ]
+  },
+  "logs": {
+    "collect": ["journalctl", "metrics", "registry"],
+    "storage_path": ".testnet-logs/integration-20260126/"
+  },
+  "proof_requirements": {
+    "binary_sha256": true,
+    "scp_output": true,
+    "service_startup_logs": true,
+    "periodic_snapshots_minutes": 15,
+    "registry_json": true,
+    "connection_metrics": true,
+    "final_summary": true
+  },
+  "status": "configured",
+  "created_at": "2026-01-26T00:00:00Z"
+}

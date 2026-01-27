@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"disk_type\": \"Private\",\n  \"entity_id\": \"026a49b2-947d-4422-be2e-3bd6daf0e90b\",\n  \"percent_used\": 0.0,\n  \"quota_bytes\": 10737418240,\n  \"used_bytes\": 0\n}","type":"text"}],"isError":false}}

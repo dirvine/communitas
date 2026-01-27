@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"element_count\": 0,\n  \"elements\": [],\n  \"entity_id\": \"026a49b2-947d-4422-be2e-3bd6daf0e90b\",\n  \"loading\": false,\n  \"pan_x\": 0.0,\n  \"pan_y\": 0.0,\n  \"viewport_height\": 600.0,\n  \"viewport_width\": 800.0,\n  \"zoom\": 1.0\n}","type":"text"}],"isError":false}}

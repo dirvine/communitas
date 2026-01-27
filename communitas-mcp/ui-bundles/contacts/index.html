@@ -83,6 +83,7 @@
             transition: background 0.2s;
         }
         .contact-item:hover { background: #f0f0f0; }
+        .contact-item.selected { background: #e0f2fe; border: 1px solid #0ea5e9; }
         .avatar-wrapper {
             position: relative;
             display: inline-block;
@@ -164,18 +165,37 @@
     </div>
     <script src="../shared/mcp-bridge.js"></script>
     <script>
-        // Contacts widget - Phase 2.1 implementation
+        // Contacts widget - Phase 2.1 implementation + Phase 9.3 AI Context
         const app = document.getElementById('app');
         const bridge = new McpBridge();
+
+        // Track currently selected contact
+        let selectedContactId = null;
+
+        // Set initial context on widget load (Phase 9.3)
+        function initContext() {
+            bridge.setCurrentView('contacts', {
+                view_mode: 'list'
+            });
+        }
 
         async function loadContacts() {
             try {
                 const result = await bridge.callTool('list_contacts', { include_presence: true });
                 const data = JSON.parse(result.content[0].text);
                 renderContacts(data.contacts || []);
+
+                // Clear any previous error state on success (Phase 9.3)
+                bridge.clearErrorState();
             } catch (err) {
                 const errorMsg = bridge.escapeHTML(err.message || 'Unknown error');
                 app.innerHTML = `<div class="loading">Error: ${errorMsg}</div>`;
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('network', err.message || 'Failed to load contacts', {
+                    recoverable: true,
+                    recovery_hint: 'Try refreshing or check your network connection'
+                });
             }
         }
 
@@ -232,13 +252,16 @@
             `;
             app.innerHTML = html;
 
-            // Favorite toggle handler
+            // Favorite toggle handler with pending action tracking (Phase 9.3)
             document.querySelectorAll('.favorite-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     e.stopPropagation(); // Prevent contact click
                     const contactId = btn.dataset.contactId;
                     const isCurrentlyFavorite = btn.classList.contains('is-favorite');
                     const newState = !isCurrentlyFavorite;
+
+                    // Track pending action (Phase 9.3)
+                    bridge.setPendingActions('edit', [contactId]);
 
                     // Optimistic UI update
                     btn.classList.toggle('is-favorite', newState);
@@ -252,27 +275,85 @@
                             contact_id: contactId,
                             is_favorite: newState
                         });
+
+                        // Clear pending action on success (Phase 9.3)
+                        bridge.clearPendingActions();
+                        bridge.clearErrorState();
                     } catch (err) {
                         // Revert on error
                         btn.classList.toggle('is-favorite', !newState);
                         btn.textContent = !newState ? '★' : '☆';
                         btn.setAttribute('aria-pressed', String(!newState));
                         console.error('Failed to toggle favorite:', err);
+
+                        // Set error state for AI troubleshooting (Phase 9.3)
+                        bridge.setErrorState('internal', 'Failed to update favorite status', {
+                            recoverable: true,
+                            recovery_hint: 'Try again or check your connection'
+                        });
+                        bridge.clearPendingActions();
                     }
                 });
             });
 
-            // Search functionality
+            // Contact click handler - tracks selection (Phase 9.3)
+            document.querySelectorAll('.contact-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    // Don't handle if clicking favorite button
+                    if (e.target.closest('.favorite-btn')) return;
+
+                    const contactId = item.dataset.id;
+                    selectedContactId = contactId;
+
+                    // Update visual selection
+                    document.querySelectorAll('.contact-item').forEach(i => i.classList.remove('selected'));
+                    item.classList.add('selected');
+
+                    // Update AI context with selected contact (Phase 9.3)
+                    bridge.setSelectionState('contact', [contactId]);
+
+                    // Update current view to detail mode
+                    bridge.setCurrentView('contacts', {
+                        view_mode: 'detail',
+                        view_id: contactId
+                    });
+
+                    // Send message to AI about selection
+                    const contactName = item.querySelector('.contact-name').textContent;
+                    bridge.sendMessageWithContext(`User selected contact: ${contactName}`);
+                });
+            });
+
+            // Search functionality - updates filter context (Phase 9.3)
             document.getElementById('search').addEventListener('input', e => {
                 const query = e.target.value.toLowerCase();
+                let visibleCount = 0;
                 document.querySelectorAll('.contact-item').forEach(item => {
                     const name = item.querySelector('.contact-name').textContent.toLowerCase();
-                    item.style.display = name.includes(query) ? 'flex' : 'none';
+                    const isVisible = name.includes(query);
+                    item.style.display = isVisible ? 'flex' : 'none';
+                    if (isVisible) visibleCount++;
                 });
+
+                // Update context with search filter info (Phase 9.3)
+                if (query) {
+                    bridge.setCurrentView('contacts', {
+                        view_mode: 'search',
+                        filter: query
+                    });
+                } else {
+                    bridge.setCurrentView('contacts', {
+                        view_mode: 'list'
+                    });
+                }
             });
         }
 
-        bridge.onReady(loadContacts);
+        // Initialize context and load data
+        bridge.onReady(() => {
+            initContext();
+            loadContacts();
+        });
     </script>
 </body>
 </html>

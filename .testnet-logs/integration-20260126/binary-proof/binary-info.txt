@@ -1,0 +1,1 @@
+/Users/davidirvine/Desktop/Devel/projects/communitas/.testnet-logs/integration-20260126/binary-proof/communitas-headless: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=0ff8783e01d4458bf17fde07755506265a31a8e0, for GNU/Linux 3.2.0, stripped

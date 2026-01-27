@@ -11,7 +11,7 @@ Group=communitas
 WorkingDirectory=/opt/communitas-mcp
 
 # Binary and arguments
-ExecStart=/opt/communitas-mcp/communitas-mcp --http --tls --listen 0.0.0.0:8443 --no-client-auth --demo
+ExecStart=/opt/communitas-mcp/communitas-mcp --http --tls --listen 0.0.0.0:8443 --no-client-auth
 
 # Environment
 Environment=RUST_LOG=info

@@ -304,6 +304,12 @@
         .card.filtered-out {
             display: none;
         }
+        /* Selected card state (Phase 9.3) */
+        .card.selected {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+            background: #eff6ff;
+        }
     </style>
 </head>
 <body>
@@ -312,10 +318,11 @@
     </div>
     <script src="../shared/mcp-bridge.js"></script>
     <script>
-        // Kanban widget - Phase 2.3 implementation
+        // Kanban widget - Phase 2.3 implementation + Phase 9.3 AI Context
         const app = document.getElementById('app');
         const bridge = new McpBridge();
         let currentBoard = null;
+        let selectedCardId = null;
 
         // Filter state
         const activeFilters = {
@@ -324,20 +331,52 @@
             search: ''
         };
 
+        // Set initial context on widget load (Phase 9.3)
+        function initContext() {
+            bridge.setCurrentView('kanban', {
+                view_mode: 'loading'
+            });
+        }
+
         async function loadBoard(boardId) {
             try {
                 const result = await bridge.callTool('get_kanban_board', { board_id: boardId });
                 const data = JSON.parse(result.content[0].text);
                 currentBoard = data;
+                selectedCardId = null; // Clear card selection on board change
+
+                // Update AI context with board view (Phase 9.3)
+                bridge.setCurrentView('kanban', {
+                    view_mode: 'board',
+                    view_id: data.id,
+                    board_name: data.name,
+                    column_count: (data.columns || []).length,
+                    card_count: (data.columns || []).reduce((sum, col) => sum + (col.cards || []).length, 0)
+                });
+                bridge.clearSelectionState();
+                bridge.clearErrorState();
+
                 renderBoard(data);
             } catch (err) {
                 // If no boardId, list boards first
-                const result = await bridge.callTool('list_kanban_boards', {});
-                const data = JSON.parse(result.content[0].text);
-                if (data.boards && data.boards.length > 0) {
-                    loadBoard(data.boards[0].id);
-                } else {
-                    app.innerHTML = '<div class="loading">No kanban boards found</div>';
+                try {
+                    const result = await bridge.callTool('list_kanban_boards', {});
+                    const data = JSON.parse(result.content[0].text);
+                    if (data.boards && data.boards.length > 0) {
+                        loadBoard(data.boards[0].id);
+                    } else {
+                        app.innerHTML = '<div class="loading">No kanban boards found</div>';
+                        bridge.setCurrentView('kanban', { view_mode: 'empty' });
+                    }
+                } catch (listErr) {
+                    const errorMsg = bridge.escapeHTML(listErr.message || 'Unknown error');
+                    app.innerHTML = `<div class="loading">Error: ${errorMsg}</div>`;
+
+                    // Set error context for AI troubleshooting (Phase 9.3)
+                    bridge.setErrorState('network', listErr.message || 'Failed to load kanban boards', {
+                        recoverable: true,
+                        recovery_hint: 'Try refreshing or check your network connection'
+                    });
                 }
             }
         }
@@ -506,6 +545,27 @@
             });
         }
 
+        // Update filter context for AI (Phase 9.3)
+        function updateFilterContext() {
+            const hasFilters = activeFilters.tags.size > 0 || activeFilters.priorities.size > 0 || activeFilters.search;
+            if (hasFilters) {
+                bridge.setCurrentView('kanban', {
+                    view_mode: 'filtered',
+                    view_id: currentBoard?.id,
+                    filters: {
+                        search: activeFilters.search || null,
+                        tags: Array.from(activeFilters.tags),
+                        priorities: Array.from(activeFilters.priorities)
+                    }
+                });
+            } else {
+                bridge.setCurrentView('kanban', {
+                    view_mode: 'board',
+                    view_id: currentBoard?.id
+                });
+            }
+        }
+
         // Initialize filter handlers
         function initFilters() {
             // Search input
@@ -514,6 +574,7 @@
                 searchInput.addEventListener('input', (e) => {
                     activeFilters.search = e.target.value;
                     applyFilters();
+                    updateFilterContext(); // Track filter state (Phase 9.3)
                 });
             }
 
@@ -541,6 +602,7 @@
                     chip.classList.toggle('active');
                     chip.setAttribute('aria-pressed', chip.classList.contains('active'));
                     applyFilters();
+                    updateFilterContext(); // Track filter state (Phase 9.3)
 
                     // Update clear button visibility
                     const hasActiveFilters = activeFilters.tags.size > 0 || activeFilters.priorities.size > 0 || activeFilters.search;
@@ -572,6 +634,7 @@
                     }
                     clearBtn.style.display = 'none';
                     applyFilters();
+                    updateFilterContext(); // Track filter cleared (Phase 9.3)
                 });
             }
         }
@@ -648,7 +711,32 @@
             const columns = document.querySelectorAll('.column-cards');
 
             cards.forEach(card => {
-                // Drag start - visual feedback
+                // Card click - select card (Phase 9.3)
+                card.addEventListener('click', (e) => {
+                    // Don't handle if dragging
+                    if (draggingCardId) return;
+
+                    const cardId = card.dataset.id;
+                    selectedCardId = cardId;
+
+                    // Update visual selection
+                    document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+
+                    // Update AI context with selected card (Phase 9.3)
+                    bridge.setSelectionState('card', [cardId]);
+
+                    // Find card data for context
+                    let cardData = null;
+                    for (const col of (currentBoard?.columns || [])) {
+                        cardData = (col.cards || []).find(c => c.id === cardId);
+                        if (cardData) break;
+                    }
+
+                    bridge.sendMessageWithContext(`User selected card: ${cardData?.title || cardId}`);
+                });
+
+                // Drag start - visual feedback + track pending move (Phase 9.3)
                 card.addEventListener('dragstart', e => {
                     draggingCardId = card.dataset.id;
                     card.classList.add('dragging');
@@ -658,6 +746,9 @@
 
                     // Highlight all potential drop zones
                     columns.forEach(col => col.classList.add('drop-zone-active'));
+
+                    // Track pending card move (Phase 9.3)
+                    bridge.setPendingActions('move', [card.dataset.id]);
                 });
 
                 // Drag end - reset visual state
@@ -670,14 +761,19 @@
                     columns.forEach(col => {
                         col.classList.remove('drop-zone-active', 'drop-zone-hover');
                     });
+
+                    // Clear pending action if no drop happened (Phase 9.3)
+                    bridge.clearPendingActions();
                 });
 
                 // Keyboard support for cards
                 card.addEventListener('keydown', async (e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        // Open card detail (future feature)
-                        bridge.sendMessage({ action: 'card_opened', cardId: card.dataset.id });
+                        // Select the card and open detail (future feature)
+                        selectedCardId = card.dataset.id;
+                        bridge.setSelectionState('card', [selectedCardId]);
+                        bridge.sendMessageWithContext(`User opened card detail: ${card.dataset.id}`);
                     }
                 });
             });
@@ -698,7 +794,7 @@
                     }
                 });
 
-                // Drop - perform move
+                // Drop - perform move with pending action tracking (Phase 9.3)
                 column.addEventListener('drop', async e => {
                     e.preventDefault();
                     const cardId = e.dataTransfer.getData('text/plain');
@@ -715,9 +811,21 @@
                             card_id: cardId,
                             target_column_id: columnId
                         });
+
+                        // Clear pending action on success (Phase 9.3)
+                        bridge.clearPendingActions();
+                        bridge.clearErrorState();
+
                         loadBoard(currentBoard.id);
                     } catch (err) {
                         console.error('Failed to move card:', err);
+
+                        // Set error context for AI troubleshooting (Phase 9.3)
+                        bridge.setErrorState('internal', 'Failed to move card', {
+                            recoverable: true,
+                            recovery_hint: 'Try again or refresh the board'
+                        });
+                        bridge.clearPendingActions();
                     }
                 });
             });
@@ -771,7 +879,11 @@
             }
         }
 
-        bridge.onReady(() => loadBoard());
+        // Initialize context and load board (Phase 9.3)
+        bridge.onReady(() => {
+            initContext();
+            loadBoard();
+        });
     </script>
 </body>
 </html>

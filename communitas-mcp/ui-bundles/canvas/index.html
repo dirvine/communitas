@@ -287,7 +287,7 @@
     </div>
     <script src="../shared/mcp-bridge.js"></script>
     <script>
-        // Canvas widget - Phase 2.5 implementation
+        // Canvas widget - Phase 2.5 implementation + Phase 9.3 AI Context
         const app = document.getElementById('app');
         const bridge = new McpBridge();
         let canvas, ctx;
@@ -299,6 +299,27 @@
         let historyEntries = [];
         let currentHistoryIndex = 0;
         let resizeListenerAdded = false;
+
+        // Set initial context on widget load (Phase 9.3)
+        function initContext() {
+            bridge.setCurrentView('canvas', {
+                view_mode: 'loading'
+            });
+        }
+
+        // Update canvas view context (Phase 9.3)
+        function updateCanvasContext() {
+            if (!canvasData) return;
+            bridge.setCurrentView('canvas', {
+                view_mode: 'editor',
+                view_id: canvasData.id,
+                canvas_name: canvasData.name,
+                layer_count: layers.length,
+                active_layer: activeLayerId,
+                history_position: currentHistoryIndex + 1,
+                history_total: historyEntries.length
+            });
+        }
 
         function renderLayerList(layerList) {
             // Sort by z_index (highest first for visual stacking)
@@ -347,9 +368,19 @@
                 renderCanvas(data);
                 loadHistory(canvasId);
                 loadRemoteCursors(canvasId);
+
+                // Update AI context with canvas view (Phase 9.3)
+                updateCanvasContext();
+                bridge.clearErrorState();
             } catch (err) {
                 const errorMsg = bridge.escapeHTML(err.message || 'Unknown error');
                 app.innerHTML = `<div class="loading">Error: ${errorMsg}</div>`;
+
+                // Set error context for AI troubleshooting (Phase 9.3)
+                bridge.setErrorState('network', err.message || 'Failed to load canvas', {
+                    recoverable: true,
+                    recovery_hint: 'Try refreshing or check your network connection'
+                });
             }
         }
 
@@ -422,12 +453,15 @@
                 progressFill.style.width = `${progress}%`;
             }
 
-            // Add click handlers for scrubbing
+            // Add click handlers for scrubbing with AI context (Phase 9.3)
             timeline.querySelectorAll('.history-dot').forEach(dot => {
                 dot.addEventListener('click', async () => {
                     const targetIndex = parseInt(dot.dataset.index);
                     const entryId = dot.dataset.entryId;
                     if (targetIndex === currentHistoryIndex) return;
+
+                    // Track pending scrub action (Phase 9.3)
+                    bridge.setPendingActions('scrub', [entryId]);
 
                     try {
                         await bridge.callTool('canvas_scrub_to', {
@@ -443,8 +477,19 @@
                         layers = data.layers || [];
                         drawSnapshot(data);
                         updateLayerPanel();
+
+                        // Clear pending action and update context (Phase 9.3)
+                        bridge.clearPendingActions();
+                        updateCanvasContext();
                     } catch (err) {
                         console.error('Failed to scrub to history:', err);
+
+                        // Set error context (Phase 9.3)
+                        bridge.setErrorState('internal', 'History scrub failed', {
+                            recoverable: true,
+                            recovery_hint: 'Try again or refresh the canvas'
+                        });
+                        bridge.clearPendingActions();
                     }
                 });
             });
@@ -525,28 +570,56 @@
             }
 
             document.getElementById('undo').addEventListener('click', async () => {
+                // Track pending undo action (Phase 9.3)
+                bridge.setPendingActions('undo', [canvasData?.id]);
+
                 try {
                     await bridge.callTool('canvas_undo', { canvas_id: canvasData.id });
                     if (currentHistoryIndex > 0) {
                         currentHistoryIndex--;
                         renderHistoryTimeline();
                     }
+
+                    // Clear pending action on success (Phase 9.3)
+                    bridge.clearPendingActions();
+
                     loadCanvas(canvasData.id);
                 } catch (err) {
                     console.error('Undo failed:', err);
+
+                    // Set error context (Phase 9.3)
+                    bridge.setErrorState('internal', 'Undo failed', {
+                        recoverable: true,
+                        recovery_hint: 'Try again or refresh the canvas'
+                    });
+                    bridge.clearPendingActions();
                 }
             });
 
             document.getElementById('redo').addEventListener('click', async () => {
+                // Track pending redo action (Phase 9.3)
+                bridge.setPendingActions('redo', [canvasData?.id]);
+
                 try {
                     await bridge.callTool('canvas_redo', { canvas_id: canvasData.id });
                     if (currentHistoryIndex < historyEntries.length - 1) {
                         currentHistoryIndex++;
                         renderHistoryTimeline();
                     }
+
+                    // Clear pending action on success (Phase 9.3)
+                    bridge.clearPendingActions();
+
                     loadCanvas(canvasData.id);
                 } catch (err) {
                     console.error('Redo failed:', err);
+
+                    // Set error context (Phase 9.3)
+                    bridge.setErrorState('internal', 'Redo failed', {
+                        recoverable: true,
+                        recovery_hint: 'Try again or refresh the canvas'
+                    });
+                    bridge.clearPendingActions();
                 }
             });
 
@@ -556,12 +629,18 @@
         }
 
         function setupLayerPanelEvents() {
-            // Layer item click for selection
+            // Layer item click for selection with AI context (Phase 9.3)
             document.querySelectorAll('.layer-item').forEach(item => {
                 item.addEventListener('click', e => {
                     if (e.target.closest('.layer-btn') || e.target.closest('.layer-opacity')) return;
                     activeLayerId = item.dataset.layerId;
                     updateLayerPanel();
+
+                    // Track layer selection (Phase 9.3)
+                    bridge.setSelectionState('layer', [activeLayerId]);
+                    const layer = layers.find(l => l.id === activeLayerId);
+                    bridge.sendMessageWithContext(`User selected layer: ${layer?.name || activeLayerId}`);
+                    updateCanvasContext();
                 });
             });
 
@@ -806,13 +885,20 @@
 
         function exportCanvas() {
             if (!canvas) return;
+
+            // Track export action (Phase 9.3)
+            bridge.sendMessageWithContext(`User exported canvas: ${canvasData?.name || 'Canvas'} as PNG`);
+
             const link = document.createElement('a');
             link.download = 'canvas-export.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
         }
 
+        // Initialize context and load canvas (Phase 9.3)
         bridge.onReady(() => {
+            initContext();
+
             // Try to get canvasId from URL params or load default
             const params = new URLSearchParams(window.location.search);
             const canvasId = params.get('canvas_id');
@@ -820,6 +906,7 @@
                 loadCanvas(canvasId);
             } else {
                 app.innerHTML = '<div class="loading">No canvas selected</div>';
+                bridge.setCurrentView('canvas', { view_mode: 'empty' });
             }
         });
     </script>

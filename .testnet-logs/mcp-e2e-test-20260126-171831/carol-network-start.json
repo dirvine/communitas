@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"connection_identity\": \"cape pizza put banker\",\n  \"listen_address\": \"116.203.101.172:62044\",\n  \"message\": \"Networking started\",\n  \"success\": true\n}","type":"text"}],"isError":false}}

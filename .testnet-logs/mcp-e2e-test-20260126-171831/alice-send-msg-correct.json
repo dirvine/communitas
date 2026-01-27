@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"id\": \"alice-bravo-charlie-delta-1-1769448151790\",\n  \"message\": \"Message sent successfully\",\n  \"success\": true\n}","type":"text"}],"isError":false}}

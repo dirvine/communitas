@@ -1,0 +1,6 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{
+  \"events\": 1,
+  \"id\": \"026a49b2-947d-4422-be2e-3bd6daf0e90b\",
+  \"message\": \"Entity created successfully\",
+  \"success\": true
+}","type":"text"}],"isError":false}}

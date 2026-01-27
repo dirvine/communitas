@@ -9,13 +9,13 @@
 
 use crate::Args;
 use crate::protocol::{
-    InitializeParams, InitializeResultWithExtensions, JsonRpcError, JsonRpcRequest,
+    AiContext, InitializeParams, InitializeResultWithExtensions, JsonRpcError, JsonRpcRequest,
     JsonRpcResponse, Resource, ResourceContent, ResourceListResult, ResourceReadParams,
-    ResourceReadResult, ResourcesCapability, ServerInfo, ToolCallParams, ToolListResult,
-    ToolsCapability,
+    ResourceReadResult, ResourcesCapability, ServerInfo, ToolCallParams, ToolCallResultWithContext,
+    ToolListResult, ToolsCapability,
 };
-use crate::ui_resources::UiResourceRegistry;
 use crate::tools;
+use crate::ui_resources::UiResourceRegistry;
 use anyhow::Result;
 use communitas_core::app::CommunitasApp;
 use communitas_core::auth_service::AuthService;
@@ -45,6 +45,8 @@ pub struct McpServer {
     token_manager: Option<TokenManager>,
     /// UI resource registry for MCP Apps extension
     ui_resources: UiResourceRegistry,
+    /// Current UI context for AI context hints (Phase 9.3)
+    ui_context: AiContext,
 }
 
 impl McpServer {
@@ -59,6 +61,7 @@ impl McpServer {
             args,
             token_manager: None,
             ui_resources: UiResourceRegistry::with_standard_widgets(),
+            ui_context: AiContext::default(),
         }
     }
 
@@ -161,6 +164,10 @@ impl McpServer {
             "resources/list" => self.handle_resources_list().await,
             "resources/read" => self.handle_resources_read(request.params).await,
             "ping" => Ok(Value::Object(serde_json::Map::new())),
+            // UI context methods (Phase 9.3 - AI Context Integration)
+            "ui/context" => self.handle_ui_context(request.params).await,
+            "ui/message" => self.handle_ui_message(request.params).await,
+            "ui/initialize" => self.handle_ui_initialize(request.params).await,
             method => {
                 warn!("Unknown method: {}", method);
                 Err(JsonRpcError::method_not_found(method))
@@ -206,7 +213,9 @@ impl McpServer {
                 name: "communitas-mcp".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
-            Some(ToolsCapability { list_changed: false }),
+            Some(ToolsCapability {
+                list_changed: false,
+            }),
             Some(ResourcesCapability {
                 subscribe: false,
                 list_changed: false,
@@ -337,7 +346,17 @@ impl McpServer {
 
         let result = tools::call_tool(app, services, &params.name, params.arguments).await;
 
-        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+        // Add AI context to tool response (Phase 9.3)
+        // This helps the AI host understand current widget state
+        let resource_uri = get_tool_resource_uri(&params.name);
+        let result_with_context = ToolCallResultWithContext::from_basic_with_context(
+            result,
+            resource_uri,
+            self.ui_context.clone(),
+        );
+
+        serde_json::to_value(result_with_context)
+            .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
     /// Handle pre-authentication tools
@@ -983,10 +1002,9 @@ impl McpServer {
                 // Handle MCP Apps UI resources
                 drop(app_lock); // Release the app lock since we don't need it for UI resources
 
-                let (content, mime_type) = self
-                    .ui_resources
-                    .read(uri)
-                    .ok_or_else(|| JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}")))?;
+                let (content, mime_type) = self.ui_resources.read(uri).ok_or_else(|| {
+                    JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}"))
+                })?;
 
                 let result = ResourceReadResult {
                     contents: vec![ResourceContent {
@@ -1017,6 +1035,106 @@ impl McpServer {
         };
 
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+    }
+
+    // ==========================================================================
+    // UI Context Methods (Phase 9.3 - AI Context Integration)
+    // ==========================================================================
+
+    /// Handle ui/context - receive context updates from widgets
+    async fn handle_ui_context(&mut self, params: Option<Value>) -> Result<Value, JsonRpcError> {
+        // Parse context update from widget
+        let params =
+            params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/context params"))?;
+
+        // Extract context and changed field from params
+        let context_value = params.get("context");
+        let changed_field = params
+            .get("changed")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        if let Some(ctx) = context_value {
+            // Parse the context
+            let context: AiContext = serde_json::from_value(ctx.clone())
+                .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid context: {e}")))?;
+
+            // Update our stored context
+            self.ui_context = context;
+
+            debug!(
+                "UI context updated: changed={:?}, current_view={:?}",
+                changed_field,
+                self.ui_context.current_view.as_ref().map(|v| &v.widget)
+            );
+        }
+
+        // Return success acknowledgment
+        Ok(serde_json::json!({
+            "success": true,
+            "changed": changed_field
+        }))
+    }
+
+    /// Handle ui/message - receive messages with optional context from widgets
+    async fn handle_ui_message(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
+        let params =
+            params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/message params"))?;
+
+        let content = params
+            .get("content")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing content in ui/message"))?;
+
+        // Optional context included with message
+        let context = params.get("context").cloned();
+
+        debug!(
+            "UI message received: content_len={}, has_context={}",
+            content.len(),
+            context.is_some()
+        );
+
+        // The message content can be used by the AI host to understand widget state
+        // For now, we acknowledge receipt. Future: could emit as notification to host.
+        Ok(serde_json::json!({
+            "success": true,
+            "received": true,
+            "content_length": content.len(),
+            "has_context": context.is_some()
+        }))
+    }
+
+    /// Handle ui/initialize - widget handshake
+    async fn handle_ui_initialize(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
+        let params =
+            params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/initialize params"))?;
+
+        // Parse widget capabilities
+        let capabilities = params.get("capabilities").cloned().unwrap_or_default();
+
+        debug!(
+            "UI widget initialized with capabilities: {:?}",
+            capabilities
+        );
+
+        // Return acknowledgment with server capabilities
+        Ok(serde_json::json!({
+            "success": true,
+            "server_capabilities": {
+                "context_tracking": true,
+                "messaging": true,
+                "tool_calls": true,
+                "resource_reads": true
+            }
+        }))
+    }
+
+    /// Get the current UI context for including in tool responses
+    #[allow(dead_code)] // Will be used in Task 2 completion
+    pub fn get_ui_context(&self) -> &AiContext {
+        &self.ui_context
     }
 }
 
@@ -1080,6 +1198,71 @@ pub async fn run(args: Args) -> Result<()> {
 
     info!("MCP Server shutting down");
     Ok(())
+}
+
+/// Map tool names to their corresponding UI resource URIs
+///
+/// Tools related to a specific widget return that widget's resource URI,
+/// allowing the AI host to understand which UI is relevant to the tool result.
+fn get_tool_resource_uri(tool_name: &str) -> Option<&'static str> {
+    match tool_name {
+        // Contacts widget tools
+        "list_contacts" | "get_contact" | "create_contact" | "update_contact"
+        | "delete_contact" | "set_favourite" => Some("ui://communitas/contacts"),
+
+        // Messages widget tools
+        "list_threads" | "get_thread" | "create_thread" | "list_messages" | "get_message"
+        | "send_message" | "delete_message" | "mark_read" => Some("ui://communitas/messages"),
+
+        // Kanban widget tools
+        "list_kanban_boards"
+        | "get_kanban_board"
+        | "create_kanban_board"
+        | "delete_kanban_board"
+        | "create_kanban_column"
+        | "update_kanban_column"
+        | "delete_kanban_column"
+        | "create_kanban_card"
+        | "update_kanban_card"
+        | "delete_kanban_card"
+        | "move_kanban_card"
+        | "get_kanban_card" => Some("ui://communitas/kanban"),
+
+        // Drive widget tools
+        "list_files" | "list_disks" | "get_file_preview" | "upload_file" | "download_file"
+        | "delete_file" | "create_folder" | "move_file" | "copy_file" | "get_quota" => {
+            Some("ui://communitas/drive")
+        }
+
+        // Canvas widget tools
+        "canvas_get_snapshot"
+        | "canvas_get_history"
+        | "canvas_undo"
+        | "canvas_redo"
+        | "canvas_add_object"
+        | "canvas_remove_object"
+        | "canvas_update_object"
+        | "canvas_list_layers"
+        | "canvas_toggle_layer" => Some("ui://communitas/canvas"),
+
+        // Settings widget tools
+        "get_settings" | "update_settings" | "get_profile" | "update_profile" => {
+            Some("ui://communitas/settings")
+        }
+
+        // Search widget tools
+        "search" | "search_contacts" | "search_messages" | "search_files" => {
+            Some("ui://communitas/search")
+        }
+
+        // Notifications widget tools
+        "list_notifications" | "mark_notification_read" | "clear_notifications" => {
+            Some("ui://communitas/notifications")
+        }
+
+        // Tools without a specific UI widget
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -1156,5 +1339,91 @@ mod tests {
             "Unexpected error message: {}",
             error.message
         );
+    }
+
+    #[test]
+    fn test_get_tool_resource_uri_contacts() {
+        assert_eq!(
+            get_tool_resource_uri("list_contacts"),
+            Some("ui://communitas/contacts")
+        );
+        assert_eq!(
+            get_tool_resource_uri("create_contact"),
+            Some("ui://communitas/contacts")
+        );
+    }
+
+    #[test]
+    fn test_get_tool_resource_uri_messages() {
+        assert_eq!(
+            get_tool_resource_uri("list_threads"),
+            Some("ui://communitas/messages")
+        );
+        assert_eq!(
+            get_tool_resource_uri("send_message"),
+            Some("ui://communitas/messages")
+        );
+    }
+
+    #[test]
+    fn test_get_tool_resource_uri_kanban() {
+        assert_eq!(
+            get_tool_resource_uri("list_kanban_boards"),
+            Some("ui://communitas/kanban")
+        );
+        assert_eq!(
+            get_tool_resource_uri("create_kanban_card"),
+            Some("ui://communitas/kanban")
+        );
+    }
+
+    #[test]
+    fn test_get_tool_resource_uri_drive() {
+        assert_eq!(
+            get_tool_resource_uri("list_files"),
+            Some("ui://communitas/drive")
+        );
+        assert_eq!(
+            get_tool_resource_uri("upload_file"),
+            Some("ui://communitas/drive")
+        );
+    }
+
+    #[test]
+    fn test_get_tool_resource_uri_canvas() {
+        assert_eq!(
+            get_tool_resource_uri("canvas_get_snapshot"),
+            Some("ui://communitas/canvas")
+        );
+        assert_eq!(
+            get_tool_resource_uri("canvas_add_object"),
+            Some("ui://communitas/canvas")
+        );
+    }
+
+    #[test]
+    fn test_get_tool_resource_uri_new_widgets() {
+        // Settings widget (Phase 9.2)
+        assert_eq!(
+            get_tool_resource_uri("get_settings"),
+            Some("ui://communitas/settings")
+        );
+        // Search widget (Phase 9.2)
+        assert_eq!(
+            get_tool_resource_uri("search"),
+            Some("ui://communitas/search")
+        );
+        // Notifications widget (Phase 9.2)
+        assert_eq!(
+            get_tool_resource_uri("list_notifications"),
+            Some("ui://communitas/notifications")
+        );
+    }
+
+    #[test]
+    fn test_get_tool_resource_uri_unknown() {
+        assert_eq!(get_tool_resource_uri("authenticate"), None);
+        assert_eq!(get_tool_resource_uri("health_check"), None);
+        assert_eq!(get_tool_resource_uri("unknown_tool"), None);
     }
 }

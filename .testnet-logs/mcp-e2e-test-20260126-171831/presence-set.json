@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"message\": \"Presence set to online\",\n  \"status\": \"online\",\n  \"status_message\": null,\n  \"success\": true,\n  \"user_id\": \"alice-bravo-charlie-delta\"\n}","type":"text"}],"isError":false}}

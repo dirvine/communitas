@@ -19,9 +19,18 @@ pub mod ui_resources;
 // Re-export MCP Apps types for external use
 pub use protocol::{
     // MCP Apps Extension Types (SEP-1865)
-    InitializeResultWithExtensions, McpUiToolMeta, ResourceMeta, ResourceWithMeta,
-    ServerCapabilitiesWithExtensions, ServerExtensions, ToolCallResultWithMeta,
-    ToolDefinitionMeta, ToolResultMeta, ToolWithMeta, UiExtensionCapability, UiResourceCsp,
+    InitializeResultWithExtensions,
+    McpUiToolMeta,
+    ResourceMeta,
+    ResourceWithMeta,
+    ServerCapabilitiesWithExtensions,
+    ServerExtensions,
+    ToolCallResultWithMeta,
+    ToolDefinitionMeta,
+    ToolResultMeta,
+    ToolWithMeta,
+    UiExtensionCapability,
+    UiResourceCsp,
     UiResourceMeta,
 };
 

@@ -1,0 +1,10 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{
+  \"entities\": [
+    {
+      \"description\": \"A test project created by Bob\",
+      \"entity_type\": \"Project\",
+      \"id\": \"44885217-e210-4f71-a9e0-2002821c100d\",
+      \"name\": \"Test Project Beta\"
+    }
+  ]
+}","type":"text"}],"isError":false}}

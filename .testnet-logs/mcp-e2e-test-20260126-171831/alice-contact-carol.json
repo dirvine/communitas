@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\n  \"contact_id\": \"d48ce749-538c-4244-bbab-2c0c83753ded\",\n  \"display_name\": \"Carol Test\",\n  \"four_words\": \"india-juliet-kilo-lima\",\n  \"message\": \"Contact created\",\n  \"success\": true\n}","type":"text"}],"isError":false}}

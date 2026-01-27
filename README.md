@@ -244,6 +244,9 @@ Communitas implements the [MCP Apps extension](https://blog.modelcontextprotocol
 | **Kanban** | Project boards | Drag-drop cards, tags, due dates |
 | **Drive** | File browser | Upload, preview, quota meter |
 | **Canvas** | Whiteboard viewer | Layer toggles, history, remote cursors |
+| **Settings** | User preferences | Theme, notifications, privacy |
+| **Search** | Global search | Cross-entity search, filters |
+| **Notifications** | Activity feed | Alerts, mentions, updates |
 
 **The MCP server IS the app.** Dioxus native and MCP Apps are both presentation layers over the same shared `communitas-ui-service` (ADR-019), ensuring identical behavior across AI agents and human users.
 

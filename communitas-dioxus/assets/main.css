@@ -38,3 +38,108 @@ body {
 #header {
     max-width: 1200px;
 }
+
+/* Identity Model Diagram - WHO/WHERE/SHOWN */
+.identity-model-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.diagram-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+}
+
+.diagram-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    width: 50px;
+    text-align: center;
+}
+
+.diagram-box {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.diagram-box.who-box {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.diagram-box.where-box {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.diagram-box.shown-box {
+    background: rgba(236, 72, 153, 0.15);
+    border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.diagram-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.who-box .diagram-title { color: #60a5fa; }
+.where-box .diagram-title { color: #34d399; }
+.shown-box .diagram-title { color: #f472b6; }
+
+.diagram-content {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.diagram-key {
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.diagram-desc {
+    font-size: 0.75rem;
+    color: #888;
+}
+
+.diagram-example {
+    font-size: 0.75rem;
+    color: #666;
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+}
+
+.diagram-arrow {
+    color: #444;
+    font-size: 1.25rem;
+}
+
+.identity-model-ref {
+    font-size: 0.75rem;
+    color: #888;
+}
+
+.identity-model-ref code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+    font-size: 0.7rem;
+}

@@ -171,6 +171,30 @@ impl UiResourceRegistry {
             "Collaborative whiteboard viewer",
             include_str!("../ui-bundles/canvas/index.html"),
         ));
+
+        // Settings widget (Phase 9.2)
+        self.register(UiResourceEntry::new_inline(
+            "ui://communitas/settings",
+            "Settings",
+            "User preferences, theme, and notification settings",
+            include_str!("../ui-bundles/settings/index.html"),
+        ));
+
+        // Search widget (Phase 9.2)
+        self.register(UiResourceEntry::new_inline(
+            "ui://communitas/search",
+            "Search",
+            "Global search across contacts, messages, files, and more",
+            include_str!("../ui-bundles/search/index.html"),
+        ));
+
+        // Notifications widget (Phase 9.2)
+        self.register(UiResourceEntry::new_inline(
+            "ui://communitas/notifications",
+            "Notifications",
+            "Notification center with filters and mark-as-read",
+            include_str!("../ui-bundles/notifications/index.html"),
+        ));
     }
 }
 
@@ -254,5 +278,26 @@ mod tests {
         let ui_meta = meta.ui.as_ref().unwrap();
         assert!(ui_meta.csp.is_some());
         assert!(!ui_meta.prefers_border);
+    }
+
+    #[test]
+    fn test_standard_widgets_registered() {
+        let registry = UiResourceRegistry::with_standard_widgets();
+        let resources = registry.list();
+
+        // Verify all 8 widgets are registered (5 original + 3 new from Phase 9.2)
+        assert_eq!(resources.len(), 8);
+
+        // Check original widgets
+        assert!(registry.read("ui://communitas/contacts").is_some());
+        assert!(registry.read("ui://communitas/messages").is_some());
+        assert!(registry.read("ui://communitas/kanban").is_some());
+        assert!(registry.read("ui://communitas/drive").is_some());
+        assert!(registry.read("ui://communitas/canvas").is_some());
+
+        // Check new Phase 9.2 widgets
+        assert!(registry.read("ui://communitas/settings").is_some());
+        assert!(registry.read("ui://communitas/search").is_some());
+        assert!(registry.read("ui://communitas/notifications").is_some());
     }
 }

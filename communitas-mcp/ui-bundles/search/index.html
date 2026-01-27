@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search - Communitas</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f3f4f6;
+            --bg-hover: #e5e7eb;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+            --accent-color: #3b82f6;
+            --accent-hover: #2563eb;
+            --highlight-bg: #fef3c7;
+            --highlight-text: #92400e;
+        }
+
+        .dark {
+            --bg-primary: #1f2937;
+            --bg-secondary: #111827;
+            --bg-hover: #374151;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --border-color: #374151;
+            --highlight-bg: #78350f;
+            --highlight-text: #fef3c7;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            padding: 16px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Search Input */
+        .search-container {
+            position: relative;
+            margin-bottom: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 14px 16px 14px 48px;
+            font-size: 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            color: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        .search-hint {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            background: var(--bg-primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .clear-btn {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .clear-btn.visible {
+            display: flex;
+        }
+
+        /* Filter Tabs */
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            border: none;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+
+        .filter-tab:hover {
+            background: var(--bg-hover);
+        }
+
+        .filter-tab.active {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .filter-tab .count {
+            margin-left: 6px;
+            padding: 1px 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            font-size: 0.75rem;
+        }
+
+        .filter-tab:not(.active) .count {
+            background: var(--bg-hover);
+        }
+
+        /* Results Section */
+        .results-section {
+            margin-bottom: 24px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            padding-left: 4px;
+        }
+
+        .section-icon {
+            font-size: 1rem;
+        }
+
+        /* Result Items */
+        .result-list {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .result-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-item:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .result-item:focus {
+            outline: 2px solid var(--accent-color);
+            outline-offset: -2px;
+        }
+
+        .result-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .result-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .result-title {
+            font-weight: 500;
+            font-size: 0.9375rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .result-subtitle {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .result-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        /* Highlight matching text */
+        mark {
+            background-color: var(--highlight-bg);
+            color: var(--highlight-text);
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .loading::after {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            margin-left: 8px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--text-secondary);
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-title {
+            font-size: 1.125rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .empty-subtitle {
+            font-size: 0.875rem;
+        }
+
+        /* Recent Searches */
+        .recent-section {
+            margin-bottom: 24px;
+        }
+
+        .recent-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 4px;
+            margin-bottom: 8px;
+        }
+
+        .recent-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        .clear-recent {
+            font-size: 0.8125rem;
+            color: var(--accent-color);
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .clear-recent:hover {
+            text-decoration: underline;
+        }
+
+        .recent-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        .recent-item:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .recent-icon {
+            color: var(--text-secondary);
+        }
+
+        /* Keyboard shortcut hint */
+        .kbd {
+            font-family: monospace;
+            background: var(--bg-hover);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" role="main" aria-label="Search">
+        <div class="search-container">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="M21 21l-4.35-4.35"></path>
+            </svg>
+            <input type="search"
+                   class="search-input"
+                   id="searchInput"
+                   placeholder="Search contacts, messages, files..."
+                   aria-label="Search"
+                   autocomplete="off">
+            <span class="search-hint" id="searchHint"><span class="kbd">⌘K</span></span>
+            <button class="clear-btn" id="clearBtn" aria-label="Clear search" onclick="clearSearch()">×</button>
+        </div>
+
+        <div id="content">
+            <!-- Results rendered here -->
+        </div>
+    </div>
+
+    <script src="../shared/mcp-bridge.js"></script>
+    <script>
+        // Initialize MCP Bridge
+        const bridge = new McpBridge();
+
+        // State
+        let searchQuery = '';
+        let activeFilter = 'all';
+        let isLoading = false;
+        let results = {
+            contacts: [],
+            messages: [],
+            files: [],
+            kanban: [],
+            canvas: []
+        };
+        let recentSearches = [];
+
+        // Debounce timer
+        let debounceTimer = null;
+        const DEBOUNCE_MS = 300;
+
+        // Category metadata
+        const categories = {
+            contacts: { icon: '👤', label: 'Contacts' },
+            messages: { icon: '💬', label: 'Messages' },
+            files: { icon: '📁', label: 'Files' },
+            kanban: { icon: '📋', label: 'Kanban' },
+            canvas: { icon: '🎨', label: 'Canvas' }
+        };
+
+        // Load recent searches from localStorage
+        function loadRecentSearches() {
+            try {
+                const saved = localStorage.getItem('communitas_recent_searches');
+                if (saved) {
+                    recentSearches = JSON.parse(saved);
+                }
+            } catch (e) {
+                // localStorage may be blocked
+            }
+        }
+
+        // Save recent searches
+        function saveRecentSearches() {
+            try {
+                localStorage.setItem('communitas_recent_searches', JSON.stringify(recentSearches.slice(0, 10)));
+            } catch (e) {
+                // localStorage may be blocked
+            }
+        }
+
+        // Add to recent searches
+        function addToRecent(query) {
+            if (!query || query.length < 2) return;
+            recentSearches = [query, ...recentSearches.filter(r => r !== query)].slice(0, 10);
+            saveRecentSearches();
+        }
+
+        // Highlight matching text (with XSS protection)
+        function highlightMatch(text, query) {
+            if (!query || !text) return bridge.escapeHTML(text || '');
+
+            const escaped = bridge.escapeHTML(text);
+            const queryLower = query.toLowerCase();
+            const textLower = text.toLowerCase();
+
+            let result = '';
+            let lastIndex = 0;
+
+            let index = textLower.indexOf(queryLower);
+            while (index !== -1) {
+                // Add text before match
+                result += bridge.escapeHTML(text.slice(lastIndex, index));
+                // Add highlighted match
+                result += '<mark>' + bridge.escapeHTML(text.slice(index, index + query.length)) + '</mark>';
+                lastIndex = index + query.length;
+                index = textLower.indexOf(queryLower, lastIndex);
+            }
+
+            // Add remaining text
+            result += bridge.escapeHTML(text.slice(lastIndex));
+            return result;
+        }
+
+        // Get total result count
+        function getTotalCount() {
+            return Object.values(results).reduce((sum, arr) => sum + arr.length, 0);
+        }
+
+        // Get filtered results
+        function getFilteredResults() {
+            if (activeFilter === 'all') return results;
+            return { [activeFilter]: results[activeFilter] || [] };
+        }
+
+        // Render filter tabs
+        function renderFilterTabs() {
+            const total = getTotalCount();
+            const tabs = [
+                { key: 'all', label: 'All', count: total },
+                ...Object.entries(categories).map(([key, cat]) => ({
+                    key,
+                    label: cat.label,
+                    count: results[key]?.length || 0
+                }))
+            ];
+
+            return `
+                <div class="filter-tabs" role="tablist" aria-label="Filter results">
+                    ${tabs.map(tab => `
+                        <button class="filter-tab ${activeFilter === tab.key ? 'active' : ''}"
+                                role="tab"
+                                aria-selected="${activeFilter === tab.key}"
+                                onclick="setFilter('${tab.key}')">
+                            ${bridge.escapeHTML(tab.label)}
+                            ${tab.count > 0 ? `<span class="count">${tab.count}</span>` : ''}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Render recent searches
+        function renderRecentSearches() {
+            if (recentSearches.length === 0) return '';
+
+            return `
+                <div class="recent-section">
+                    <div class="recent-header">
+                        <span class="recent-title">Recent Searches</span>
+                        <button class="clear-recent" onclick="clearRecentSearches()">Clear</button>
+                    </div>
+                    <div class="result-list">
+                        ${recentSearches.map(query => `
+                            <div class="recent-item"
+                                 tabindex="0"
+                                 role="button"
+                                 onclick="searchRecent('${bridge.escapeHTML(query)}')"
+                                 onkeydown="if(event.key==='Enter')searchRecent('${bridge.escapeHTML(query)}')">
+                                <span class="recent-icon">🕐</span>
+                                <span>${bridge.escapeHTML(query)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render result item
+        function renderResultItem(item, type) {
+            const cat = categories[type];
+            const title = highlightMatch(item.title || item.name, searchQuery);
+            const subtitle = highlightMatch(item.subtitle || item.preview || '', searchQuery);
+            const meta = item.meta || '';
+
+            return `
+                <div class="result-item"
+                     tabindex="0"
+                     role="button"
+                     data-type="${type}"
+                     data-id="${item.id}"
+                     onclick="selectResult('${type}', '${item.id}')"
+                     onkeydown="if(event.key==='Enter')selectResult('${type}', '${item.id}')">
+                    <div class="result-icon">${cat.icon}</div>
+                    <div class="result-content">
+                        <div class="result-title">${title}</div>
+                        ${subtitle ? `<div class="result-subtitle">${subtitle}</div>` : ''}
+                    </div>
+                    ${meta ? `<span class="result-meta">${bridge.escapeHTML(meta)}</span>` : ''}
+                </div>
+            `;
+        }
+
+        // Render results
+        function renderResults() {
+            const filtered = getFilteredResults();
+            const hasResults = Object.values(filtered).some(arr => arr.length > 0);
+
+            if (!hasResults) {
+                return `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <div class="empty-title">No results found</div>
+                        <div class="empty-subtitle">Try different keywords or check your spelling</div>
+                    </div>
+                `;
+            }
+
+            let html = '';
+            for (const [type, items] of Object.entries(filtered)) {
+                if (items.length === 0) continue;
+                const cat = categories[type];
+
+                html += `
+                    <section class="results-section" aria-labelledby="${type}-heading">
+                        <h2 class="section-header" id="${type}-heading">
+                            <span class="section-icon">${cat.icon}</span>
+                            ${bridge.escapeHTML(cat.label)}
+                        </h2>
+                        <div class="result-list">
+                            ${items.map(item => renderResultItem(item, type)).join('')}
+                        </div>
+                    </section>
+                `;
+            }
+
+            return html;
+        }
+
+        // Main render
+        function render() {
+            const content = document.getElementById('content');
+            const clearBtn = document.getElementById('clearBtn');
+            const searchHint = document.getElementById('searchHint');
+
+            if (searchQuery) {
+                clearBtn.classList.add('visible');
+                searchHint.style.display = 'none';
+            } else {
+                clearBtn.classList.remove('visible');
+                searchHint.style.display = 'block';
+            }
+
+            if (isLoading) {
+                content.innerHTML = `<div class="loading" aria-live="polite">Searching</div>`;
+                return;
+            }
+
+            if (!searchQuery) {
+                content.innerHTML = renderRecentSearches();
+                return;
+            }
+
+            content.innerHTML = renderFilterTabs() + renderResults();
+        }
+
+        // Search handler
+        async function performSearch(query) {
+            if (!query || query.length < 2) {
+                results = { contacts: [], messages: [], files: [], kanban: [], canvas: [] };
+                render();
+                return;
+            }
+
+            isLoading = true;
+            render();
+
+            try {
+                const searchTypes = activeFilter === 'all'
+                    ? ['contacts', 'messages', 'files', 'kanban', 'canvas']
+                    : [activeFilter];
+
+                const response = await bridge.callTool('global_search', {
+                    query: query,
+                    types: searchTypes
+                });
+
+                if (response && response.results) {
+                    results = {
+                        contacts: response.results.contacts || [],
+                        messages: response.results.messages || [],
+                        files: response.results.files || [],
+                        kanban: response.results.kanban || [],
+                        canvas: response.results.canvas || []
+                    };
+                }
+
+                // Add to recent searches on successful search
+                addToRecent(query);
+            } catch (e) {
+                console.log('Search error:', e);
+                // Mock results for demo
+                results = {
+                    contacts: query.length > 2 ? [
+                        { id: '1', title: 'John ' + query, subtitle: 'john@example.com' },
+                        { id: '2', title: query + ' Smith', subtitle: 'smith@example.com' }
+                    ] : [],
+                    messages: query.length > 2 ? [
+                        { id: 'm1', title: 'Thread about ' + query, preview: 'Hey, did you see the ' + query + '?' }
+                    ] : [],
+                    files: [],
+                    kanban: [],
+                    canvas: []
+                };
+            }
+
+            isLoading = false;
+            render();
+        }
+
+        // Event handlers
+        function setFilter(filter) {
+            activeFilter = filter;
+            render();
+        }
+
+        function selectResult(type, id) {
+            bridge.sendMessage({
+                action: 'navigate',
+                target: type,
+                id: id
+            });
+        }
+
+        function clearSearch() {
+            searchQuery = '';
+            document.getElementById('searchInput').value = '';
+            results = { contacts: [], messages: [], files: [], kanban: [], canvas: [] };
+            render();
+            document.getElementById('searchInput').focus();
+        }
+
+        function clearRecentSearches() {
+            recentSearches = [];
+            saveRecentSearches();
+            render();
+        }
+
+        function searchRecent(query) {
+            searchQuery = query;
+            document.getElementById('searchInput').value = query;
+            performSearch(query);
+        }
+
+        // Input handler with debounce
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+
+            debounceTimer = setTimeout(() => {
+                performSearch(searchQuery);
+            }, DEBOUNCE_MS);
+        });
+
+        // Keyboard shortcut
+        document.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                document.getElementById('searchInput').focus();
+            }
+
+            if (e.key === 'Escape') {
+                clearSearch();
+            }
+        });
+
+        // Handle MCP events
+        bridge.onToolInput((input) => {
+            if (input.query) {
+                searchQuery = input.query;
+                document.getElementById('searchInput').value = input.query;
+                performSearch(input.query);
+            }
+        });
+
+        bridge.onReady(() => {
+            loadRecentSearches();
+            render();
+        });
+
+        // Initial render
+        loadRecentSearches();
+        render();
+        document.getElementById('searchInput').focus();
+    </script>
+</body>
+</html>

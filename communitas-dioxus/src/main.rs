@@ -314,7 +314,8 @@ fn App() -> Element {
 
     rsx! {
         AppLifecycleManager {}
-        RouteObserver {}
+        // Note: RouteObserver removed - it used use_route() which panics outside Router context
+        // Navigation tracking can be added inside MainLayout if needed
         Router::<Route> {}
 
         // Onboarding tour overlay (rendered above all content)
@@ -480,7 +481,7 @@ fn LoginRoute() -> Element {
     rsx! {
         AuthLayout {
             title: "Welcome back",
-            subtitle: "Unlock your Communitas vault with your four-word identity and passphrase.",
+            subtitle: "Unlock your Communitas vault with your connection words and passphrase.",
             error: error_msg,
             footer: Some(rsx! {
                 div {
@@ -2080,11 +2081,15 @@ fn AppShell(props: AppShellProps) -> Element {
     }
 }
 
+// Used by RouteObserver (currently disabled) and tests
+#[allow(dead_code)]
 enum RouteNavigationEvent {
     Entity(EntityNavigationKey),
     Contact(String),
 }
 
+// Used by RouteObserver (currently disabled) and tests
+#[allow(dead_code)]
 fn route_navigation_event(route: &Route) -> Option<RouteNavigationEvent> {
     match route {
         Route::EntityDetailRoute {

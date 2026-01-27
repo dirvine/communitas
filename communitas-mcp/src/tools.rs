@@ -29,11 +29,11 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         // Pre-auth tools (always available)
         Tool {
             name: "authenticate".to_string(),
-            description: "Authenticate with four-word identity and password".to_string(),
+            description: "Authenticate with four-word connection address and password".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "four_words": {"type": "string", "description": "Your four-word identity (word1.word2.word3.word4)"},
+                    "four_words": {"type": "string", "description": "Your four-word connection address (word1.word2.word3.word4)"},
                     "password": {"type": "string", "description": "Your password"},
                     "device_name": {"type": "string", "description": "Name for this device/session"}
                 },
@@ -42,11 +42,11 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         },
         Tool {
             name: "create_vault".to_string(),
-            description: "Create a new identity vault with four-word address".to_string(),
+            description: "Create a new identity vault with four-word connection address".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "four_words": {"type": "string", "description": "Choose your four-word identity (word1.word2.word3.word4)"},
+                    "four_words": {"type": "string", "description": "Choose your four-word connection address (word1.word2.word3.word4)"},
                     "password": {"type": "string", "description": "Password to protect your vault"},
                     "display_name": {"type": "string", "description": "Your display name"}
                 },
@@ -96,7 +96,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "four_words": {"type": "string", "description": "Four-word identity of the vault to delete"},
+                    "four_words": {"type": "string", "description": "Four-word connection address of the vault to delete"},
                     "password": {"type": "string", "description": "Password to confirm deletion"}
                 },
                 "required": ["four_words", "password"]
@@ -1751,11 +1751,11 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         },
         Tool {
             name: "network_connect".to_string(),
-            description: "Connect to a specific peer by their four-word identity".to_string(),
+            description: "Connect to a specific peer by their connection words".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "peer_four_words": {"type": "string", "description": "Four-word identity of the peer (e.g., 'ocean-forest-moon-star')"}
+                    "peer_four_words": {"type": "string", "description": "Connection words of the peer (e.g., 'ocean-forest-moon-star')"}
                 },
                 "required": ["peer_four_words"]
             }),
@@ -1852,7 +1852,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "type": "object",
                 "properties": {
                     "display_name": {"type": "string", "description": "Display name for the contact"},
-                    "four_words": {"type": "string", "description": "Four-word identity of the contact (optional for local-only contacts)"},
+                    "four_words": {"type": "string", "description": "Connection words of the contact (optional for local-only contacts)"},
                     "is_favourite": {"type": "boolean", "description": "Mark as favourite contact", "default": false}
                 },
                 "required": ["display_name"]
@@ -1884,12 +1884,12 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         },
         Tool {
             name: "link_contact".to_string(),
-            description: "Link a local contact to a network identity (four-word address)".to_string(),
+            description: "Link a local contact to a network identity via connection words".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "contact_id": {"type": "string", "description": "Contact ID to link"},
-                    "four_words": {"type": "string", "description": "Four-word identity to link to"}
+                    "four_words": {"type": "string", "description": "Connection words to link to"}
                 },
                 "required": ["contact_id", "four_words"]
             }),
@@ -1900,7 +1900,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "four_words": {"type": "string", "description": "Four-word identity of the contact"}
+                    "four_words": {"type": "string", "description": "Connection words of the contact"}
                 },
                 "required": ["four_words"]
             }),
@@ -1911,7 +1911,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "four_words": {"type": "string", "description": "Four-word identity of the contact"}
+                    "four_words": {"type": "string", "description": "Connection words of the contact"}
                 },
                 "required": ["four_words"]
             }),
@@ -1988,7 +1988,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         },
         Tool {
             name: "search_contacts".to_string(),
-            description: "Search contacts by name or four-word identity".to_string(),
+            description: "Search contacts by name or connection words".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -2000,7 +2000,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         // ========== Website Publishing Tools ==========
         Tool {
             name: "create_website".to_string(),
-            description: "Create and publish a website bound to an entity. The website will be accessible via the entity's four-word identity.".to_string(),
+            description: "Create and publish a website bound to an entity. The website will be accessible via the entity's connection words.".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -5875,7 +5875,7 @@ async fn dispatch_recovery_tools(name: &str, args: &Value) -> Option<ToolCallRes
 
 /// Create a new identity with BIP39 mnemonic.
 ///
-/// Returns mnemonic words for backup, four-word identity, and public keys.
+/// Returns mnemonic words for backup, connection words, and public keys.
 /// SECURITY: Never returns private keys - only public keys are included.
 async fn execute_create_identity(args: &Value) -> ToolCallResult {
     use communitas_core::recovery::{RecoveryConfig, create_new_identity};
@@ -5937,7 +5937,7 @@ async fn execute_create_identity(args: &Value) -> ToolCallResult {
 
 /// Recover an identity from a BIP39 mnemonic phrase.
 ///
-/// Returns four-word identity and public keys.
+/// Returns connection words and public keys.
 /// SECURITY: Never returns private keys - only public keys are included.
 async fn execute_recover_identity(args: &Value) -> ToolCallResult {
     use communitas_core::recovery::{Language, recover_identity};

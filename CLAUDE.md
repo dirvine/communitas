@@ -243,8 +243,10 @@ For detailed API documentation, see:
 
 ## Notes
 
-- We use `four-word-networking` crate to encode/decode IPv4 and IPv6 to 4 or more words
-- All identities are validated words from the four-word-networking dictionary
+- We use `four-word-networking` crate to encode/decode IPv4/IPv6 addresses to 4 words for easy sharing
+- **Four-words are ONLY for connection bootstrap** - they're a network address (WHERE), not identity (WHO)
+- **Identity is the pubkey_hex** - ML-DSA-65 public key that uniquely identifies a user
+- **Display name is shown to others** - user-chosen human-friendly label
 - Test network and MCP integration available for development
 
 This architecture supports rapid development while maintaining production-quality standards for a secure, decentralized collaboration platform.

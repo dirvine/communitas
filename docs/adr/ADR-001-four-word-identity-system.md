@@ -1,10 +1,18 @@
-# ADR-001: Four-Word Identity System
+# ADR-001: Four-Word Connection Address System
 
 ## Status
 
 **Superseded** (2025-01-15)
 
-Superseded by pubkey_hex identity model. Four-word encoding now used **only for connection addresses** (WHERE), not user identity (WHO).
+**IMPORTANT**: Four-word encoding is used **ONLY for connection addresses** (WHERE - network location), NOT for user identity (WHO). The title of this ADR is historical - it documents the OLD incorrect model that has been fixed.
+
+## Quick Reference
+
+| Concept | Format | Purpose |
+|---------|--------|---------|
+| **WHO** (Identity) | pubkey_hex (3904 chars) | Cryptographic identity - WHO you are |
+| **WHERE** (Connection) | 4 words (e.g., "ocean-forest-moon-star") | Network address - WHERE to find you |
+| **SHOWN** (Display) | Any string (e.g., "Alice") | Human-friendly label - shown to others |
 
 ## Original Context (Historical)
 

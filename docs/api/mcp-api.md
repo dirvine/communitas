@@ -67,8 +67,8 @@ The following tools are available before authentication:
 
 | Tool | Description |
 |------|-------------|
-| `authenticate` | Authenticate with four-word identity and password |
-| `create_vault` | Create a new identity vault |
+| `authenticate` | Authenticate with four-word connection address and password |
+| `create_vault` | Create a new identity vault with connection address |
 | `authenticate_token` | Authenticate using a delegate token (for AI agents) |
 | `health_check` | Check server health |
 | `list_vaults` | List available vaults on this device |

@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 /// Props for the RecoveryWarningBanner component.
 #[derive(Props, Clone, PartialEq)]
 pub struct RecoveryWarningBannerProps {
-    /// Four-word identity this warning applies to
+    /// Connection words this warning applies to
     pub four_words: String,
     /// Display name of the identity
     pub display_name: String,
@@ -96,7 +96,7 @@ pub fn RecoveryWarningBadge(props: RecoveryWarningBadgeProps) -> Element {
 /// Props for the RecoverySetupModal component.
 #[derive(Props, Clone, PartialEq)]
 pub struct RecoverySetupModalProps {
-    /// Four-word identity this applies to
+    /// Connection words this applies to
     pub four_words: String,
     /// Display name of the identity
     pub display_name: String,

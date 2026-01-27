@@ -1,0 +1,53 @@
+[Unit]
+Description=Communitas MCP Server - AI Agent Interface
+Documentation=https://github.com/saorsa-labs/communitas
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=communitas
+Group=communitas
+WorkingDirectory=/opt/communitas-mcp
+
+# Binary and arguments
+ExecStart=/opt/communitas-mcp/communitas-mcp --http --tls --listen 0.0.0.0:8443 --no-client-auth --demo
+
+# Environment
+Environment=RUST_LOG=info
+Environment=RUST_BACKTRACE=1
+
+# Restart configuration
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=512M
+CPUQuota=100%
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+
+# Allow network access
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=communitas-mcp
+
+[Install]
+WantedBy=multi-user.target

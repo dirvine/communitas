@@ -304,9 +304,27 @@ async fn handle_mcp_request(
     }
 }
 
-/// Handle health check
-async fn handle_health() -> &'static str {
-    "OK"
+/// Health check response
+#[derive(serde::Serialize)]
+struct HealthResponse {
+    status: &'static str,
+    version: &'static str,
+    uptime_seconds: u64,
+}
+
+/// Server start time for uptime calculation
+static SERVER_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// Handle health check - returns JSON with status, version, and uptime
+async fn handle_health() -> Json<HealthResponse> {
+    let start = SERVER_START.get_or_init(std::time::Instant::now);
+    let uptime = start.elapsed().as_secs();
+
+    Json(HealthResponse {
+        status: "healthy",
+        version: env!("CARGO_PKG_VERSION"),
+        uptime_seconds: uptime,
+    })
 }
 
 /// Internal request handler (shared logic with stdio server)
@@ -449,7 +467,9 @@ async fn handle_initialize(
             name: "communitas-mcp-http".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
         },
-        Some(ToolsCapability { list_changed: false }),
+        Some(ToolsCapability {
+            list_changed: false,
+        }),
         Some(ResourcesCapability {
             subscribe: false,
             list_changed: false,
@@ -868,10 +888,9 @@ async fn handle_resources_read(
             // Handle MCP Apps UI resources
             drop(app_lock); // Release the app lock since we don't need it for UI resources
 
-            let (content, mime_type) = state
-                .ui_resources
-                .read(uri)
-                .ok_or_else(|| JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}")))?;
+            let (content, mime_type) = state.ui_resources.read(uri).ok_or_else(|| {
+                JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}"))
+            })?;
 
             let result = ResourceReadResult {
                 contents: vec![ResourceContent {

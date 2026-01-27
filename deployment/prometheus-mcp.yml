@@ -1,0 +1,59 @@
+# Prometheus scrape configuration for Communitas MCP Server
+#
+# Add this to your prometheus.yml under scrape_configs:
+
+scrape_configs:
+  - job_name: 'communitas-mcp'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true  # Remove in production with proper certs
+    static_configs:
+      - targets:
+        - 'mcp.saorsalabs.com:8443'
+        labels:
+          environment: 'production'
+          service: 'communitas-mcp'
+          node: 'saorsa-1'
+      - targets:
+        - 'mcp-secondary.saorsalabs.com:8443'
+        labels:
+          environment: 'production'
+          service: 'communitas-mcp'
+          node: 'saorsa-7'
+
+    # Health check endpoint for now
+    # TODO: Add /metrics endpoint with Prometheus format
+    metrics_path: /health
+
+    # Custom metric relabeling (parse JSON health response)
+    # Note: This is a workaround until proper /metrics endpoint is added
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+# Alert rules for MCP server
+# Add to your alerting rules file:
+#
+# groups:
+#   - name: communitas-mcp
+#     rules:
+#       - alert: McpServerDown
+#         expr: up{job="communitas-mcp"} == 0
+#         for: 5m
+#         labels:
+#           severity: critical
+#         annotations:
+#           summary: "MCP server {{ $labels.instance }} is down"
+#           description: "MCP server has been unreachable for 5 minutes"
+#
+#       - alert: McpServerHighLatency
+#         expr: probe_http_duration_seconds{job="communitas-mcp"} > 2
+#         for: 5m
+#         labels:
+#           severity: warning
+#         annotations:
+#           summary: "High latency on MCP server {{ $labels.instance }}"
+#           description: "MCP server response time is above 2 seconds"

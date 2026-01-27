@@ -103,6 +103,140 @@ impl JsonRpcError {
     }
 }
 
+// =============================================================================
+// Security Validation Functions (MCP Apps Extension - SEP-1865)
+// =============================================================================
+
+/// Error type for MCP protocol validation errors
+#[derive(Debug, Clone, thiserror::Error)]
+#[allow(dead_code)] // Security infrastructure for future hardening phases
+pub enum ProtocolError {
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("Invalid origin: {0}")]
+    InvalidOrigin(String),
+
+    #[error("Path traversal detected in: {0}")]
+    PathTraversal(String),
+}
+
+/// Validates a string identifier (e.g., app_id, widget_id, resource_uri)
+///
+/// # Validation Rules
+/// - Only alphanumeric characters, hyphens, underscores, and forward slashes
+/// - Maximum 256 characters
+/// - Cannot start or end with hyphen/underscore/slash
+/// - Prevents path traversal (`..`) and shell injection
+///
+/// # Examples
+/// ```
+/// assert!(validate_identifier("ui://communitas/contacts", "resource_uri").is_ok());
+/// assert!(validate_identifier("../../../etc/passwd", "resource_uri").is_err());
+/// ```
+#[allow(dead_code)] // Security infrastructure for future hardening phases
+pub fn validate_identifier(id: &str, identifier_type: &str) -> Result<(), ProtocolError> {
+    if id.is_empty() {
+        return Err(ProtocolError::InvalidInput(format!(
+            "{identifier_type} cannot be empty"
+        )));
+    }
+
+    if id.len() > 256 {
+        return Err(ProtocolError::InvalidInput(format!(
+            "{identifier_type} too long (max 256 characters)"
+        )));
+    }
+
+    // Prevent path traversal
+    if id.contains("..") {
+        return Err(ProtocolError::PathTraversal(format!(
+            "{identifier_type}: {}",
+            id
+        )));
+    }
+
+    // Prevent Windows path traversal
+    if id.contains('\\') {
+        return Err(ProtocolError::PathTraversal(format!(
+            "{identifier_type}: {}",
+            id
+        )));
+    }
+
+    // Check for valid characters (alphanumeric, hyphen, underscore, slash, colon, dot)
+    // Allows URIs like "ui://communitas/contacts"
+    if !id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '/' || c == ':' || c == '.')
+    {
+        return Err(ProtocolError::InvalidInput(format!(
+            "{identifier_type} contains invalid characters"
+        )));
+    }
+
+    // Prevent leading/trailing special characters (except for URI scheme prefixes)
+    let trimmed = id.trim_start_matches("ui://").trim_start_matches("mcp://");
+    let first = trimmed.chars().next();
+    let last = trimmed.chars().last();
+    if first == Some('/')
+        || first == Some('.')
+        || first == Some('-')
+        || first == Some('_')
+        || last == Some('/')
+        || last == Some('.')
+        || last == Some('-')
+        || last == Some('_')
+    {
+        return Err(ProtocolError::InvalidInput(format!(
+            "{identifier_type} cannot start or end with special character"
+        )));
+    }
+
+    Ok(())
+}
+
+/// Validates an origin string for postMessage security
+///
+/// # Validation Rules
+/// - Must be a valid HTTP/HTTPS origin
+/// - Must not contain javascript: or data: schemes
+///
+/// # Examples
+/// ```
+/// assert!(validate_origin("https://localhost:8443").is_ok());
+/// assert!(validate_origin("javascript:alert('xss')").is_err());
+/// ```
+#[allow(dead_code)] // Used in Phase 4 security hardening
+pub fn validate_origin(origin: &str) -> Result<(), ProtocolError> {
+    if origin.is_empty() {
+        return Err(ProtocolError::InvalidOrigin(
+            "Origin cannot be empty".to_string(),
+        ));
+    }
+
+    // Prevent dangerous schemes
+    let origin_lower = origin.to_lowercase();
+    if origin_lower.starts_with("javascript:")
+        || origin_lower.starts_with("data:")
+        || origin_lower.starts_with("file:")
+        || origin_lower.starts_with("ftp:")
+    {
+        return Err(ProtocolError::InvalidOrigin(format!(
+            "Dangerous origin scheme: {origin}"
+        )));
+    }
+
+    // Must start with http:// or https://
+    if !origin_lower.starts_with("http://") && !origin_lower.starts_with("https://") {
+        return Err(ProtocolError::InvalidOrigin(format!(
+            "Origin must use HTTP or HTTPS scheme: {origin}"
+        )));
+    }
+
+    Ok(())
+}
+
 /// MCP Initialize request parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -579,6 +713,591 @@ impl InitializeResultWithExtensions {
     }
 }
 
+// =============================================================================
+// AI Context Types (Phase 9.3)
+// =============================================================================
+//
+// These types provide context hints to AI hosts about the current UI state,
+// enabling the AI to understand what the user is viewing, what's selected,
+// pending changes, and any error states. This allows for more contextual
+// assistance without requiring clarifying questions.
+//
+// Context is included in tool responses via `_meta.ui.context`.
+
+/// AI context hints for tool responses
+///
+/// Provides contextual information about the UI state to help AI hosts
+/// understand the user's current situation and provide better assistance.
+///
+/// # Example
+/// ```json
+/// {
+///   "_meta": {
+///     "ui": {
+///       "resourceUri": "ui://communitas/kanban",
+///       "context": {
+///         "current_view": { "widget": "kanban", "view_id": "board-123" },
+///         "selection_state": { "selected_ids": ["card-1"], "selection_type": "card" }
+///       }
+///     }
+///   }
+/// }
+/// ```
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct AiContext {
+    /// Current view state - what widget and view is active
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_view: Option<CurrentView>,
+
+    /// Selection state - what items are selected
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selection_state: Option<SelectionState>,
+
+    /// Pending unsaved actions
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_actions: Option<PendingActions>,
+
+    /// Current error state for troubleshooting
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_state: Option<ErrorState>,
+}
+
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+impl AiContext {
+    /// Create an empty context
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create context with just current view
+    pub fn with_view(widget: impl Into<String>) -> Self {
+        Self {
+            current_view: Some(CurrentView {
+                widget: widget.into(),
+                view_id: None,
+                view_mode: None,
+                filter: None,
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// Add selection state to context
+    pub fn with_selection(mut self, selection: SelectionState) -> Self {
+        self.selection_state = Some(selection);
+        self
+    }
+
+    /// Add pending actions to context
+    pub fn with_pending(mut self, pending: PendingActions) -> Self {
+        self.pending_actions = Some(pending);
+        self
+    }
+
+    /// Add error state to context
+    pub fn with_error(mut self, error: ErrorState) -> Self {
+        self.error_state = Some(error);
+        self
+    }
+
+    /// Check if context has any meaningful data
+    pub fn is_empty(&self) -> bool {
+        self.current_view.is_none()
+            && self.selection_state.is_none()
+            && self.pending_actions.is_none()
+            && self.error_state.is_none()
+    }
+}
+
+/// Current view state - tracks what widget and view is active
+///
+/// # Fields
+/// - `widget`: The active widget name (e.g., "kanban", "contacts", "drive")
+/// - `view_id`: Optional specific view/board/folder ID
+/// - `view_mode`: Optional view mode (e.g., "board", "list", "grid")
+/// - `filter`: Optional active filter description
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct CurrentView {
+    /// Widget name (e.g., "kanban", "contacts", "drive")
+    pub widget: String,
+
+    /// Specific view/board/folder ID being viewed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_id: Option<String>,
+
+    /// View mode (e.g., "board", "list", "grid", "detail")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_mode: Option<String>,
+
+    /// Active filter description
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+}
+
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+impl CurrentView {
+    /// Create a basic view for a widget
+    pub fn new(widget: impl Into<String>) -> Self {
+        Self {
+            widget: widget.into(),
+            view_id: None,
+            view_mode: None,
+            filter: None,
+        }
+    }
+
+    /// Create a view with ID
+    pub fn with_id(widget: impl Into<String>, view_id: impl Into<String>) -> Self {
+        Self {
+            widget: widget.into(),
+            view_id: Some(view_id.into()),
+            view_mode: None,
+            filter: None,
+        }
+    }
+
+    /// Set the view mode
+    pub fn mode(mut self, mode: impl Into<String>) -> Self {
+        self.view_mode = Some(mode.into());
+        self
+    }
+
+    /// Set the filter
+    pub fn filtered(mut self, filter: impl Into<String>) -> Self {
+        self.filter = Some(filter.into());
+        self
+    }
+}
+
+/// Selection state - tracks what items are selected
+///
+/// # Fields
+/// - `selected_ids`: List of selected item IDs
+/// - `selection_type`: Type of items selected (e.g., "card", "contact", "file")
+/// - `count`: Number of selected items (for convenience)
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct SelectionState {
+    /// IDs of selected items
+    #[serde(default)]
+    pub selected_ids: Vec<String>,
+
+    /// Type of items selected (e.g., "card", "contact", "file")
+    pub selection_type: String,
+
+    /// Number of selected items
+    #[serde(default)]
+    pub count: usize,
+}
+
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+impl SelectionState {
+    /// Create selection state for given type and IDs
+    pub fn new(selection_type: impl Into<String>, ids: Vec<String>) -> Self {
+        let count = ids.len();
+        Self {
+            selected_ids: ids,
+            selection_type: selection_type.into(),
+            count,
+        }
+    }
+
+    /// Create single selection
+    pub fn single(selection_type: impl Into<String>, id: impl Into<String>) -> Self {
+        Self {
+            selected_ids: vec![id.into()],
+            selection_type: selection_type.into(),
+            count: 1,
+        }
+    }
+
+    /// Create empty selection (nothing selected)
+    pub fn none(selection_type: impl Into<String>) -> Self {
+        Self {
+            selected_ids: vec![],
+            selection_type: selection_type.into(),
+            count: 0,
+        }
+    }
+}
+
+/// Pending actions - tracks unsaved changes
+///
+/// # Fields
+/// - `has_unsaved`: Whether there are unsaved changes
+/// - `unsaved_items`: List of item IDs with unsaved changes
+/// - `action_type`: Type of pending action (edit, create, delete, move)
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct PendingActions {
+    /// Whether there are unsaved changes
+    pub has_unsaved: bool,
+
+    /// IDs of items with unsaved changes
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsaved_items: Vec<String>,
+
+    /// Type of pending action
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_type: Option<PendingActionType>,
+}
+
+/// Types of pending actions
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PendingActionType {
+    /// Item being edited
+    Edit,
+    /// New item not yet saved
+    Create,
+    /// Pending deletion confirmation
+    Delete,
+    /// Item being relocated
+    Move,
+    /// Draft message/content
+    Draft,
+}
+
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+impl PendingActions {
+    /// Create pending action state
+    pub fn new(action_type: PendingActionType, items: Vec<String>) -> Self {
+        Self {
+            has_unsaved: !items.is_empty(),
+            unsaved_items: items,
+            action_type: Some(action_type),
+        }
+    }
+
+    /// Create state with no pending actions
+    pub fn none() -> Self {
+        Self {
+            has_unsaved: false,
+            unsaved_items: vec![],
+            action_type: None,
+        }
+    }
+
+    /// Create edit pending state for single item
+    pub fn editing(id: impl Into<String>) -> Self {
+        Self::new(PendingActionType::Edit, vec![id.into()])
+    }
+
+    /// Create create pending state (new unsaved item)
+    pub fn creating() -> Self {
+        Self {
+            has_unsaved: true,
+            unsaved_items: vec![],
+            action_type: Some(PendingActionType::Create),
+        }
+    }
+
+    /// Create draft pending state
+    pub fn draft() -> Self {
+        Self {
+            has_unsaved: true,
+            unsaved_items: vec![],
+            action_type: Some(PendingActionType::Draft),
+        }
+    }
+}
+
+/// Error state - tracks current errors for troubleshooting
+///
+/// # Fields
+/// - `has_error`: Whether an error is currently present
+/// - `error_type`: Category of error
+/// - `error_message`: Human-readable error message
+/// - `recoverable`: Whether the error can be recovered from
+/// - `recovery_hint`: Optional hint for how to recover
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct ErrorState {
+    /// Whether an error is currently present
+    pub has_error: bool,
+
+    /// Category of error
+    pub error_type: ErrorType,
+
+    /// Human-readable error message
+    pub error_message: String,
+
+    /// Whether the error can be recovered from
+    #[serde(default = "default_recoverable")]
+    pub recoverable: bool,
+
+    /// Optional hint for how to recover
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_hint: Option<String>,
+}
+
+fn default_recoverable() -> bool {
+    true
+}
+
+/// Types of errors
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorType {
+    /// Network/connection error
+    Network,
+    /// Invalid input/validation error
+    Validation,
+    /// Access denied/permission error
+    Permission,
+    /// Request timed out
+    Timeout,
+    /// Server/internal error
+    Internal,
+    /// Resource not found
+    NotFound,
+    /// Quota/limit exceeded
+    QuotaExceeded,
+    /// Sync/conflict error
+    Sync,
+}
+
+#[allow(dead_code)] // Used by server.rs and widgets in Tasks 2-10
+impl ErrorState {
+    /// Create error state
+    pub fn new(error_type: ErrorType, message: impl Into<String>, recoverable: bool) -> Self {
+        Self {
+            has_error: true,
+            error_type,
+            error_message: message.into(),
+            recoverable,
+            recovery_hint: None,
+        }
+    }
+
+    /// Create network error
+    pub fn network(message: impl Into<String>) -> Self {
+        Self::new(ErrorType::Network, message, true)
+            .with_hint("Check your internet connection and try again")
+    }
+
+    /// Create validation error
+    pub fn validation(message: impl Into<String>) -> Self {
+        Self::new(ErrorType::Validation, message, true)
+    }
+
+    /// Create permission error
+    pub fn permission(message: impl Into<String>) -> Self {
+        Self::new(ErrorType::Permission, message, false)
+            .with_hint("You may need to request access from the owner")
+    }
+
+    /// Create timeout error
+    pub fn timeout(message: impl Into<String>) -> Self {
+        Self::new(ErrorType::Timeout, message, true)
+            .with_hint("The operation took too long. Try again")
+    }
+
+    /// Create no error state
+    pub fn none() -> Self {
+        Self {
+            has_error: false,
+            error_type: ErrorType::Internal,
+            error_message: String::new(),
+            recoverable: true,
+            recovery_hint: None,
+        }
+    }
+
+    /// Add recovery hint
+    pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
+        self.recovery_hint = Some(hint.into());
+        self
+    }
+}
+
+/// Extended UI metadata with AI context support
+///
+/// Extends `McpUiToolMeta` to include AI context hints.
+#[allow(dead_code)] // Used by server.rs in Tasks 2-10
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpUiToolMetaWithContext {
+    /// URI of the UI resource to render
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_uri: Option<String>,
+
+    /// Visibility scopes for this tool's UI
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub visibility: Vec<String>,
+
+    /// AI context hints about current UI state
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<AiContext>,
+}
+
+#[allow(dead_code)] // Used by server.rs in Tasks 2-10
+impl McpUiToolMetaWithContext {
+    /// Create UI metadata with context
+    pub fn new(resource_uri: impl Into<String>, context: AiContext) -> Self {
+        Self {
+            resource_uri: Some(resource_uri.into()),
+            visibility: vec!["model".to_string(), "app".to_string()],
+            context: if context.is_empty() {
+                None
+            } else {
+                Some(context)
+            },
+        }
+    }
+
+    /// Create UI metadata without context
+    pub fn without_context(resource_uri: impl Into<String>) -> Self {
+        Self {
+            resource_uri: Some(resource_uri.into()),
+            visibility: vec!["model".to_string(), "app".to_string()],
+            context: None,
+        }
+    }
+}
+
+/// Extended tool result metadata with AI context support
+#[allow(dead_code)] // Used by server.rs in Tasks 2-10
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolResultMetaWithContext {
+    /// UI metadata with context hints
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ui: Option<McpUiToolMetaWithContext>,
+}
+
+/// Extended tool call result with AI context in _meta
+#[allow(dead_code)] // Used by server.rs in Tasks 2-10
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallResultWithContext {
+    pub content: Vec<ToolContent>,
+    #[serde(default, rename = "isError")]
+    pub is_error: bool,
+    /// MCP Apps metadata with AI context
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub _meta: Option<ToolResultMetaWithContext>,
+}
+
+#[allow(dead_code)] // Used by server.rs in Tasks 2-10
+impl ToolCallResultWithContext {
+    /// Create a successful result without UI metadata
+    pub fn success(text: String) -> Self {
+        Self {
+            content: vec![ToolContent::Text { text }],
+            is_error: false,
+            _meta: None,
+        }
+    }
+
+    /// Create a successful result with UI metadata and context
+    pub fn success_with_context(text: String, resource_uri: &str, context: AiContext) -> Self {
+        Self {
+            content: vec![ToolContent::Text { text }],
+            is_error: false,
+            _meta: Some(ToolResultMetaWithContext {
+                ui: Some(McpUiToolMetaWithContext::new(resource_uri, context)),
+            }),
+        }
+    }
+
+    /// Create a successful result with UI but no context
+    pub fn success_with_ui(text: String, resource_uri: &str) -> Self {
+        Self {
+            content: vec![ToolContent::Text { text }],
+            is_error: false,
+            _meta: Some(ToolResultMetaWithContext {
+                ui: Some(McpUiToolMetaWithContext::without_context(resource_uri)),
+            }),
+        }
+    }
+
+    /// Create an error result
+    pub fn error(text: String) -> Self {
+        Self {
+            content: vec![ToolContent::Text { text }],
+            is_error: true,
+            _meta: None,
+        }
+    }
+
+    /// Create an error result with context for troubleshooting
+    pub fn error_with_context(text: String, resource_uri: &str, error: ErrorState) -> Self {
+        let context = AiContext::default().with_error(error);
+        Self {
+            content: vec![ToolContent::Text { text }],
+            is_error: true,
+            _meta: Some(ToolResultMetaWithContext {
+                ui: Some(McpUiToolMetaWithContext::new(resource_uri, context)),
+            }),
+        }
+    }
+
+    /// Convert from basic ToolCallResult
+    pub fn from_basic(result: ToolCallResult) -> Self {
+        Self {
+            content: result.content,
+            is_error: result.is_error,
+            _meta: None,
+        }
+    }
+
+    /// Convert from ToolCallResultWithMeta
+    pub fn from_with_meta(result: ToolCallResultWithMeta) -> Self {
+        Self {
+            content: result.content,
+            is_error: result.is_error,
+            _meta: result._meta.map(|m| ToolResultMetaWithContext {
+                ui: m.ui.map(|u| McpUiToolMetaWithContext {
+                    resource_uri: u.resource_uri,
+                    visibility: u.visibility,
+                    context: None,
+                }),
+            }),
+        }
+    }
+
+    /// Convert from basic ToolCallResult with UI context
+    ///
+    /// This is used to add AI context hints to tool responses so the AI host
+    /// can understand the current widget state (what's being viewed, selected, etc.)
+    pub fn from_basic_with_context(
+        result: ToolCallResult,
+        resource_uri: Option<&str>,
+        context: AiContext,
+    ) -> Self {
+        let has_context = context.current_view.is_some()
+            || context.selection_state.is_some()
+            || context.pending_actions.is_some()
+            || context.error_state.is_some();
+
+        let meta = if has_context || resource_uri.is_some() {
+            Some(ToolResultMetaWithContext {
+                ui: Some(McpUiToolMetaWithContext {
+                    resource_uri: resource_uri.map(String::from),
+                    visibility: vec!["user".to_string(), "assistant".to_string()],
+                    context: if has_context { Some(context) } else { None },
+                }),
+            })
+        } else {
+            None
+        };
+
+        Self {
+            content: result.content,
+            is_error: result.is_error,
+            _meta: meta,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -713,7 +1432,9 @@ mod tests {
     #[test]
     fn test_capabilities_with_extensions() {
         let caps = ServerCapabilitiesWithExtensions {
-            tools: Some(ToolsCapability { list_changed: false }),
+            tools: Some(ToolsCapability {
+                list_changed: false,
+            }),
             resources: Some(ResourcesCapability {
                 subscribe: false,
                 list_changed: false,
@@ -728,5 +1449,426 @@ mod tests {
         assert!(json.contains("resources"));
         assert!(json.contains("extensions"));
         assert!(json.contains("io.modelcontextprotocol/ui"));
+    }
+
+    // Security validation tests
+
+    #[test]
+    fn test_validate_identifier_valid() {
+        assert!(validate_identifier("ui://communitas/contacts", "resource_uri").is_ok());
+        assert!(validate_identifier("app-name-123", "app_id").is_ok());
+        assert!(validate_identifier("widget_name", "widget_id").is_ok());
+    }
+
+    #[test]
+    fn test_validate_identifier_path_traversal() {
+        assert!(validate_identifier("../../../etc/passwd", "resource_uri").is_err());
+        assert!(validate_identifier("../escape", "app_id").is_err());
+        assert!(validate_identifier("path/../to/file", "widget_id").is_err());
+    }
+
+    #[test]
+    fn test_validate_identifier_backslash() {
+        assert!(validate_identifier("path\\to\\file", "resource_uri").is_err());
+        assert!(validate_identifier("C:\\Windows\\System32", "app_id").is_err());
+    }
+
+    #[test]
+    fn test_validate_identifier_empty() {
+        assert!(validate_identifier("", "app_id").is_err());
+    }
+
+    #[test]
+    fn test_validate_identifier_too_long() {
+        let too_long = "a".repeat(257);
+        assert!(validate_identifier(&too_long, "app_id").is_err());
+    }
+
+    #[test]
+    fn test_validate_identifier_invalid_characters() {
+        assert!(validate_identifier("app<script>", "app_id").is_err());
+        assert!(validate_identifier("app&name", "app_id").is_err());
+        assert!(validate_identifier("app|name", "app_id").is_err());
+        assert!(validate_identifier("app\x00null", "app_id").is_err());
+    }
+
+    // =============================================================================
+    // AI Context Tests (Phase 9.3)
+    // =============================================================================
+
+    #[test]
+    fn test_ai_context_empty() {
+        let context = AiContext::new();
+        assert!(context.is_empty());
+
+        let json = serde_json::to_string(&context).unwrap();
+        assert_eq!(json, "{}");
+    }
+
+    #[test]
+    fn test_ai_context_with_view() {
+        let context = AiContext::with_view("kanban");
+        assert!(!context.is_empty());
+        assert!(context.current_view.is_some());
+
+        let view = context.current_view.unwrap();
+        assert_eq!(view.widget, "kanban");
+    }
+
+    #[test]
+    fn test_ai_context_serialization_roundtrip() {
+        let context = AiContext {
+            current_view: Some(CurrentView {
+                widget: "kanban".to_string(),
+                view_id: Some("board-123".to_string()),
+                view_mode: Some("board".to_string()),
+                filter: None,
+            }),
+            selection_state: Some(SelectionState {
+                selected_ids: vec!["card-1".to_string(), "card-2".to_string()],
+                selection_type: "card".to_string(),
+                count: 2,
+            }),
+            pending_actions: Some(PendingActions {
+                has_unsaved: true,
+                unsaved_items: vec!["card-1".to_string()],
+                action_type: Some(PendingActionType::Edit),
+            }),
+            error_state: None,
+        };
+
+        let json = serde_json::to_string(&context).unwrap();
+        let deserialized: AiContext = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(context, deserialized);
+    }
+
+    #[test]
+    fn test_current_view_builder() {
+        let view = CurrentView::with_id("drive", "folder-abc")
+            .mode("list")
+            .filtered("*.pdf");
+
+        assert_eq!(view.widget, "drive");
+        assert_eq!(view.view_id, Some("folder-abc".to_string()));
+        assert_eq!(view.view_mode, Some("list".to_string()));
+        assert_eq!(view.filter, Some("*.pdf".to_string()));
+    }
+
+    #[test]
+    fn test_current_view_serialization() {
+        let view = CurrentView::new("contacts");
+        let json = serde_json::to_string(&view).unwrap();
+
+        assert!(json.contains("\"widget\":\"contacts\""));
+        // Optional fields should be omitted
+        assert!(!json.contains("view_id"));
+        assert!(!json.contains("view_mode"));
+    }
+
+    #[test]
+    fn test_selection_state_single() {
+        let selection = SelectionState::single("contact", "contact-123");
+        assert_eq!(selection.count, 1);
+        assert_eq!(selection.selected_ids.len(), 1);
+        assert_eq!(selection.selection_type, "contact");
+    }
+
+    #[test]
+    fn test_selection_state_multiple() {
+        let selection = SelectionState::new(
+            "file",
+            vec![
+                "file-1".to_string(),
+                "file-2".to_string(),
+                "file-3".to_string(),
+            ],
+        );
+        assert_eq!(selection.count, 3);
+        assert_eq!(selection.selected_ids.len(), 3);
+    }
+
+    #[test]
+    fn test_selection_state_none() {
+        let selection = SelectionState::none("card");
+        assert_eq!(selection.count, 0);
+        assert!(selection.selected_ids.is_empty());
+    }
+
+    #[test]
+    fn test_pending_actions_editing() {
+        let pending = PendingActions::editing("card-1");
+        assert!(pending.has_unsaved);
+        assert_eq!(pending.action_type, Some(PendingActionType::Edit));
+        assert_eq!(pending.unsaved_items, vec!["card-1".to_string()]);
+    }
+
+    #[test]
+    fn test_pending_actions_draft() {
+        let pending = PendingActions::draft();
+        assert!(pending.has_unsaved);
+        assert_eq!(pending.action_type, Some(PendingActionType::Draft));
+    }
+
+    #[test]
+    fn test_pending_actions_none() {
+        let pending = PendingActions::none();
+        assert!(!pending.has_unsaved);
+        assert!(pending.unsaved_items.is_empty());
+        assert!(pending.action_type.is_none());
+    }
+
+    #[test]
+    fn test_pending_action_type_serialization() {
+        let action = PendingActionType::Edit;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"edit\"");
+
+        let action = PendingActionType::Create;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"create\"");
+
+        let action = PendingActionType::Delete;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"delete\"");
+
+        let action = PendingActionType::Move;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"move\"");
+
+        let action = PendingActionType::Draft;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"draft\"");
+    }
+
+    #[test]
+    fn test_error_state_network() {
+        let error = ErrorState::network("Connection failed");
+        assert!(error.has_error);
+        assert_eq!(error.error_type, ErrorType::Network);
+        assert!(error.recoverable);
+        assert!(error.recovery_hint.is_some());
+    }
+
+    #[test]
+    fn test_error_state_permission() {
+        let error = ErrorState::permission("Access denied");
+        assert!(error.has_error);
+        assert_eq!(error.error_type, ErrorType::Permission);
+        assert!(!error.recoverable);
+    }
+
+    #[test]
+    fn test_error_state_none() {
+        let error = ErrorState::none();
+        assert!(!error.has_error);
+    }
+
+    #[test]
+    fn test_error_type_serialization() {
+        let error_type = ErrorType::Network;
+        let json = serde_json::to_string(&error_type).unwrap();
+        assert_eq!(json, "\"network\"");
+
+        let error_type = ErrorType::Validation;
+        let json = serde_json::to_string(&error_type).unwrap();
+        assert_eq!(json, "\"validation\"");
+
+        let error_type = ErrorType::QuotaExceeded;
+        let json = serde_json::to_string(&error_type).unwrap();
+        assert_eq!(json, "\"quota_exceeded\"");
+    }
+
+    #[test]
+    fn test_tool_result_with_context_success() {
+        let result = ToolCallResultWithContext::success("Hello".to_string());
+        assert!(!result.is_error);
+        assert!(result._meta.is_none());
+    }
+
+    #[test]
+    fn test_tool_result_with_context_full() {
+        let context = AiContext::with_view("kanban")
+            .with_selection(SelectionState::single("card", "card-1"))
+            .with_pending(PendingActions::editing("card-1"));
+
+        let result = ToolCallResultWithContext::success_with_context(
+            "Card details".to_string(),
+            "ui://communitas/kanban",
+            context,
+        );
+
+        assert!(!result.is_error);
+        assert!(result._meta.is_some());
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"context\""));
+        assert!(json.contains("\"current_view\""));
+        assert!(json.contains("\"selection_state\""));
+        assert!(json.contains("\"pending_actions\""));
+    }
+
+    #[test]
+    fn test_tool_result_with_context_error() {
+        let error = ErrorState::network("Connection timeout");
+        let result = ToolCallResultWithContext::error_with_context(
+            "Failed to load".to_string(),
+            "ui://communitas/drive",
+            error,
+        );
+
+        assert!(result.is_error);
+        assert!(result._meta.is_some());
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"error_state\""));
+        assert!(json.contains("\"network\""));
+    }
+
+    #[test]
+    fn test_ai_context_json_structure() {
+        // Verify the JSON structure matches the plan specification
+        let context = AiContext {
+            current_view: Some(CurrentView {
+                widget: "kanban".to_string(),
+                view_id: Some("board-123".to_string()),
+                view_mode: Some("board".to_string()),
+                filter: None,
+            }),
+            selection_state: Some(SelectionState {
+                selected_ids: vec!["card-1".to_string(), "card-2".to_string()],
+                selection_type: "card".to_string(),
+                count: 2,
+            }),
+            pending_actions: Some(PendingActions {
+                has_unsaved: true,
+                unsaved_items: vec!["card-1".to_string()],
+                action_type: Some(PendingActionType::Edit),
+            }),
+            error_state: None,
+        };
+
+        let json = serde_json::to_string_pretty(&context).unwrap();
+
+        // Verify snake_case field names (as per plan)
+        assert!(json.contains("\"current_view\""));
+        assert!(json.contains("\"selection_state\""));
+        assert!(json.contains("\"pending_actions\""));
+        assert!(json.contains("\"selected_ids\""));
+        assert!(json.contains("\"selection_type\""));
+        assert!(json.contains("\"has_unsaved\""));
+        assert!(json.contains("\"unsaved_items\""));
+        assert!(json.contains("\"action_type\""));
+    }
+
+    #[test]
+    fn test_mcp_ui_tool_meta_with_context() {
+        let context = AiContext::with_view("contacts");
+        let meta = McpUiToolMetaWithContext::new("ui://communitas/contacts", context);
+
+        assert_eq!(
+            meta.resource_uri,
+            Some("ui://communitas/contacts".to_string())
+        );
+        assert!(meta.visibility.contains(&"model".to_string()));
+        assert!(meta.context.is_some());
+    }
+
+    #[test]
+    fn test_mcp_ui_tool_meta_without_context() {
+        let meta = McpUiToolMetaWithContext::without_context("ui://communitas/drive");
+
+        assert_eq!(meta.resource_uri, Some("ui://communitas/drive".to_string()));
+        assert!(meta.context.is_none());
+    }
+
+    #[test]
+    fn test_mcp_ui_tool_meta_empty_context_omitted() {
+        let empty_context = AiContext::new();
+        let meta = McpUiToolMetaWithContext::new("ui://communitas/settings", empty_context);
+
+        // Empty context should be None (omitted in serialization)
+        assert!(meta.context.is_none());
+    }
+
+    #[test]
+    fn test_from_basic_with_context() {
+        // Create a basic tool result
+        let basic_result = ToolCallResult {
+            content: vec![ToolContent::Text {
+                text: "Contact list retrieved".to_string(),
+            }],
+            is_error: false,
+        };
+
+        // Create context with current view
+        let context = AiContext::with_view("contacts");
+
+        // Convert with context
+        let result = ToolCallResultWithContext::from_basic_with_context(
+            basic_result,
+            Some("ui://communitas/contacts"),
+            context,
+        );
+
+        assert!(!result.is_error);
+        assert!(result._meta.is_some());
+
+        let meta = result._meta.unwrap();
+        let ui = meta.ui.unwrap();
+        assert_eq!(
+            ui.resource_uri,
+            Some("ui://communitas/contacts".to_string())
+        );
+        assert!(ui.context.is_some());
+
+        let ctx = ui.context.unwrap();
+        assert!(ctx.current_view.is_some());
+        assert_eq!(ctx.current_view.unwrap().widget, "contacts");
+    }
+
+    #[test]
+    fn test_from_basic_with_empty_context_no_uri() {
+        let basic_result = ToolCallResult {
+            content: vec![ToolContent::Text {
+                text: "Health check OK".to_string(),
+            }],
+            is_error: false,
+        };
+
+        // Empty context and no resource URI should result in no _meta
+        let result = ToolCallResultWithContext::from_basic_with_context(
+            basic_result,
+            None,
+            AiContext::new(),
+        );
+
+        assert!(!result.is_error);
+        assert!(result._meta.is_none()); // No context, no URI = no meta
+    }
+
+    #[test]
+    fn test_from_basic_with_context_preserves_error_state() {
+        let basic_result = ToolCallResult {
+            content: vec![ToolContent::Text {
+                text: "Failed to load contacts".to_string(),
+            }],
+            is_error: true,
+        };
+
+        let error = ErrorState::network("Connection timeout");
+        let context = AiContext::default().with_error(error);
+
+        let result = ToolCallResultWithContext::from_basic_with_context(
+            basic_result,
+            Some("ui://communitas/contacts"),
+            context,
+        );
+
+        assert!(result.is_error);
+        assert!(result._meta.is_some());
+
+        let ctx = result._meta.unwrap().ui.unwrap().context.unwrap();
+        assert!(ctx.error_state.is_some());
     }
 }

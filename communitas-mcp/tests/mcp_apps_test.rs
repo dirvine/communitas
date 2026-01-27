@@ -29,9 +29,10 @@ fn test_standard_widgets_registered() {
     let registry = UiResourceRegistry::with_standard_widgets();
     let resources = registry.list();
 
-    // Verify all 5 standard widgets are registered
+    // Verify all 8 standard widgets are registered (5 original + 3 from Phase 9.2)
     let uris: Vec<&str> = resources.iter().map(|r| r.uri.as_str()).collect();
 
+    // Original 5 widgets
     assert!(
         uris.contains(&"ui://communitas/contacts"),
         "Contacts widget should be registered"
@@ -53,7 +54,21 @@ fn test_standard_widgets_registered() {
         "Canvas widget should be registered"
     );
 
-    assert_eq!(resources.len(), 5, "Should have exactly 5 standard widgets");
+    // Phase 9.2 widgets
+    assert!(
+        uris.contains(&"ui://communitas/settings"),
+        "Settings widget should be registered"
+    );
+    assert!(
+        uris.contains(&"ui://communitas/search"),
+        "Search widget should be registered"
+    );
+    assert!(
+        uris.contains(&"ui://communitas/notifications"),
+        "Notifications widget should be registered"
+    );
+
+    assert_eq!(resources.len(), 8, "Should have exactly 8 standard widgets");
 }
 
 #[test]
@@ -113,11 +128,7 @@ fn test_widget_content_readable() {
 
     for (uri, name) in expected_widgets {
         let result = registry.read(uri);
-        assert!(
-            result.is_some(),
-            "Should be able to read {} widget",
-            name
-        );
+        assert!(result.is_some(), "Should be able to read {} widget", name);
 
         let (content, mime_type) = result.unwrap();
 
@@ -158,8 +169,7 @@ fn test_mcp_ui_tool_meta_serialization() {
     let json = serde_json::to_value(&meta).unwrap();
 
     assert_eq!(
-        json["resourceUri"],
-        "ui://communitas/contacts",
+        json["resourceUri"], "ui://communitas/contacts",
         "resourceUri should serialize correctly"
     );
     assert_eq!(
@@ -180,13 +190,9 @@ fn test_tool_result_meta_serialization() {
 
     let json = serde_json::to_value(&meta).unwrap();
 
-    assert!(
-        json["ui"].is_object(),
-        "_meta.ui should be an object"
-    );
+    assert!(json["ui"].is_object(), "_meta.ui should be an object");
     assert_eq!(
-        json["ui"]["resourceUri"],
-        "ui://communitas/kanban",
+        json["ui"]["resourceUri"], "ui://communitas/kanban",
         "_meta.ui.resourceUri should serialize correctly"
     );
 }
@@ -243,10 +249,7 @@ fn test_resource_with_meta_serialization() {
     // use skip_serializing_if and have default values
     if let Some(meta) = json.get("_meta") {
         // If _meta is present in JSON, verify it has correct structure
-        assert!(
-            meta.is_object(),
-            "_meta should be an object when present"
-        );
+        assert!(meta.is_object(), "_meta should be an object when present");
     }
 }
 
@@ -262,7 +265,9 @@ fn test_initialize_result_with_ui_extension() {
             name: "communitas-mcp".to_string(),
             version: "0.1.0".to_string(),
         },
-        Some(communitas_mcp::protocol::ToolsCapability { list_changed: false }),
+        Some(communitas_mcp::protocol::ToolsCapability {
+            list_changed: false,
+        }),
         Some(communitas_mcp::protocol::ResourcesCapability {
             subscribe: false,
             list_changed: false,
@@ -289,7 +294,9 @@ fn test_initialize_result_with_ui_extension() {
 
     let ui_cap = extensions.ui.as_ref().unwrap();
     assert!(
-        ui_cap.mime_types.contains(&"text/html;profile=mcp-app".to_string()),
+        ui_cap
+            .mime_types
+            .contains(&"text/html;profile=mcp-app".to_string()),
         "UI extension should support MCP App MIME type"
     );
 }
@@ -321,7 +328,9 @@ fn test_server_extensions_serialization() {
 #[test]
 fn test_capabilities_include_extensions() {
     let caps = ServerCapabilitiesWithExtensions::with_ui_extension(
-        Some(communitas_mcp::protocol::ToolsCapability { list_changed: false }),
+        Some(communitas_mcp::protocol::ToolsCapability {
+            list_changed: false,
+        }),
         Some(communitas_mcp::protocol::ResourcesCapability {
             subscribe: false,
             list_changed: false,

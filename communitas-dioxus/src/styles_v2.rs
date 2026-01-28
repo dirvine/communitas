@@ -411,6 +411,52 @@ pub mod text {
             typography::LEADING_NORMAL
         )
     }
+
+    // Responsive text sizing helpers using CSS clamp()
+
+    /// Responsive font size using clamp() for fluid typography.
+    ///
+    /// Scales between 80% and 100% of base size based on viewport width.
+    /// Uses the formula: clamp(min, preferred, max)
+    pub fn text_responsive(base_px: u32) -> String {
+        let min_px = (base_px as f32 * 0.8) as u32;
+        let vw = base_px as f32 / 100.0;
+        let add_px = (base_px as f32 * 0.5) as u32;
+        format!(
+            "font-size: clamp({}px, {}vw + {}px, {}px);",
+            min_px, vw, add_px, base_px
+        )
+    }
+
+    /// Responsive extra small text (12px base).
+    pub fn text_xs_responsive() -> String {
+        text_responsive(12)
+    }
+
+    /// Responsive small text (14px base).
+    pub fn text_sm_responsive() -> String {
+        text_responsive(14)
+    }
+
+    /// Responsive base text (16px base).
+    pub fn text_base_responsive() -> String {
+        text_responsive(16)
+    }
+
+    /// Responsive large text (18px base).
+    pub fn text_lg_responsive() -> String {
+        text_responsive(18)
+    }
+
+    /// Responsive extra large text (20px base).
+    pub fn text_xl_responsive() -> String {
+        text_responsive(20)
+    }
+
+    /// Responsive 2xl text (24px base).
+    pub fn text_2xl_responsive() -> String {
+        text_responsive(24)
+    }
 }
 
 /// Interactive element utilities.
@@ -702,6 +748,7 @@ pub mod flex {
 /// Layout utilities for common container patterns.
 pub mod layout {
     use super::*;
+    use crate::tokens::breakpoints;
 
     /// Full-height container that prevents overflow.
     pub fn full_height() -> &'static str {
@@ -716,6 +763,76 @@ pub mod layout {
     /// Minimum width zero (prevents flex overflow).
     pub fn min_w_0() -> &'static str {
         "min-width: 0;"
+    }
+
+    // Responsive width helpers
+
+    /// Width: 100vw (viewport width).
+    pub fn w_screen() -> &'static str {
+        "width: 100vw;"
+    }
+
+    /// Max-width: small breakpoint (640px).
+    pub fn max_w_sm() -> String {
+        format!("max-width: {};", breakpoints::SM)
+    }
+
+    /// Max-width: medium breakpoint (768px).
+    pub fn max_w_md() -> String {
+        format!("max-width: {};", breakpoints::MD)
+    }
+
+    /// Max-width: large breakpoint (1024px).
+    pub fn max_w_lg() -> String {
+        format!("max-width: {};", breakpoints::LG)
+    }
+
+    /// Max-width: extra large breakpoint (1280px).
+    pub fn max_w_xl() -> String {
+        format!("max-width: {};", breakpoints::XL)
+    }
+
+    /// Max-width: 2xl breakpoint (1536px).
+    pub fn max_w_2xl() -> String {
+        format!("max-width: {};", breakpoints::XXL)
+    }
+
+    /// Min-width: custom pixel value.
+    pub fn min_w(px: u32) -> String {
+        format!("min-width: {}px;", px)
+    }
+
+    /// Max-width: custom pixel value.
+    pub fn max_w(px: u32) -> String {
+        format!("max-width: {}px;", px)
+    }
+
+    /// Constrained container with auto margins for centering.
+    pub fn container(max_width: &str) -> String {
+        format!(
+            "width: 100%; max-width: {}; margin-left: auto; margin-right: auto;",
+            max_width
+        )
+    }
+
+    /// Small container (640px max-width, centered).
+    pub fn container_sm() -> String {
+        container(breakpoints::SM)
+    }
+
+    /// Medium container (768px max-width, centered).
+    pub fn container_md() -> String {
+        container(breakpoints::MD)
+    }
+
+    /// Large container (1024px max-width, centered).
+    pub fn container_lg() -> String {
+        container(breakpoints::LG)
+    }
+
+    /// XL container (1280px max-width, centered).
+    pub fn container_xl() -> String {
+        container(breakpoints::XL)
     }
 
     /// Scrollable container with custom scrollbar.

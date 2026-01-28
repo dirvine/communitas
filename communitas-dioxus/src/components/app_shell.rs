@@ -9,10 +9,13 @@ use crate::design_tokens::{
     gradients, layout, motion, palette, radius, semantic, spacing, typography,
 };
 use crate::styles_v2::{self, avatar, flex, presence};
+#[cfg(target_arch = "wasm32")]
+use crate::tokens::breakpoints;
 use communitas_ui_api::{PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType};
 use dioxus::prelude::*;
+use tracing::debug;
 
-/// Main app shell with 3-column layout.
+/// Main app shell with 3-column layout and responsive sidebar.
 #[component]
 pub fn AppShell(
     /// Whether the thread panel is visible
@@ -26,6 +29,44 @@ pub fn AppShell(
     #[props(default)]
     thread_panel: Option<Element>,
 ) -> Element {
+    // Responsive sidebar state
+    let mut sidebar_collapsed = use_signal(|| false);
+    let mut manual_override = use_signal(|| false); // Track if user manually toggled
+
+    // Window resize effect for responsive behavior
+    use_effect(move || {
+        // Only auto-collapse if user hasn't manually toggled
+        if !manual_override() {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use wasm_bindgen::prelude::*;
+                use web_sys::window;
+
+                if let Some(win) = window() {
+                    let width = win
+                        .inner_width()
+                        .ok()
+                        .and_then(|w| w.as_f64())
+                        .unwrap_or(1280.0);
+                    sidebar_collapsed.set(width < breakpoints::MD_PX as f64);
+                }
+            }
+        }
+    });
+
+    // Toggle handler
+    let toggle_sidebar = move |_| {
+        sidebar_collapsed.set(!sidebar_collapsed());
+        manual_override.set(true); // User manually toggled
+        debug!("Sidebar toggled: collapsed={}", sidebar_collapsed());
+    };
+
+    let sidebar_width = if sidebar_collapsed() {
+        layout::SIDEBAR_COLLAPSED
+    } else {
+        layout::SIDEBAR_WIDTH
+    };
+
     rsx! {
         // Skip-to-content link for keyboard accessibility
         a {
@@ -46,7 +87,7 @@ pub fn AppShell(
                 typography::FONT_BODY
             ),
 
-            // Sidebar
+            // Sidebar (responsive, collapsible)
             aside {
                 style: format!(
                     "width: {}; \
@@ -56,12 +97,61 @@ pub fn AppShell(
                      display: flex; \
                      flex-direction: column; \
                      flex-shrink: 0; \
-                     overflow: hidden;",
-                    layout::SIDEBAR_WIDTH,
+                     overflow: hidden; \
+                     transition: width {};",
+                    sidebar_width,
                     gradients::SIDEBAR_BG,
-                    semantic::BORDER_SUBTLE
+                    semantic::BORDER_SUBTLE,
+                    motion::transition("width")
                 ),
-                {sidebar}
+
+                // Toggle button (always visible)
+                button {
+                    onclick: toggle_sidebar,
+                    "aria-label": if sidebar_collapsed() { "Expand sidebar" } else { "Collapse sidebar" },
+                    style: format!(
+                        "position: absolute; \
+                         top: {}; \
+                         right: {}; \
+                         z-index: 100; \
+                         width: 32px; \
+                         height: 32px; \
+                         display: flex; \
+                         align-items: center; \
+                         justify-content: center; \
+                         background: {}; \
+                         border: 1px solid {}; \
+                         border-radius: {}; \
+                         cursor: pointer; \
+                         transition: {}; \
+                         color: {};",
+                        spacing::MD,
+                        spacing::MD,
+                        semantic::BG_ELEVATED,
+                        semantic::BORDER_DEFAULT,
+                        radius::MD,
+                        motion::transition("all"),
+                        semantic::TEXT_SECONDARY
+                    ),
+                    if sidebar_collapsed() {
+                        "→" // Right arrow when collapsed
+                    } else {
+                        "←" // Left arrow when expanded
+                    }
+                }
+
+                // Sidebar content (hidden when collapsed via overflow)
+                div {
+                    style: format!(
+                        "flex: 1; \
+                         min-width: {}; \
+                         overflow: hidden; \
+                         display: {};",
+                        layout::SIDEBAR_WIDTH,
+                        if sidebar_collapsed() { "none" } else { "flex" }
+                    ),
+                    {sidebar}
+                }
             }
 
             // Main content area

@@ -315,6 +315,12 @@ pub fn SidebarSection(
                     if collapsible { "pointer" } else { "default" },
                     motion::transition("background")
                 ),
+                aria_expanded: if collapsible { if is_expanded() { "true" } else { "false" } } else { "" },
+                aria_label: if collapsible {
+                    format!("{} section, {}", title, if is_expanded() { "expanded" } else { "collapsed" })
+                } else {
+                    format!("{} section", title)
+                },
                 onclick: move |_| {
                     if collapsible {
                         is_expanded.set(!is_expanded());
@@ -327,6 +333,7 @@ pub fn SidebarSection(
 
                     if collapsible {
                         span {
+                            aria_hidden: "true",
                             style: format!(
                                 "font-size: {}; \
                                  color: {}; \
@@ -363,9 +370,11 @@ pub fn SidebarSection(
                 }
             }
 
-            // Content
+            // Content (tree container)
             if is_expanded() {
                 div {
+                    role: "tree",
+                    aria_label: title.clone(),
                     style: format!(
                         "animation: expandIn 150ms ease-out;",
                     ),
@@ -453,6 +462,8 @@ pub fn EntityNavItem(
 
     rsx! {
         button {
+            role: "treeitem",
+            tabindex: if selected { "0" } else { "-1" },
             style: format!(
                 "{} \
                  position: relative; \
@@ -478,7 +489,7 @@ pub fn EntityNavItem(
                 entity_type_label,
                 if unread_count > 0 { format!(", {} unread", unread_count) } else { String::new() }
             ),
-            aria_current: if selected { "page" } else { "false" },
+            aria_selected: if selected { "true" } else { "false" },
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
@@ -492,6 +503,7 @@ pub fn EntityNavItem(
 
             // Entity icon
             span {
+                aria_hidden: "true",
                 style: format!(
                     "width: 24px; \
                      height: 24px; \
@@ -780,9 +792,27 @@ pub fn ExpandableEntityNavItem(
     };
 
     let current_expanded = expanded;
+    let entity_type_label = match entity.entity_type {
+        UnifiedEntityType::Organization => "organization",
+        UnifiedEntityType::Project => "project",
+        UnifiedEntityType::Channel => "channel",
+        UnifiedEntityType::Group => "group",
+        UnifiedEntityType::Person => "contact",
+    };
 
     rsx! {
         div {
+            role: "treeitem",
+            aria_expanded: if has_children { if current_expanded { "true" } else { "false" } } else { "" },
+            aria_selected: if selected { "true" } else { "false" },
+            aria_label: format!(
+                "{} {}{}{}",
+                entity.name,
+                entity_type_label,
+                if has_children { format!(", {}", if current_expanded { "expanded" } else { "collapsed" }) } else { String::new() },
+                if unread_count > 0 { format!(", {} unread", unread_count) } else { String::new() }
+            ),
+            tabindex: if selected { "0" } else { "-1" },
             style: "display: flex; flex-direction: column;",
 
             // Main entity row
@@ -850,7 +880,7 @@ pub fn ExpandableEntityNavItem(
                             evt.stop_propagation();
                             ontoggle.call(!current_expanded);
                         },
-                        "▶"
+                        span { aria_hidden: "true", "▶" }
                     }
                 } else {
                     // Spacer to maintain alignment when no chevron
@@ -887,6 +917,7 @@ pub fn ExpandableEntityNavItem(
                     onclick: move |evt| onclick.call(evt),
 
                     span {
+                        aria_hidden: "true",
                         style: format!(
                             "width: 24px; \
                              height: 24px; \
@@ -951,6 +982,7 @@ pub fn ExpandableEntityNavItem(
             // Children container (animated)
             if current_expanded {
                 div {
+                    role: "group",
                     style: format!(
                         "padding-left: {}; \
                          animation: expandChildren 150ms ease-out;",

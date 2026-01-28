@@ -47,8 +47,6 @@ use design_tokens::{gradients, motion, palette, radius, semantic, spacing, typog
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
 static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
-
-
 /// Main entry point for the Dioxus application.
 ///
 /// Uses `#[tokio::main]` to provide an async runtime, allowing the use of

@@ -38,6 +38,8 @@ fn contact_route(contact: &UnifiedContact) -> Route {
 }
 
 use crate::components::{
+    // Accessibility announcer
+    AnnouncementMode,
     // New v2 components
     AppShell as AppShellV2,
     AuthLayoutV2,
@@ -58,8 +60,6 @@ use crate::components::{
     SecondaryButton,
     SidebarSearch,
     TypingIndicatorV2,
-    // Accessibility announcer
-    AnnouncementMode,
     use_announcer,
 };
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
@@ -1016,7 +1016,10 @@ pub fn MainAppV2(children: Element) -> Element {
                     Route::ContactDetailRoute { contact_id: _ } => "Contact details".to_string(),
                     Route::ContactChatRoute { contact_id: _ } => "Contact chat".to_string(),
                 };
-                announcer(format!("Navigated to {page_name}"), AnnouncementMode::Polite);
+                announcer(
+                    format!("Navigated to {page_name}"),
+                    AnnouncementMode::Polite,
+                );
                 last_route.set(current);
             }
         });

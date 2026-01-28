@@ -65,10 +65,11 @@ jobs:
 
       - name: Run MCP coverage check
         run: |
+          set -o pipefail
           cargo test -p communitas-mcp --test coverage_check -- --nocapture 2>&1 | tee coverage_output.txt
 
-          # Extract coverage percentage
-          COVERAGE=$(grep "Coverage:" coverage_output.txt | head -1 | grep -o '[0-9]*\.[0-9]*' || echo "0")
+          # Extract coverage percentage (handles both "85" and "85.5" formats)
+          COVERAGE=$(grep "Coverage:" coverage_output.txt | head -1 | grep -o '[0-9]*\(\.[0-9]*\)\?' || echo "0")
           echo "MCP_COVERAGE=$COVERAGE" >> $GITHUB_ENV
           echo "Coverage: $COVERAGE%"
 
@@ -167,6 +168,7 @@ jobs:
 
       - name: Run all MCP tests
         run: |
+          set -o pipefail
           cargo test -p communitas-mcp --all-features 2>&1 | tee test_output.txt
 
       - name: Generate test results summary

@@ -7,9 +7,9 @@
 //! - Rich composer
 //! - Typing indicators
 
-use dioxus::prelude::*;
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
 use crate::styles_v2::avatar;
+use dioxus::prelude::*;
 
 /// Message data structure for display.
 #[derive(Clone, PartialEq)]
@@ -23,6 +23,16 @@ pub struct MessageDisplay {
     pub is_edited: bool,
     pub reply_count: u32,
     pub reactions: Vec<ReactionDisplay>,
+    /// The message this is replying to, if any.
+    pub replied_to: Option<RepliedToDisplay>,
+}
+
+/// Simplified display info for replied-to messages.
+#[derive(Clone, PartialEq)]
+pub struct RepliedToDisplay {
+    pub id: String,
+    pub author_name: String,
+    pub content: String,
 }
 
 /// Reaction data for display.
@@ -35,9 +45,7 @@ pub struct ReactionDisplay {
 
 /// Chat view container with message list and composer.
 #[component]
-pub fn ChatView(
-    children: Element,
-) -> Element {
+pub fn ChatView(children: Element) -> Element {
     rsx! {
         div {
             style: format!(
@@ -54,9 +62,7 @@ pub fn ChatView(
 
 /// Message list container with auto-scroll.
 #[component]
-pub fn MessageListContainer(
-    children: Element,
-) -> Element {
+pub fn MessageListContainer(children: Element) -> Element {
     rsx! {
         div {
             style: format!(
@@ -82,8 +88,7 @@ pub fn MessageListContainer(
 #[component]
 pub fn MessageBubble(
     message: MessageDisplay,
-    #[props(default = false)]
-    show_avatar: bool,
+    #[props(default = false)] show_avatar: bool,
     on_reply: EventHandler<String>,
     on_react: EventHandler<String>,
 ) -> Element {
@@ -95,16 +100,25 @@ pub fn MessageBubble(
     let message_id_for_react = message.id.clone();
     let message_id_for_thread = message.id.clone();
 
-    let initials = message.author_name
+    let initials = message
+        .author_name
         .split_whitespace()
         .take(2)
         .filter_map(|w| w.chars().next())
         .collect::<String>()
         .to_uppercase();
 
-    let bubble_align = if message.is_own { "flex-end" } else { "flex-start" };
+    let bubble_align = if message.is_own {
+        "flex-end"
+    } else {
+        "flex-start"
+    };
     let bubble_bg = if message.is_own {
-        format!("background: linear-gradient(135deg, {} 0%, {} 100%);", palette::JADE_600, palette::JADE_700)
+        format!(
+            "background: linear-gradient(135deg, {} 0%, {} 100%);",
+            palette::JADE_600,
+            palette::JADE_700
+        )
     } else {
         format!("background: {};", semantic::BG_TERTIARY)
     };
@@ -180,6 +194,64 @@ pub fn MessageBubble(
                             format!("border-bottom-left-radius: {};", radius::SM)
                         }
                     ),
+
+                    // Reply context (if this message is a reply)
+                    if let Some(ref replied_to) = message.replied_to {
+                        div {
+                            style: format!(
+                                "display: flex; \
+                                 flex-direction: column; \
+                                 gap: {}; \
+                                 padding: {}; \
+                                 margin-bottom: {}; \
+                                 background: {}; \
+                                 border-left: 2px solid {}; \
+                                 border-radius: 0 {} {} 0; \
+                                 cursor: pointer; \
+                                 transition: {};",
+                                spacing::XXS,
+                                spacing::SM,
+                                spacing::SM,
+                                if message.is_own {
+                                    "rgba(0,0,0,0.15)"
+                                } else {
+                                    semantic::BG_SECONDARY
+                                },
+                                palette::JADE_500,
+                                radius::SM,
+                                radius::SM,
+                                motion::transition("background")
+                            ),
+                            // TODO: Add onclick to scroll to original message
+
+                            span {
+                                style: format!(
+                                    "font-size: {}; \
+                                     font-weight: {}; \
+                                     color: {};",
+                                    typography::SIZE_XS,
+                                    typography::WEIGHT_SEMIBOLD,
+                                    palette::JADE_400
+                                ),
+                                "{replied_to.author_name}"
+                            }
+
+                            p {
+                                style: format!(
+                                    "margin: 0; \
+                                     font-size: {}; \
+                                     color: {}; \
+                                     overflow: hidden; \
+                                     text-overflow: ellipsis; \
+                                     white-space: nowrap; \
+                                     max-width: 200px;",
+                                    typography::SIZE_XS,
+                                    if message.is_own { "rgba(255,255,255,0.7)" } else { semantic::TEXT_MUTED }
+                                ),
+                                "{replied_to.content}"
+                            }
+                        }
+                    }
 
                     // Author name (for group messages)
                     if !message.is_own && show_avatar {
@@ -499,8 +571,7 @@ pub fn DateSeparator(date: String) -> Element {
 pub fn MessageComposerV2(
     value: String,
     placeholder: String,
-    #[props(default = false)]
-    disabled: bool,
+    #[props(default = false)] disabled: bool,
     oninput: EventHandler<FormEvent>,
     onsubmit: EventHandler<()>,
 ) -> Element {
@@ -621,11 +692,7 @@ pub fn MessageComposerV2(
 
 /// Composer toolbar button.
 #[component]
-fn ComposerButton(
-    icon: String,
-    tooltip: String,
-    onclick: EventHandler<MouseEvent>,
-) -> Element {
+fn ComposerButton(icon: String, tooltip: String, onclick: EventHandler<MouseEvent>) -> Element {
     let mut hovered = use_signal(|| false);
 
     rsx! {
@@ -657,10 +724,7 @@ fn ComposerButton(
 
 /// Send button with primary styling.
 #[component]
-fn SendButton(
-    disabled: bool,
-    onclick: EventHandler<MouseEvent>,
-) -> Element {
+fn SendButton(disabled: bool, onclick: EventHandler<MouseEvent>) -> Element {
     let mut hovered = use_signal(|| false);
 
     let bg = if disabled {

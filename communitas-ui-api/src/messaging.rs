@@ -249,6 +249,7 @@ mod tests {
             id: "alice".to_string(),
             display_name: "Alice".to_string(),
             status: "available".to_string(),
+            presence: PresenceStatus::Online,
         };
         let cwp = ContactWithPresence {
             contact: contact.clone(),
@@ -271,6 +272,7 @@ mod tests {
             id: "bob".to_string(),
             display_name: "Bob".to_string(),
             status: "in_call".to_string(),
+            presence: PresenceStatus::Busy,
         };
         let cwp = ContactWithPresence {
             contact,

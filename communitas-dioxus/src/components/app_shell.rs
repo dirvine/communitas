@@ -5,10 +5,12 @@
 //! - Center: Main content area (flexible)
 //! - Right: Thread/detail panel (360px, collapsible)
 
-use dioxus::prelude::*;
-use crate::design_tokens::{gradients, layout, motion, palette, radius, semantic, spacing, typography};
-use crate::styles_v2::{flex, presence, avatar};
+use crate::design_tokens::{
+    gradients, layout, motion, palette, radius, semantic, spacing, typography,
+};
+use crate::styles_v2::{avatar, flex, presence};
 use communitas_ui_api::{PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType};
+use dioxus::prelude::*;
 
 /// Main app shell with 3-column layout.
 #[component]
@@ -113,12 +115,9 @@ pub fn AppShell(
 #[component]
 pub fn ProfileHeader(
     display_name: String,
-    #[props(default)]
-    pubkey_fingerprint: Option<String>,
-    #[props(default = PresenceStatus::Online)]
-    presence: PresenceStatus,
-    #[props(default = false)]
-    is_networking: bool,
+    #[props(default)] pubkey_fingerprint: Option<String>,
+    #[props(default = PresenceStatus::Online)] presence: PresenceStatus,
+    #[props(default = false)] is_networking: bool,
 ) -> Element {
     let initials = display_name
         .split_whitespace()
@@ -272,12 +271,9 @@ pub fn ProfileHeader(
 #[component]
 pub fn SidebarSection(
     title: String,
-    #[props(default)]
-    action: Option<Element>,
-    #[props(default = true)]
-    collapsible: bool,
-    #[props(default = true)]
-    expanded: bool,
+    #[props(default)] action: Option<Element>,
+    #[props(default = true)] collapsible: bool,
+    #[props(default = true)] expanded: bool,
     children: Element,
 ) -> Element {
     let mut is_expanded = use_signal(|| expanded);
@@ -382,10 +378,8 @@ pub fn SidebarSection(
 #[component]
 pub fn EntityNavItem(
     entity: UnifiedEntity,
-    #[props(default = false)]
-    selected: bool,
-    #[props(default = 0)]
-    unread_count: u32,
+    #[props(default = false)] selected: bool,
+    #[props(default = 0)] unread_count: u32,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
@@ -432,6 +426,14 @@ pub fn EntityNavItem(
         String::new()
     };
 
+    let entity_type_label = match entity.entity_type {
+        UnifiedEntityType::Organization => "organization",
+        UnifiedEntityType::Project => "project",
+        UnifiedEntityType::Channel => "channel",
+        UnifiedEntityType::Group => "group",
+        UnifiedEntityType::Person => "contact",
+    };
+
     rsx! {
         button {
             style: format!(
@@ -453,6 +455,13 @@ pub fn EntityNavItem(
                 bg_color,
                 spacing::XXS
             ),
+            aria_label: format!(
+                "{} {}{}",
+                entity.name,
+                entity_type_label,
+                if unread_count > 0 { format!(", {} unread", unread_count) } else { String::new() }
+            ),
+            aria_current: if selected { "page" } else { "false" },
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
@@ -532,17 +541,15 @@ pub fn EntityNavItem(
 #[component]
 pub fn ContactNavItem(
     contact: UnifiedContact,
-    #[props(default = false)]
-    selected: bool,
-    #[props(default = 0)]
-    unread_count: u32,
-    #[props(default = PresenceStatus::Offline)]
-    presence: PresenceStatus,
+    #[props(default = false)] selected: bool,
+    #[props(default = 0)] unread_count: u32,
+    #[props(default = PresenceStatus::Offline)] presence: PresenceStatus,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
 
-    let initials = contact.display_name
+    let initials = contact
+        .display_name
         .split_whitespace()
         .take(2)
         .filter_map(|word| word.chars().next())
@@ -562,6 +569,13 @@ pub fn ContactNavItem(
         format!("background: {};", semantic::BG_HOVER)
     } else {
         "background: transparent;".to_string()
+    };
+
+    let presence_label = match presence {
+        PresenceStatus::Online => "online",
+        PresenceStatus::Away => "away",
+        PresenceStatus::Busy => "busy",
+        PresenceStatus::Offline | PresenceStatus::Unknown => "offline",
     };
 
     rsx! {
@@ -585,6 +599,13 @@ pub fn ContactNavItem(
                 bg_color,
                 spacing::XXS
             ),
+            aria_label: format!(
+                "{}, {}{}",
+                contact.display_name,
+                presence_label,
+                if unread_count > 0 { format!(", {} unread messages", unread_count) } else { String::new() }
+            ),
+            aria_current: if selected { "page" } else { "false" },
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
@@ -676,11 +697,278 @@ pub fn ContactNavItem(
     }
 }
 
+/// Expandable entity navigation item for hierarchical display.
+///
+/// Used for organizations/communities that can have children (channels, projects, groups).
+/// Shows a chevron that rotates when expanded, and indented children when open.
+#[component]
+pub fn ExpandableEntityNavItem(
+    entity: UnifiedEntity,
+    /// Child elements to render when expanded
+    #[props(default)]
+    children: Element,
+    #[props(default = false)] selected: bool,
+    #[props(default = 0)] unread_count: u32,
+    #[props(default = false)] expanded: bool,
+    /// Whether this entity has children to show
+    #[props(default = false)]
+    has_children: bool,
+    /// Click handler for the entity row (navigation)
+    onclick: EventHandler<MouseEvent>,
+    /// Toggle handler for expand/collapse
+    ontoggle: EventHandler<bool>,
+) -> Element {
+    let mut hovered = use_signal(|| false);
+
+    let entity_color = match entity.entity_type {
+        UnifiedEntityType::Organization => semantic::ENTITY_ORG,
+        UnifiedEntityType::Project => semantic::ENTITY_PROJECT,
+        UnifiedEntityType::Channel => semantic::ENTITY_CHANNEL,
+        UnifiedEntityType::Group => semantic::ENTITY_GROUP,
+        UnifiedEntityType::Person => semantic::ENTITY_PERSON,
+    };
+
+    let icon = match entity.entity_type {
+        UnifiedEntityType::Organization => "◆",
+        UnifiedEntityType::Project => "◈",
+        UnifiedEntityType::Channel => "#",
+        UnifiedEntityType::Group => "◎",
+        UnifiedEntityType::Person => "◉",
+    };
+
+    let bg_color = if selected {
+        format!("background: {}20;", entity_color)
+    } else if hovered() {
+        format!("background: {};", semantic::BG_HOVER)
+    } else {
+        "background: transparent;".to_string()
+    };
+
+    let left_indicator = if selected {
+        format!(
+            "position: absolute; \
+             left: 0; \
+             top: 50%; \
+             transform: translateY(-50%); \
+             width: 3px; \
+             height: 60%; \
+             background: {}; \
+             border-radius: 0 {} {} 0;",
+            entity_color,
+            radius::FULL,
+            radius::FULL
+        )
+    } else {
+        String::new()
+    };
+
+    let current_expanded = expanded;
+
+    rsx! {
+        div {
+            style: "display: flex; flex-direction: column;",
+
+            // Main entity row
+            div {
+                style: format!(
+                    "{} \
+                     position: relative; \
+                     width: 100%; \
+                     padding: {} {}; \
+                     border: none; \
+                     border-radius: {}; \
+                     cursor: pointer; \
+                     transition: {}; \
+                     {} \
+                     margin: {} 0;",
+                    flex::start(),
+                    spacing::SM,
+                    spacing::BASE,
+                    radius::MD,
+                    motion::transition("background"),
+                    bg_color,
+                    spacing::XXS
+                ),
+                onmouseenter: move |_| hovered.set(true),
+                onmouseleave: move |_| hovered.set(false),
+
+                // Selection indicator
+                if selected {
+                    div {
+                        style: "{left_indicator}",
+                    }
+                }
+
+                // Chevron button (only if has children)
+                if has_children {
+                    button {
+                        style: format!(
+                            "width: 20px; \
+                             height: 20px; \
+                             display: flex; \
+                             align-items: center; \
+                             justify-content: center; \
+                             background: none; \
+                             border: none; \
+                             cursor: pointer; \
+                             padding: 0; \
+                             margin-right: {}; \
+                             color: {}; \
+                             font-size: {}; \
+                             transform: rotate({}); \
+                             transition: {};",
+                            spacing::XXS,
+                            semantic::TEXT_MUTED,
+                            typography::SIZE_XS,
+                            if current_expanded { "90deg" } else { "0deg" },
+                            motion::transition("transform")
+                        ),
+                        aria_label: if current_expanded {
+                            format!("Collapse {}", entity.name)
+                        } else {
+                            format!("Expand {}", entity.name)
+                        },
+                        aria_expanded: if current_expanded { "true" } else { "false" },
+                        onclick: move |evt| {
+                            evt.stop_propagation();
+                            ontoggle.call(!current_expanded);
+                        },
+                        "▶"
+                    }
+                } else {
+                    // Spacer to maintain alignment when no chevron
+                    div {
+                        style: format!("width: 20px; margin-right: {};", spacing::XXS),
+                    }
+                }
+
+                // Entity icon (clickable for navigation)
+                button {
+                    style: format!(
+                        "display: flex; \
+                         align-items: center; \
+                         flex: 1; \
+                         min-width: 0; \
+                         background: none; \
+                         border: none; \
+                         cursor: pointer; \
+                         padding: 0;",
+                    ),
+                    aria_label: format!(
+                        "Navigate to {} {}{}",
+                        entity.name,
+                        match entity.entity_type {
+                            UnifiedEntityType::Organization => "organization",
+                            UnifiedEntityType::Project => "project",
+                            UnifiedEntityType::Channel => "channel",
+                            UnifiedEntityType::Group => "group",
+                            UnifiedEntityType::Person => "contact",
+                        },
+                        if unread_count > 0 { format!(", {} unread", unread_count) } else { String::new() }
+                    ),
+                    aria_current: if selected { "page" } else { "false" },
+                    onclick: move |evt| onclick.call(evt),
+
+                    span {
+                        style: format!(
+                            "width: 24px; \
+                             height: 24px; \
+                             display: flex; \
+                             align-items: center; \
+                             justify-content: center; \
+                             font-size: {}; \
+                             color: {}; \
+                             margin-right: {};",
+                            typography::SIZE_BASE,
+                            entity_color,
+                            spacing::SM
+                        ),
+                        "{icon}"
+                    }
+
+                    // Entity name
+                    span {
+                        style: format!(
+                            "flex: 1; \
+                             text-align: left; \
+                             font-size: {}; \
+                             font-weight: {}; \
+                             color: {}; \
+                             white-space: nowrap; \
+                             overflow: hidden; \
+                             text-overflow: ellipsis;",
+                            typography::SIZE_SM,
+                            if selected { typography::WEIGHT_SEMIBOLD } else { typography::WEIGHT_MEDIUM },
+                            if selected { semantic::TEXT_PRIMARY } else { semantic::TEXT_SECONDARY }
+                        ),
+                        "{entity.name}"
+                    }
+                }
+
+                // Unread badge
+                if unread_count > 0 {
+                    span {
+                        style: format!(
+                            "min-width: 20px; \
+                             height: 20px; \
+                             display: flex; \
+                             align-items: center; \
+                             justify-content: center; \
+                             padding: 0 {}; \
+                             background: {}; \
+                             color: white; \
+                             font-size: {}; \
+                             font-weight: {}; \
+                             border-radius: {};",
+                            spacing::SM,
+                            semantic::PRIMARY,
+                            typography::SIZE_XS,
+                            typography::WEIGHT_SEMIBOLD,
+                            radius::FULL
+                        ),
+                        "{unread_count}"
+                    }
+                }
+            }
+
+            // Children container (animated)
+            if current_expanded {
+                div {
+                    style: format!(
+                        "padding-left: {}; \
+                         animation: expandChildren 150ms ease-out;",
+                        spacing::XL
+                    ),
+                    {children}
+                }
+            }
+        }
+
+        style {
+            r#"
+            @keyframes expandChildren {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(-4px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
+            }}
+            "#
+        }
+    }
+}
+
 /// Quick action button for sidebar sections.
 #[component]
 pub fn QuickActionButton(
     icon: String,
     onclick: EventHandler<MouseEvent>,
+    /// Accessible label describing the button's action
+    #[props(default = "Action".to_string())]
+    label: String,
 ) -> Element {
     let mut hovered = use_signal(|| false);
 
@@ -705,6 +993,8 @@ pub fn QuickActionButton(
                 typography::SIZE_SM,
                 motion::transition("all")
             ),
+            aria_label: "{label}",
+            title: "{label}",
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
@@ -757,9 +1047,11 @@ pub fn SidebarSearch(
                 }
 
                 input {
+                    id: "global-search-input",
                     r#type: "search",
                     placeholder: "{placeholder}",
                     value: "{value}",
+                    aria_label: "Search spaces and contacts. Press Command K or Control K to focus.",
                     style: format!(
                         "flex: 1; \
                          background: transparent; \
@@ -775,6 +1067,31 @@ pub fn SidebarSearch(
                     onfocus: move |_| focused.set(true),
                     onblur: move |_| focused.set(false),
                     oninput: move |evt| oninput.call(evt),
+                }
+
+                // Keyboard shortcut hint (shown when not focused)
+                if !focused() && value.is_empty() {
+                    kbd {
+                        style: format!(
+                            "padding: 2px {}; \
+                             background: {}; \
+                             border: 1px solid {}; \
+                             border-radius: {}; \
+                             font-family: {}; \
+                             font-size: {}; \
+                             color: {}; \
+                             opacity: 0.7;",
+                            spacing::XS,
+                            semantic::BG_SECONDARY,
+                            semantic::BORDER_SUBTLE,
+                            radius::SM,
+                            typography::FONT_MONO,
+                            typography::SIZE_XS,
+                            semantic::TEXT_MUTED
+                        ),
+                        title: "Press ⌘K or Ctrl+K to search",
+                        "⌘K"
+                    }
                 }
             }
         }

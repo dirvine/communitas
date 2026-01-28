@@ -6,16 +6,15 @@
 //! - Smooth micro-interactions
 //! - Accessible keyboard navigation
 
-use dioxus::prelude::*;
-use crate::design_tokens::{gradients, motion, palette, radius, semantic, shadow, spacing, typography};
+use crate::design_tokens::{
+    gradients, motion, palette, radius, semantic, shadow, spacing, typography,
+};
 use crate::styles_v2::{self as styles, heading, text};
+use dioxus::prelude::*;
 
 /// Logo component with subtle glow animation.
 #[component]
-pub fn Logo(
-    #[props(default = false)]
-    large: bool,
-) -> Element {
+pub fn Logo(#[props(default = false)] large: bool) -> Element {
     let size = if large { "48px" } else { "32px" };
     let icon_size = if large { "28px" } else { "18px" };
 
@@ -148,8 +147,7 @@ pub fn AuthBackground() -> Element {
 pub fn AuthLayoutV2(
     title: String,
     subtitle: Option<String>,
-    #[props(default)]
-    footer: Option<Element>,
+    #[props(default)] footer: Option<Element>,
     children: Element,
 ) -> Element {
     rsx! {
@@ -273,14 +271,11 @@ pub fn AuthLayoutV2(
 #[component]
 pub fn FormField(
     label: String,
-    #[props(default = "text".to_string())]
-    input_type: String,
+    #[props(default = "text".to_string())] input_type: String,
     placeholder: Option<String>,
     value: String,
-    #[props(default = false)]
-    disabled: bool,
-    #[props(default = false)]
-    required: bool,
+    #[props(default = false)] disabled: bool,
+    #[props(default = false)] required: bool,
     oninput: EventHandler<FormEvent>,
 ) -> Element {
     let mut focused = use_signal(|| false);
@@ -368,10 +363,8 @@ pub fn FormTextarea(
     label: String,
     placeholder: Option<String>,
     value: String,
-    #[props(default = false)]
-    disabled: bool,
-    #[props(default = 4)]
-    rows: u32,
+    #[props(default = false)] disabled: bool,
+    #[props(default = 4)] rows: u32,
     oninput: EventHandler<FormEvent>,
 ) -> Element {
     let mut focused = use_signal(|| false);
@@ -442,8 +435,7 @@ pub fn FormTextarea(
 pub fn FormSelect(
     label: String,
     value: String,
-    #[props(default = false)]
-    disabled: bool,
+    #[props(default = false)] disabled: bool,
     onchange: EventHandler<FormEvent>,
     children: Element,
 ) -> Element {
@@ -527,12 +519,9 @@ pub fn FormSelect(
 /// Primary action button.
 #[component]
 pub fn PrimaryButton(
-    #[props(default = false)]
-    disabled: bool,
-    #[props(default = false)]
-    loading: bool,
-    #[props(default = "submit".to_string())]
-    button_type: String,
+    #[props(default = false)] disabled: bool,
+    #[props(default = false)] loading: bool,
+    #[props(default = "submit".to_string())] button_type: String,
     onclick: Option<EventHandler<MouseEvent>>,
     children: Element,
 ) -> Element {
@@ -628,8 +617,7 @@ pub fn PrimaryButton(
 /// Secondary/ghost button.
 #[component]
 pub fn SecondaryButton(
-    #[props(default = false)]
-    disabled: bool,
+    #[props(default = false)] disabled: bool,
     onclick: Option<EventHandler<MouseEvent>>,
     children: Element,
 ) -> Element {
@@ -681,10 +669,7 @@ pub fn SecondaryButton(
 
 /// Link styled as text.
 #[component]
-pub fn TextLink(
-    href: String,
-    children: Element,
-) -> Element {
+pub fn TextLink(href: String, children: Element) -> Element {
     let mut hovered = use_signal(|| false);
 
     rsx! {
@@ -747,10 +732,17 @@ pub fn PasswordStrength(password: String) -> Element {
     let has_digit = password.chars().any(|c| c.is_ascii_digit());
     let has_special = password.chars().any(|c| !c.is_alphanumeric());
 
-    let score = [len >= 8, len >= 12, has_upper, has_lower, has_digit, has_special]
-        .iter()
-        .filter(|&&b| b)
-        .count();
+    let score = [
+        len >= 8,
+        len >= 12,
+        has_upper,
+        has_lower,
+        has_digit,
+        has_special,
+    ]
+    .iter()
+    .filter(|&&b| b)
+    .count();
 
     let (strength, color) = match score {
         0..=1 => ("Weak", palette::ROSE_400),

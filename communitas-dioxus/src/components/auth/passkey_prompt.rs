@@ -7,6 +7,7 @@ use dioxus::prelude::*;
 
 /// State of the biometric authentication prompt.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)] // All variants are part of the public API for future biometric auth UI
 pub enum BiometricState {
     /// Waiting for user to initiate
     Idle,

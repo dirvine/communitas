@@ -120,7 +120,10 @@ fn recovery_tools_correctly_reference_identity() {
 
     // These tools correctly work with actual identity, so "identity" is appropriate
     assert!(
-        create_identity.description.to_lowercase().contains("identity"),
+        create_identity
+            .description
+            .to_lowercase()
+            .contains("identity"),
         "create_identity should reference 'identity' since it creates the actual cryptographic identity"
     );
 
@@ -130,7 +133,10 @@ fn recovery_tools_correctly_reference_identity() {
         .expect("recover_identity tool should exist");
 
     assert!(
-        recover_identity.description.to_lowercase().contains("identity"),
+        recover_identity
+            .description
+            .to_lowercase()
+            .contains("identity"),
         "recover_identity should reference 'identity' since it recovers the actual cryptographic identity"
     );
 }

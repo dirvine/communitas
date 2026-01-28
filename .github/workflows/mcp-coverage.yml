@@ -1,0 +1,187 @@
+name: MCP Coverage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'communitas-mcp/**'
+      - '.github/workflows/mcp-coverage.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'communitas-mcp/**'
+      - '.github/workflows/mcp-coverage.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: mcp-coverage-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: MCP Tool Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          df -h
+
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libpipewire-0.3-dev \
+            libasound2-dev \
+            libdbus-1-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          cache-on-failure: false
+
+      - name: Run MCP coverage check
+        run: |
+          cargo test -p communitas-mcp --test coverage_check -- --nocapture 2>&1 | tee coverage_output.txt
+
+          # Extract coverage percentage
+          COVERAGE=$(grep "Coverage:" coverage_output.txt | head -1 | grep -o '[0-9]*\.[0-9]*%' || echo "0%")
+          echo "MCP_COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          echo "Coverage: $COVERAGE"
+
+      - name: Run MCP test generator report
+        run: |
+          cargo test -p communitas-mcp --test generate_stubs generate_test_stubs -- --nocapture 2>&1 | tee generator_output.txt
+
+      - name: Collect coverage artifacts
+        run: |
+          mkdir -p coverage-report
+          cp communitas-mcp/tests/coverage/report.json coverage-report/ 2>/dev/null || true
+          cp communitas-mcp/tests/coverage/REPORT.md coverage-report/ 2>/dev/null || true
+          cp communitas-mcp/tests/generator/REPORT.md coverage-report/generator-report.md 2>/dev/null || true
+          cp communitas-mcp/tests/inventory/tools.json coverage-report/ 2>/dev/null || true
+          cp coverage_output.txt coverage-report/
+          cp generator_output.txt coverage-report/
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-coverage-report
+          path: coverage-report/
+          retention-days: 30
+
+      - name: Create coverage summary
+        run: |
+          echo "## MCP Tool Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Coverage**: ${{ env.MCP_COVERAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f communitas-mcp/tests/coverage/REPORT.md ]; then
+            echo "### Detailed Report" >> $GITHUB_STEP_SUMMARY
+            cat communitas-mcp/tests/coverage/REPORT.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check coverage threshold
+        run: |
+          # Extract numeric coverage value
+          COVERAGE_NUM=$(echo "${{ env.MCP_COVERAGE }}" | grep -o '[0-9]*\.[0-9]*' || echo "0")
+          THRESHOLD=60
+
+          echo "Current coverage: $COVERAGE_NUM%"
+          echo "Threshold: $THRESHOLD%"
+
+          # Check if coverage meets threshold (using bc for float comparison)
+          if (( $(echo "$COVERAGE_NUM < $THRESHOLD" | bc -l) )); then
+            echo "::warning::MCP coverage ($COVERAGE_NUM%) is below threshold ($THRESHOLD%)"
+          else
+            echo "Coverage meets threshold!"
+          fi
+
+  test-matrix:
+    name: MCP Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: coverage
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            libssl-dev \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libpipewire-0.3-dev \
+            libasound2-dev \
+            libdbus-1-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          cache-on-failure: false
+
+      - name: Run all MCP tests
+        run: |
+          cargo test -p communitas-mcp --all-features 2>&1 | tee test_output.txt
+
+      - name: Generate test results summary
+        if: always()
+        run: |
+          echo "## MCP Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count test results
+          PASSED=$(grep -c "test .* ok" test_output.txt 2>/dev/null || echo "0")
+          FAILED=$(grep -c "test .* FAILED" test_output.txt 2>/dev/null || echo "0")
+          IGNORED=$(grep -c "test .* ignored" test_output.txt 2>/dev/null || echo "0")
+
+          echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ignored | $IGNORED |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-test-output
+          path: test_output.txt
+          retention-days: 7

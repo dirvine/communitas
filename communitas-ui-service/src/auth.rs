@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use communitas_core::ui_core::{
-    generate_id_words, CommunitasApi, UiRecentIdentity, UiSessionInfo,
+    CommunitasApi, UiRecentIdentity, UiSessionInfo, generate_id_words,
     recover_identity_from_mnemonic,
 };
 use std::env;

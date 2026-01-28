@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use communitas_core::ui_core::{CommunitasApi, UiContact, UiEntity, UiEntityType};
 use communitas_ui_api::{
-    OrganizationCategory, UnifiedContact, UnifiedEntity, UnifiedEntityType, UnifiedIdentity,
+    OrganizationCategory, PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType,
+    UnifiedIdentity,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
@@ -136,6 +137,12 @@ impl DirectoryService {
             display_name
         };
 
+        let presence = if is_online {
+            PresenceStatus::Online
+        } else {
+            PresenceStatus::Offline
+        };
+
         UnifiedContact {
             id,
             display_name: resolved_name,
@@ -144,6 +151,7 @@ impl DirectoryService {
             } else {
                 "offline".to_string()
             },
+            presence,
         }
     }
 

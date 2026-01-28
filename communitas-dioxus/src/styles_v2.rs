@@ -2,7 +2,9 @@
 //!
 //! Provides composable style functions for Dioxus components.
 
-use crate::design_tokens::{gradients, motion, palette, radius, semantic, shadow, spacing, typography};
+use crate::design_tokens::{
+    gradients, motion, palette, radius, semantic, shadow, spacing, typography,
+};
 
 /// Glass card style - warm-tinted frosted glass effect.
 pub fn glass_card() -> String {
@@ -541,10 +543,7 @@ pub mod avatar {
     }
 
     pub fn with_bg(bg_color: &str, text_color: &str) -> String {
-        format!(
-            "background-color: {}; color: {};",
-            bg_color, text_color
-        )
+        format!("background-color: {}; color: {};", bg_color, text_color)
     }
 }
 

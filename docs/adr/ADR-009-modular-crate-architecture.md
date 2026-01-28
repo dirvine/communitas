@@ -120,7 +120,7 @@ The core crate is platform-agnostic and UI-free:
 // communitas-core/src/lib.rs
 
 // Identity and addressing
-pub mod identity;          // Four-word system
+pub mod identity;          // Public key identity (ML-DSA-65)
 pub mod types;             // UserProfile, DeviceType
 
 // Data management
@@ -155,7 +155,7 @@ Exposes core functionality to the shared UI service and Dioxus front-end:
 
 impl CommunitasApi {
     // Authentication
-    pub async fn auth_login(&self, four_words: String, password: String) -> Result<UiSessionInfo, String>;
+    pub async fn auth_login(&self, pubkey_hex: String, password: String) -> Result<UiSessionInfo, String>;
     pub async fn auth_logout(&self) -> Result<(), String>;
 
     // Entities

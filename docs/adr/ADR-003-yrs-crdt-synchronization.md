@@ -76,9 +76,10 @@ Doc {
     "metadata": YMap {
         "entity_id": String,
         "name": String,
-        "four_words": String,
+        "pubkey_hex": String,           // Entity identity
+        "connection_words": String,     // Optional - IP:port encoding for P2P
         "created_at": i64,
-        "website_root": String,  // Optional BLAKE3 hash
+        "website_root": String,         // Optional BLAKE3 hash
     },
     "members": YMap<member_id, MemberData>,
     "active_members": YMap<member_id, bool>,

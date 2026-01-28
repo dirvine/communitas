@@ -1,0 +1,344 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-01-27",
+  "total_tools": 197,
+  "categories": {
+    "identity": {
+      "description": "Authentication, profiles, and identity management",
+      "tools": [
+        {"name": "create_identity", "description": "Create a new identity with mnemonic"},
+        {"name": "recover_identity", "description": "Recover identity from mnemonic"},
+        {"name": "validate_mnemonic", "description": "Validate mnemonic words"},
+        {"name": "get_session", "description": "Get current session info"},
+        {"name": "get_profile", "description": "Get user profile"},
+        {"name": "update_profile", "description": "Update user profile"},
+        {"name": "workspace_init", "description": "Initialize workspace"},
+        {"name": "export_audit_log", "description": "Export audit log"},
+        {"name": "get_audit_log", "description": "Get audit log entries"}
+      ]
+    },
+    "entities": {
+      "description": "Groups, channels, projects, and entity management",
+      "tools": [
+        {"name": "create_entity", "description": "Create a new entity"},
+        {"name": "get_entity", "description": "Get entity by ID"},
+        {"name": "update_entity", "description": "Update entity properties"},
+        {"name": "delete_entity", "description": "Delete an entity"},
+        {"name": "list_entities", "description": "List all entities"},
+        {"name": "join_entity", "description": "Join an entity"},
+        {"name": "group", "description": "Entity type: group"},
+        {"name": "channel", "description": "Entity type: channel"},
+        {"name": "project", "description": "Entity type: project"},
+        {"name": "person", "description": "Entity type: person"},
+        {"name": "entities", "description": "Query entities"}
+      ]
+    },
+    "members": {
+      "description": "Membership and invitation management",
+      "tools": [
+        {"name": "add_member", "description": "Add member to entity"},
+        {"name": "remove_member", "description": "Remove member from entity"},
+        {"name": "list_members", "description": "List entity members"},
+        {"name": "create_invite", "description": "Create invitation"},
+        {"name": "accept_invite", "description": "Accept invitation"},
+        {"name": "list_pending_invites", "description": "List pending invitations"},
+        {"name": "assign_user", "description": "Assign user to item"},
+        {"name": "unassign_user", "description": "Unassign user from item"}
+      ]
+    },
+    "contacts": {
+      "description": "Contact management and favorites",
+      "tools": [
+        {"name": "create_contact", "description": "Create a new contact"},
+        {"name": "get_contact", "description": "Get contact by ID"},
+        {"name": "update_contact", "description": "Update contact info"},
+        {"name": "delete_contact", "description": "Delete a contact"},
+        {"name": "list_contacts", "description": "List all contacts"},
+        {"name": "search_contacts", "description": "Search contacts"},
+        {"name": "link_contact", "description": "Link contact to identity"},
+        {"name": "set_favourite_contact", "description": "Add to favorites"},
+        {"name": "remove_favourite_contact", "description": "Remove from favorites"},
+        {"name": "list_favourite_contacts", "description": "List favorite contacts"},
+        {"name": "get_contact_presence", "description": "Get contact presence"},
+        {"name": "contacts", "description": "Query contacts"},
+        {"name": "favorites", "description": "Query favorites"}
+      ]
+    },
+    "messaging": {
+      "description": "Messages, threads, and reactions",
+      "tools": [
+        {"name": "send_message", "description": "Send a message"},
+        {"name": "edit_message", "description": "Edit a message"},
+        {"name": "delete_message", "description": "Delete a message"},
+        {"name": "get_messages", "description": "Get messages by ID"},
+        {"name": "list_messages", "description": "List messages"},
+        {"name": "search_messages", "description": "Search messages"},
+        {"name": "create_thread", "description": "Create a thread"},
+        {"name": "list_threads", "description": "List threads"},
+        {"name": "get_thread_messages", "description": "Get thread messages"},
+        {"name": "mark_thread_read", "description": "Mark thread as read"},
+        {"name": "pin_thread", "description": "Pin a thread"},
+        {"name": "unpin_thread", "description": "Unpin a thread"},
+        {"name": "get_pinned_threads", "description": "Get pinned threads"},
+        {"name": "add_reaction", "description": "Add reaction to message"},
+        {"name": "remove_reaction", "description": "Remove reaction"},
+        {"name": "get_reactions", "description": "Get message reactions"},
+        {"name": "get_available_reactions", "description": "Get available reactions"},
+        {"name": "send_typing_indicator", "description": "Send typing indicator"},
+        {"name": "get_typing_users", "description": "Get typing users"},
+        {"name": "unread", "description": "Mark as unread"}
+      ]
+    },
+    "offline_queue": {
+      "description": "Offline message queue management",
+      "tools": [
+        {"name": "get_pending_messages", "description": "Get pending messages"},
+        {"name": "queue_offline_message", "description": "Queue message for offline"},
+        {"name": "retry_pending_messages", "description": "Retry pending messages"},
+        {"name": "cancel_pending_message", "description": "Cancel pending message"},
+        {"name": "retry", "description": "Retry operation"},
+        {"name": "skip", "description": "Skip operation"}
+      ]
+    },
+    "kanban": {
+      "description": "Kanban boards, columns, cards, and tags",
+      "tools": [
+        {"name": "create_kanban_board", "description": "Create a board"},
+        {"name": "get_kanban_board", "description": "Get board by ID"},
+        {"name": "update_kanban_board", "description": "Update board"},
+        {"name": "delete_kanban_board", "description": "Delete board"},
+        {"name": "list_kanban_boards", "description": "List boards"},
+        {"name": "create_kanban_column", "description": "Create column"},
+        {"name": "get_kanban_column", "description": "Get column by ID"},
+        {"name": "update_kanban_column", "description": "Update column"},
+        {"name": "delete_kanban_column", "description": "Delete column"},
+        {"name": "move_kanban_column", "description": "Move column"},
+        {"name": "list_kanban_columns", "description": "List columns"},
+        {"name": "create_kanban_card", "description": "Create card"},
+        {"name": "get_kanban_card", "description": "Get card by ID"},
+        {"name": "update_kanban_card", "description": "Update card"},
+        {"name": "delete_kanban_card", "description": "Delete card"},
+        {"name": "move_kanban_card", "description": "Move card"},
+        {"name": "list_kanban_cards", "description": "List cards"},
+        {"name": "change_card_state", "description": "Change card state"},
+        {"name": "create_kanban_tag", "description": "Create tag"},
+        {"name": "list_kanban_tags", "description": "List tags"},
+        {"name": "tag_card", "description": "Tag a card"},
+        {"name": "untag_card", "description": "Remove tag from card"}
+      ]
+    },
+    "kanban_extras": {
+      "description": "Kanban comments and steps",
+      "tools": [
+        {"name": "add_comment", "description": "Add comment to card"},
+        {"name": "delete_comment", "description": "Delete comment"},
+        {"name": "list_comments", "description": "List comments"},
+        {"name": "add_step", "description": "Add checklist step"},
+        {"name": "delete_step", "description": "Delete step"},
+        {"name": "get_step", "description": "Get step by ID"},
+        {"name": "toggle_step", "description": "Toggle step completion"}
+      ]
+    },
+    "drive": {
+      "description": "File and directory operations",
+      "tools": [
+        {"name": "list_files", "description": "List files in directory"},
+        {"name": "read_file", "description": "Read file contents"},
+        {"name": "write_file", "description": "Write file contents"},
+        {"name": "delete_file", "description": "Delete a file"},
+        {"name": "move_file", "description": "Move/rename file"},
+        {"name": "copy_file", "description": "Copy file"},
+        {"name": "create_directory", "description": "Create directory"},
+        {"name": "list_disks", "description": "List virtual disks"},
+        {"name": "get_disk_stats", "description": "Get disk statistics"},
+        {"name": "get_file_preview", "description": "Get file preview"},
+        {"name": "get_media_metadata", "description": "Get media metadata"}
+      ]
+    },
+    "drive_upload": {
+      "description": "File upload operations",
+      "tools": [
+        {"name": "upload_with_metadata", "description": "Upload with metadata"},
+        {"name": "start_streaming_upload", "description": "Start streaming upload"},
+        {"name": "get_upload_progress", "description": "Get upload progress"},
+        {"name": "cancel_upload", "description": "Cancel upload"},
+        {"name": "resume_upload", "description": "Resume interrupted upload"}
+      ]
+    },
+    "drive_download": {
+      "description": "File download operations",
+      "tools": [
+        {"name": "start_streaming_download", "description": "Start streaming download"},
+        {"name": "get_download_progress", "description": "Get download progress"},
+        {"name": "cancel_download", "description": "Cancel download"},
+        {"name": "resume_download", "description": "Resume interrupted download"}
+      ]
+    },
+    "drive_sharing": {
+      "description": "File sharing links",
+      "tools": [
+        {"name": "create_share_link", "description": "Create share link"},
+        {"name": "revoke_share_link", "description": "Revoke share link"},
+        {"name": "list_share_links", "description": "List share links"},
+        {"name": "get_file_share_links", "description": "Get file share links"}
+      ]
+    },
+    "drive_staging": {
+      "description": "Upload staging and conflict resolution",
+      "tools": [
+        {"name": "stage_upload", "description": "Stage file for upload"},
+        {"name": "get_staged_upload", "description": "Get staged upload"},
+        {"name": "list_staged_uploads", "description": "List staged uploads"},
+        {"name": "remove_staged_upload", "description": "Remove staged upload"},
+        {"name": "retry_staged_upload", "description": "Retry staged upload"},
+        {"name": "get_staging_status", "description": "Get staging status"},
+        {"name": "sync_staging_queue", "description": "Sync staging queue"},
+        {"name": "resolve_staging_conflict", "description": "Resolve staging conflict"},
+        {"name": "keep_local", "description": "Keep local version"},
+        {"name": "keep_remote", "description": "Keep remote version"},
+        {"name": "keep_both", "description": "Keep both versions"}
+      ]
+    },
+    "drive_access": {
+      "description": "Disk access types",
+      "tools": [
+        {"name": "private", "description": "Private disk access"},
+        {"name": "public", "description": "Public disk access"},
+        {"name": "shared", "description": "Shared disk access"}
+      ]
+    },
+    "canvas": {
+      "description": "Canvas elements and operations",
+      "tools": [
+        {"name": "canvas_add_text", "description": "Add text element"},
+        {"name": "canvas_add_image", "description": "Add image element"},
+        {"name": "canvas_add_chart", "description": "Add chart element"},
+        {"name": "canvas_remove_element", "description": "Remove element"},
+        {"name": "canvas_update_transform", "description": "Update element transform"},
+        {"name": "canvas_select_element", "description": "Select element"},
+        {"name": "canvas_deselect_all", "description": "Deselect all elements"},
+        {"name": "canvas_element_at", "description": "Get element at position"},
+        {"name": "canvas_clear", "description": "Clear canvas"}
+      ]
+    },
+    "canvas_history": {
+      "description": "Canvas history and state",
+      "tools": [
+        {"name": "canvas_undo", "description": "Undo last action"},
+        {"name": "canvas_redo", "description": "Redo undone action"},
+        {"name": "canvas_get_history", "description": "Get canvas history"},
+        {"name": "canvas_get_snapshot", "description": "Get canvas snapshot"},
+        {"name": "canvas_export", "description": "Export canvas"},
+        {"name": "canvas_import", "description": "Import canvas"}
+      ]
+    },
+    "canvas_view": {
+      "description": "Canvas view and collaboration",
+      "tools": [
+        {"name": "canvas_set_view", "description": "Set view bounds"},
+        {"name": "canvas_set_viewport", "description": "Set viewport"},
+        {"name": "canvas_broadcast_cursor", "description": "Broadcast cursor position"},
+        {"name": "canvas_get_remote_cursors", "description": "Get remote cursors"},
+        {"name": "canvas_flush_offline_queue", "description": "Flush offline queue"}
+      ]
+    },
+    "call": {
+      "description": "Voice/video call operations",
+      "tools": [
+        {"name": "start_voice_call", "description": "Start voice call"},
+        {"name": "join_call", "description": "Join existing call"},
+        {"name": "end_call", "description": "End call"},
+        {"name": "toggle_mute", "description": "Toggle microphone mute"},
+        {"name": "toggle_video", "description": "Toggle video"},
+        {"name": "share_screen", "description": "Share screen"},
+        {"name": "list_media_devices", "description": "List media devices"},
+        {"name": "get_call_status", "description": "Get call status"},
+        {"name": "get_call_participants", "description": "Get call participants"},
+        {"name": "get_call_quality", "description": "Get call quality metrics"},
+        {"name": "list_active_calls", "description": "List active calls"}
+      ]
+    },
+    "call_recording": {
+      "description": "Call recording operations",
+      "tools": [
+        {"name": "start_call_recording", "description": "Start recording"},
+        {"name": "stop_call_recording", "description": "Stop recording"},
+        {"name": "get_call_recording", "description": "Get recording"}
+      ]
+    },
+    "call_history": {
+      "description": "Call history and missed calls",
+      "tools": [
+        {"name": "get_call_history", "description": "Get call history"},
+        {"name": "get_missed_calls", "description": "Get missed calls"},
+        {"name": "acknowledge_missed_call", "description": "Acknowledge missed call"}
+      ]
+    },
+    "presence": {
+      "description": "User presence and status",
+      "tools": [
+        {"name": "set_presence", "description": "Set presence status"},
+        {"name": "get_presence", "description": "Get user presence"},
+        {"name": "set_my_presence", "description": "Set own presence"},
+        {"name": "get_our_presence", "description": "Get own presence"},
+        {"name": "query_presence", "description": "Query presence"},
+        {"name": "subscribe_to_presence", "description": "Subscribe to presence"},
+        {"name": "get_cached_presence", "description": "Get cached presence"},
+        {"name": "announce_presence", "description": "Announce presence"},
+        {"name": "online", "description": "Set online status"},
+        {"name": "offline", "description": "Set offline status"},
+        {"name": "away", "description": "Set away status"},
+        {"name": "busy", "description": "Set busy status"},
+        {"name": "invisible", "description": "Set invisible status"}
+      ]
+    },
+    "network": {
+      "description": "Network and connectivity",
+      "tools": [
+        {"name": "network_start", "description": "Start network"},
+        {"name": "network_stop", "description": "Stop network"},
+        {"name": "network_status", "description": "Get network status"},
+        {"name": "network_connect", "description": "Connect to peer"},
+        {"name": "network_peers", "description": "Get connected peers"},
+        {"name": "network_request_external_address", "description": "Request external address"},
+        {"name": "connect_by_words", "description": "Connect by four words"},
+        {"name": "get_connection_words", "description": "Get connection words"},
+        {"name": "set_network_available", "description": "Set network availability"}
+      ]
+    },
+    "website": {
+      "description": "Website publishing",
+      "tools": [
+        {"name": "create_website", "description": "Create website"},
+        {"name": "update_website", "description": "Update website"},
+        {"name": "delete_website", "description": "Delete website"},
+        {"name": "get_website", "description": "Get website info"}
+      ]
+    }
+  },
+  "summary": {
+    "identity": 9,
+    "entities": 11,
+    "members": 8,
+    "contacts": 13,
+    "messaging": 20,
+    "offline_queue": 6,
+    "kanban": 22,
+    "kanban_extras": 7,
+    "drive": 11,
+    "drive_upload": 5,
+    "drive_download": 4,
+    "drive_sharing": 4,
+    "drive_staging": 11,
+    "drive_access": 3,
+    "canvas": 9,
+    "canvas_history": 6,
+    "canvas_view": 5,
+    "call": 11,
+    "call_recording": 3,
+    "call_history": 3,
+    "presence": 13,
+    "network": 9,
+    "website": 4
+  }
+}

@@ -112,16 +112,19 @@ pub mod gradients {
                                radial-gradient(ellipse at 50% 50%, rgba(20, 29, 40, 1) 0%, rgba(10, 15, 20, 1) 100%)";
 
     /// Glass card gradient overlay
-    pub const GLASS_OVERLAY: &str = "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)";
+    pub const GLASS_OVERLAY: &str =
+        "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)";
 
     /// Primary button gradient
     pub const BUTTON_PRIMARY: &str = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
 
     /// Glow effect for focused elements
-    pub const GLOW_JADE: &str = "0 0 20px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.1)";
+    pub const GLOW_JADE: &str =
+        "0 0 20px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.1)";
 
     /// Sidebar gradient
-    pub const SIDEBAR_BG: &str = "linear-gradient(180deg, rgba(15, 23, 32, 0.98) 0%, rgba(10, 15, 20, 0.99) 100%)";
+    pub const SIDEBAR_BG: &str =
+        "linear-gradient(180deg, rgba(15, 23, 32, 0.98) 0%, rgba(10, 15, 20, 0.99) 100%)";
 }
 
 /// Spacing scale (rem-based).
@@ -129,46 +132,48 @@ pub mod spacing {
     pub const NONE: &str = "0";
     pub const PX: &str = "1px";
     pub const XXS: &str = "0.125rem"; // 2px
-    pub const XS: &str = "0.25rem";   // 4px
-    pub const SM: &str = "0.5rem";    // 8px
-    pub const MD: &str = "0.75rem";   // 12px
-    pub const BASE: &str = "1rem";    // 16px
-    pub const LG: &str = "1.25rem";   // 20px
-    pub const XL: &str = "1.5rem";    // 24px
-    pub const XXL: &str = "2rem";     // 32px
-    pub const XXXL: &str = "3rem";    // 48px
-    pub const HUGE: &str = "4rem";    // 64px
+    pub const XS: &str = "0.25rem"; // 4px
+    pub const SM: &str = "0.5rem"; // 8px
+    pub const MD: &str = "0.75rem"; // 12px
+    pub const BASE: &str = "1rem"; // 16px
+    pub const LG: &str = "1.25rem"; // 20px
+    pub const XL: &str = "1.5rem"; // 24px
+    pub const XXL: &str = "2rem"; // 32px
+    pub const XXXL: &str = "3rem"; // 48px
+    pub const HUGE: &str = "4rem"; // 64px
 }
 
 /// Border radius values.
 pub mod radius {
     pub const NONE: &str = "0";
-    pub const SM: &str = "0.375rem";  // 6px
-    pub const MD: &str = "0.5rem";    // 8px
-    pub const LG: &str = "0.75rem";   // 12px
-    pub const XL: &str = "1rem";      // 16px
-    pub const XXL: &str = "1.5rem";   // 24px
+    pub const SM: &str = "0.375rem"; // 6px
+    pub const MD: &str = "0.5rem"; // 8px
+    pub const LG: &str = "0.75rem"; // 12px
+    pub const XL: &str = "1rem"; // 16px
+    pub const XXL: &str = "1.5rem"; // 24px
     pub const FULL: &str = "9999px";
 }
 
 /// Typography tokens.
 pub mod typography {
     // Font families
-    pub const FONT_DISPLAY: &str = "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
-    pub const FONT_BODY: &str = "'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+    pub const FONT_DISPLAY: &str =
+        "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+    pub const FONT_BODY: &str =
+        "'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
     pub const FONT_MONO: &str = "'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace";
 
     // Font sizes
-    pub const SIZE_XXS: &str = "0.625rem";  // 10px
-    pub const SIZE_XS: &str = "0.75rem";    // 12px
-    pub const SIZE_SM: &str = "0.8125rem";  // 13px
+    pub const SIZE_XXS: &str = "0.625rem"; // 10px
+    pub const SIZE_XS: &str = "0.75rem"; // 12px
+    pub const SIZE_SM: &str = "0.8125rem"; // 13px
     pub const SIZE_BASE: &str = "0.875rem"; // 14px
-    pub const SIZE_MD: &str = "1rem";       // 16px
-    pub const SIZE_LG: &str = "1.125rem";   // 18px
-    pub const SIZE_XL: &str = "1.25rem";    // 20px
-    pub const SIZE_2XL: &str = "1.5rem";    // 24px
-    pub const SIZE_3XL: &str = "2rem";      // 32px
-    pub const SIZE_4XL: &str = "2.5rem";    // 40px
+    pub const SIZE_MD: &str = "1rem"; // 16px
+    pub const SIZE_LG: &str = "1.125rem"; // 18px
+    pub const SIZE_XL: &str = "1.25rem"; // 20px
+    pub const SIZE_2XL: &str = "1.5rem"; // 24px
+    pub const SIZE_3XL: &str = "2rem"; // 32px
+    pub const SIZE_4XL: &str = "2.5rem"; // 40px
 
     // Font weights
     pub const WEIGHT_NORMAL: &str = "400";

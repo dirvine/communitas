@@ -1,5 +1,13 @@
 //! Shared UI-facing models for Communitas front-ends.
 
+// Security: Enforce no-panic policy in production code
+#![cfg_attr(
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
+// Allow these in tests for convenience
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 pub mod call;
 pub mod canvas;
 pub mod drive;
@@ -99,4 +107,5 @@ pub struct UnifiedContact {
     pub id: String,
     pub display_name: String,
     pub status: String,
+    pub presence: PresenceStatus,
 }

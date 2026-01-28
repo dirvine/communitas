@@ -48,7 +48,8 @@ Implement a **multi-layered encrypted vault system** with platform-native securi
 │  Layer 1: Authentication                                            │
 │  ──────────────────────────                                         │
 │  ┌──────────────────────────────────────────────────────────────┐  │
-│  │ Four-Word Address │ Password │ Passkey/WebAuthn │ Touch ID   │  │
+│  │ Vault Selector   │ Password │ Passkey/WebAuthn │ Touch ID    │  │
+│  │ (by pubkey_hex)  │          │                  │             │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                              │                                      │
 │                              ▼                                      │
@@ -96,7 +97,7 @@ Each identity (pubkey_hex) gets its own encrypted vault:
 
 ```rust
 pub struct EncryptedVault {
-    pub four_words: String,
+    pub pubkey_hex: String,      // Identity (vault identifier)
     pub display_name: String,
     metadata: VaultMetadata,
     encryption_key: Zeroizing<Vec<u8>>,  // Auto-zeroed on drop
@@ -209,24 +210,24 @@ pub fn decrypt(&self, key: &[u8], data: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
 
 ### Password-Only Login
 
-Users can log in with just a password (no connection words required):
+Users can log in with just a password (no vault selection required):
 
 ```rust
 // Store password hash → identity mapping
 pub async fn store_password_locator(
     &self,
     password_hash: &[u8],  // BLAKE3 hash
-    four_words: &str,
+    pubkey_hex: &str,
 ) -> Result<()>;
 
 // Find vault by password
 pub async fn login_password_only(&self, password: &str) -> Result<Session> {
     let password_hash = self.key_manager.hash_password(password).await?;
-    let four_words = self.platform_storage
+    let pubkey_hex = self.platform_storage
         .find_vault_by_password_hash(&password_hash)
         .await?;
 
-    self.login(&four_words, password, None).await
+    self.login(&pubkey_hex, password, None).await
 }
 ```
 
@@ -236,14 +237,14 @@ Leverage OS-native secure storage:
 
 ```rust
 impl KeyManager {
-    pub async fn store_in_keyring(&self, four_words: &str, key: &[u8]) -> Result<()> {
-        let entry = Entry::new("com.saorsalabs.communitas", four_words)?;
+    pub async fn store_in_keyring(&self, pubkey_hex: &str, key: &[u8]) -> Result<()> {
+        let entry = Entry::new("com.saorsalabs.communitas", pubkey_hex)?;
         entry.set_password(&base64::encode(key))?;
         Ok(())
     }
 
-    pub async fn get_from_keyring(&self, four_words: &str) -> Result<Zeroizing<Vec<u8>>> {
-        let entry = Entry::new("com.saorsalabs.communitas", four_words)?;
+    pub async fn get_from_keyring(&self, pubkey_hex: &str) -> Result<Zeroizing<Vec<u8>>> {
+        let entry = Entry::new("com.saorsalabs.communitas", pubkey_hex)?;
         let key_b64 = entry.get_password()?;
         Ok(Zeroizing::new(base64::decode(key_b64)?))
     }
@@ -261,17 +262,17 @@ impl KeyManager {
 Biometric authentication for passwordless login:
 
 ```rust
-pub async fn passkey_authenticate(&self, four_words: &str) -> Result<Session> {
+pub async fn passkey_authenticate(&self, pubkey_hex: &str) -> Result<Session> {
     // 1. Verify passkey is registered
-    if !self.passkey_manager.has_passkey(&four_words).await {
+    if !self.passkey_manager.has_passkey(&pubkey_hex).await {
         bail!("No passkey registered");
     }
 
     // 2. Retrieve password from keyring (stored during initial login)
-    let password = self.key_manager.get_from_keyring(&four_words).await?;
+    let password = self.key_manager.get_from_keyring(&pubkey_hex).await?;
 
     // 3. Login with stored password
-    self.login(&four_words, &password, None).await
+    self.login(&pubkey_hex, &password, None).await
 }
 ```
 
@@ -314,7 +315,7 @@ Sessions provide authenticated access with timeout:
 ```rust
 pub struct Session {
     pub id: String,           // UUID
-    pub four_words: String,
+    pub pubkey_hex: String,   // Identity
     pub display_name: String,
     pub created_at: i64,
     pub expires_at: i64,

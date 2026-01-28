@@ -22,9 +22,11 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 /// Keyboard shortcut hint text for the identity switcher.
+#[allow(dead_code)] // Kept for future keyboard shortcut implementation
 pub const KEYBOARD_SHORTCUT_HINT: &str = "\u{2318}\u{21E7}I"; // ⌘⇧I for macOS
 
 /// Message types for identity switcher coroutine.
+#[allow(dead_code)] // Kept for coroutine-based identity switching implementation
 #[derive(Debug, Clone)]
 enum SwitcherAction {
     /// Switch to a different identity (without passkey)
@@ -547,6 +549,7 @@ fn IdentityItem(props: IdentityItemProps) -> Element {
 }
 
 /// Format a Unix timestamp as a relative time string.
+#[allow(dead_code)] // Kept for future use in identity switcher UI
 fn format_relative_time(timestamp: u64) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

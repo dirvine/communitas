@@ -119,7 +119,7 @@ User authenticates with their identity passphrase:
   "params": {
     "name": "authenticate",
     "arguments": {
-      "four_words": "ocean-forest-moon-star",
+      "pubkey_hex": "3a4b5c6d...",
       "passphrase": "user-passphrase"
     }
   }
@@ -134,8 +134,8 @@ Auto-authenticate with temporary identity:
 # Start MCP in demo mode (creates temp identity)
 communitas-mcp --http --demo
 
-# Or with specific identity (legacy flag name)
-communitas-mcp --http --demo --four-words "pubkey_hex_or_identity"
+# Or with specific identity
+communitas-mcp --http --demo --identity "pubkey_hex"
 ```
 
 #### 3. Delegate Tokens (Scoped Access)
@@ -161,7 +161,7 @@ Issue tokens with limited permissions for AI agents:
 Token structure:
 ```rust
 pub struct DelegateToken {
-    pub issuer: String,           // Four-word identity of issuer
+    pub issuer: String,           // Identity (pubkey_hex) of issuer
     pub delegate_name: String,    // Name for this delegate
     pub scopes: Vec<Scope>,       // Permitted operations
     pub issued_at: u64,           // Unix timestamp

@@ -192,19 +192,19 @@ pub async fn set_website_root(
     root_hash: &str,  // BLAKE3 hash of /public/website/
 ) -> Result<()>;
 
-// Resolve website content
+// Resolve website content by identity
 pub async fn resolve_website(
     &self,
-    four_words: &str,
+    pubkey_hex: &str,
     path: &str,
 ) -> Result<Vec<u8>>;
 ```
 
 **DNS-free access**:
 ```
-ocean-forest-moon-star.communitas/index.html
+{pubkey_hex_short}.communitas/index.html
 → Resolves to: /public/website/index.html
-→ No DNS required, P2P resolution
+→ No DNS required, P2P resolution via identity
 ```
 
 ### Replication Strategy

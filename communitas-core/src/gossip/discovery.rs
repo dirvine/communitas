@@ -345,10 +345,7 @@ impl IntroducerConfig {
     /// Create config for local testing (peer-to-peer between instances)
     pub fn local_testing() -> Self {
         Self {
-            addresses: vec![
-                "127.0.0.1:11000".to_string(),
-                "127.0.0.1:11001".to_string(),
-            ],
+            addresses: vec!["127.0.0.1:11000".to_string(), "127.0.0.1:11001".to_string()],
             timeout_secs: 5,
         }
     }

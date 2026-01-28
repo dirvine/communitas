@@ -2,10 +2,10 @@
 //!
 //! Tabs: Board (Kanban), Chat, Drive, Documents, Details
 
-use dioxus::prelude::*;
 use crate::design_tokens::{motion, radius, semantic, spacing, typography};
 use crate::styles_v2::flex;
 use communitas_ui_api::{UnifiedEntity, UnifiedEntityType};
+use dioxus::prelude::*;
 
 /// Tab identifiers for entity views.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -39,6 +39,13 @@ impl EntityTab {
     }
 
     /// Available tabs for entity type.
+    ///
+    /// Tab availability per entity type:
+    /// - Organizations: Chat, Drive, Details
+    /// - Channels: Chat, Drive
+    /// - Projects: Board, Chat, Drive, Docs
+    /// - Groups: Chat, Drive
+    /// - Contacts: Chat only
     pub fn tabs_for_entity(entity_type: UnifiedEntityType) -> Vec<Self> {
         match entity_type {
             UnifiedEntityType::Project => vec![
@@ -48,30 +55,29 @@ impl EntityTab {
                 Self::Documents,
                 Self::Details,
             ],
-            UnifiedEntityType::Channel => vec![
-                Self::Chat,
-                Self::Drive,
-                Self::Documents,
-                Self::Details,
-            ],
-            UnifiedEntityType::Organization => vec![
-                Self::Chat,
-                Self::Drive,
-                Self::Documents,
-                Self::Details,
-            ],
-            UnifiedEntityType::Group => vec![
-                Self::Chat,
-                Self::Drive,
-                Self::Documents,
-                Self::Details,
-            ],
-            UnifiedEntityType::Person => vec![
-                Self::Chat,
-                Self::Drive,
-                Self::Details,
-            ],
+            UnifiedEntityType::Channel => {
+                vec![Self::Chat, Self::Drive]
+            }
+            UnifiedEntityType::Organization => {
+                vec![Self::Chat, Self::Drive, Self::Details]
+            }
+            UnifiedEntityType::Group => {
+                vec![Self::Chat, Self::Drive]
+            }
+            UnifiedEntityType::Person => vec![Self::Chat],
         }
+    }
+
+    /// Get all tabs in order (for keyboard navigation).
+    #[allow(dead_code)] // Will be used for keyboard navigation in Phase 12.8
+    pub fn all_tabs() -> &'static [Self] {
+        &[
+            Self::Board,
+            Self::Chat,
+            Self::Drive,
+            Self::Documents,
+            Self::Details,
+        ]
     }
 }
 
@@ -79,9 +85,19 @@ impl EntityTab {
 #[component]
 pub fn EntityHeader(
     entity: UnifiedEntity,
+    #[props(default)] actions: Option<Element>,
+    /// Number of members currently online
+    #[props(default = 0)]
+    online_count: u32,
+    /// Optional description for the entity
     #[props(default)]
-    actions: Option<Element>,
+    description: Option<String>,
+    /// Parent entity name for breadcrumb (e.g., "Organization Name")
+    #[props(default)]
+    parent_name: Option<String>,
 ) -> Element {
+    let mut description_expanded = use_signal(|| false);
+
     let entity_color = match entity.entity_type {
         UnifiedEntityType::Organization => semantic::ENTITY_ORG,
         UnifiedEntityType::Project => semantic::ENTITY_PROJECT,
@@ -106,101 +122,256 @@ pub fn EntityHeader(
         UnifiedEntityType::Person => "Contact",
     };
 
+    // Presence summary: "X online" or "X/Y online"
+    let presence_text = if entity.member_count > 0 {
+        if online_count > 0 {
+            format!("{online_count} online")
+        } else {
+            "all offline".to_string()
+        }
+    } else {
+        String::new()
+    };
+
     rsx! {
         div {
             style: format!(
-                "{} \
-                 padding: {} {}; \
+                "display: flex; \
+                 flex-direction: column; \
                  border-bottom: 1px solid {};",
-                flex::between(),
-                spacing::BASE,
-                spacing::XL,
                 semantic::BORDER_SUBTLE
             ),
 
-            // Left: Entity info
+            // Main header row
             div {
-                style: format!("{} gap: {};", flex::start(), spacing::MD),
+                style: format!(
+                    "{} \
+                     padding: {} {};",
+                    flex::between(),
+                    spacing::BASE,
+                    spacing::XL
+                ),
 
-                // Entity icon badge
+                // Left: Entity info
                 div {
-                    style: format!(
-                        "width: 40px; \
-                         height: 40px; \
-                         display: flex; \
-                         align-items: center; \
-                         justify-content: center; \
-                         background: {}20; \
-                         border-radius: {}; \
-                         font-size: {}; \
-                         color: {};",
-                        entity_color,
-                        radius::LG,
-                        typography::SIZE_LG,
-                        entity_color
-                    ),
-                    "{icon}"
-                }
+                    style: format!("{} gap: {};", flex::start(), spacing::MD),
 
-                // Name and type
-                div {
-                    style: flex::col(),
-
-                    h1 {
+                    // Entity icon badge
+                    div {
                         style: format!(
-                            "font-size: {}; \
-                             font-weight: {}; \
-                             color: {}; \
-                             margin: 0; \
-                             line-height: {};",
+                            "width: 40px; \
+                             height: 40px; \
+                             display: flex; \
+                             align-items: center; \
+                             justify-content: center; \
+                             background: {}20; \
+                             border-radius: {}; \
+                             font-size: {}; \
+                             color: {};",
+                            entity_color,
+                            radius::LG,
                             typography::SIZE_LG,
-                            typography::WEIGHT_SEMIBOLD,
-                            semantic::TEXT_PRIMARY,
-                            typography::LEADING_TIGHT
+                            entity_color
                         ),
-                        "{entity.name}"
+                        "{icon}"
                     }
 
+                    // Name, breadcrumb, and metadata
                     div {
-                        style: format!("{} gap: {};", flex::start(), spacing::SM),
+                        style: flex::col(),
 
-                        // Type badge
-                        span {
+                        // Breadcrumb (if parent exists)
+                        if let Some(ref parent) = parent_name {
+                            div {
+                                style: format!(
+                                    "display: flex; \
+                                     align-items: center; \
+                                     gap: {}; \
+                                     font-size: {}; \
+                                     color: {}; \
+                                     margin-bottom: {};",
+                                    spacing::XS,
+                                    typography::SIZE_XS,
+                                    semantic::TEXT_MUTED,
+                                    spacing::XXS
+                                ),
+
+                                span { "{parent}" }
+                                span {
+                                    style: format!("color: {};", semantic::TEXT_MUTED),
+                                    "›"
+                                }
+                            }
+                        }
+
+                        h1 {
                             style: format!(
                                 "font-size: {}; \
+                                 font-weight: {}; \
                                  color: {}; \
-                                 padding: {} {}; \
-                                 background: {}15; \
-                                 border-radius: {};",
-                                typography::SIZE_XS,
-                                entity_color,
-                                spacing::XXS,
-                                spacing::SM,
-                                entity_color,
-                                radius::SM
+                                 margin: 0; \
+                                 line-height: {};",
+                                typography::SIZE_LG,
+                                typography::WEIGHT_SEMIBOLD,
+                                semantic::TEXT_PRIMARY,
+                                typography::LEADING_TIGHT
                             ),
-                            "{type_label}"
+                            "{entity.name}"
                         }
 
-                        // Member count
-                        span {
-                            style: format!(
-                                "font-size: {}; \
-                                 color: {};",
-                                typography::SIZE_XS,
-                                semantic::TEXT_MUTED
-                            ),
-                            "{entity.member_count} members"
+                        div {
+                            style: format!("{} gap: {};", flex::start(), spacing::SM),
+
+                            // Type badge
+                            span {
+                                style: format!(
+                                    "font-size: {}; \
+                                     color: {}; \
+                                     padding: {} {}; \
+                                     background: {}15; \
+                                     border-radius: {};",
+                                    typography::SIZE_XS,
+                                    entity_color,
+                                    spacing::XXS,
+                                    spacing::SM,
+                                    entity_color,
+                                    radius::SM
+                                ),
+                                "{type_label}"
+                            }
+
+                            // Member count
+                            span {
+                                style: format!(
+                                    "font-size: {}; \
+                                     color: {};",
+                                    typography::SIZE_XS,
+                                    semantic::TEXT_MUTED
+                                ),
+                                "{entity.member_count} members"
+                            }
+
+                            // Presence summary (online count)
+                            if !presence_text.is_empty() {
+                                span {
+                                    style: format!(
+                                        "font-size: {}; \
+                                         color: {}; \
+                                         display: flex; \
+                                         align-items: center; \
+                                         gap: {};",
+                                        typography::SIZE_XS,
+                                        semantic::PRESENCE_ONLINE,
+                                        spacing::XXS
+                                    ),
+
+                                    // Online dot
+                                    span {
+                                        style: format!(
+                                            "width: 6px; \
+                                             height: 6px; \
+                                             border-radius: {}; \
+                                             background: {};",
+                                            radius::FULL,
+                                            semantic::PRESENCE_ONLINE
+                                        ),
+                                    }
+                                    "{presence_text}"
+                                }
+                            }
                         }
+                    }
+                }
+
+                // Right: Actions
+                if let Some(acts) = actions {
+                    div {
+                        style: format!("{} gap: {};", flex::row(), spacing::SM),
+                        {acts}
                     }
                 }
             }
 
-            // Right: Actions
-            if let Some(acts) = actions {
-                div {
-                    style: format!("{} gap: {};", flex::row(), spacing::SM),
-                    {acts}
+            // Collapsible description
+            if let Some(ref desc) = description {
+                if !desc.is_empty() {
+                    div {
+                        style: format!(
+                            "padding: 0 {} {}; \
+                             border-top: 1px solid {};",
+                            spacing::XL,
+                            spacing::BASE,
+                            semantic::BORDER_SUBTLE
+                        ),
+
+                        button {
+                            style: format!(
+                                "display: flex; \
+                                 align-items: center; \
+                                 gap: {}; \
+                                 width: 100%; \
+                                 padding: {} 0; \
+                                 background: none; \
+                                 border: none; \
+                                 cursor: pointer; \
+                                 font-family: {}; \
+                                 font-size: {}; \
+                                 color: {}; \
+                                 text-align: left;",
+                                spacing::SM,
+                                spacing::SM,
+                                typography::FONT_BODY,
+                                typography::SIZE_SM,
+                                semantic::TEXT_SECONDARY
+                            ),
+                            onclick: move |_| description_expanded.set(!description_expanded()),
+
+                            span {
+                                style: format!(
+                                    "transform: rotate({}); \
+                                     transition: {};",
+                                    if description_expanded() { "90deg" } else { "0deg" },
+                                    motion::transition("transform")
+                                ),
+                                "▶"
+                            }
+                            span { "About this {type_label}" }
+                        }
+
+                        if description_expanded() {
+                            p {
+                                style: format!(
+                                    "margin: 0 0 {} 0; \
+                                     padding-left: {}; \
+                                     font-size: {}; \
+                                     color: {}; \
+                                     line-height: {}; \
+                                     animation: expandDesc 150ms ease-out;",
+                                    spacing::SM,
+                                    spacing::XL,
+                                    typography::SIZE_SM,
+                                    semantic::TEXT_SECONDARY,
+                                    typography::LEADING_RELAXED
+                                ),
+                                "{desc}"
+                            }
+                        }
+                    }
+
+                    style {
+                        r#"
+                        @keyframes expandDesc {{
+                            from {{
+                                opacity: 0;
+                                transform: translateY(-4px);
+                            }}
+                            to {{
+                                opacity: 1;
+                                transform: translateY(0);
+                            }}
+                        }}
+                        "#
+                    }
                 }
             }
         }
@@ -241,11 +412,7 @@ pub fn EntityTabBar(
 
 /// Individual tab button.
 #[component]
-fn TabButton(
-    tab: EntityTab,
-    is_active: bool,
-    onclick: EventHandler<MouseEvent>,
-) -> Element {
+fn TabButton(tab: EntityTab, is_active: bool, onclick: EventHandler<MouseEvent>) -> Element {
     let mut hovered = use_signal(|| false);
 
     let color = if is_active {
@@ -313,10 +480,8 @@ fn TabButton(
 #[component]
 pub fn EntityDetailView(
     entity: UnifiedEntity,
-    #[props(default = EntityTab::Chat)]
-    initial_tab: EntityTab,
-    #[props(default)]
-    header_actions: Option<Element>,
+    #[props(default = EntityTab::Chat)] initial_tab: EntityTab,
+    #[props(default)] header_actions: Option<Element>,
     children: Element,
 ) -> Element {
     let available_tabs = EntityTab::tabs_for_entity(entity.entity_type);
@@ -325,7 +490,10 @@ pub fn EntityDetailView(
         if available_tabs_for_signal.contains(&initial_tab) {
             initial_tab
         } else {
-            available_tabs_for_signal.first().copied().unwrap_or(EntityTab::Chat)
+            available_tabs_for_signal
+                .first()
+                .copied()
+                .unwrap_or(EntityTab::Chat)
         }
     });
 
@@ -371,8 +539,7 @@ pub fn EntityDetailView(
 pub fn HeaderAction(
     icon: String,
     label: String,
-    #[props(default = false)]
-    primary: bool,
+    #[props(default = false)] primary: bool,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
@@ -441,8 +608,7 @@ pub fn EmptyState(
     icon: String,
     title: String,
     description: String,
-    #[props(default)]
-    action: Option<Element>,
+    #[props(default)] action: Option<Element>,
 ) -> Element {
     rsx! {
         div {

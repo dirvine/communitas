@@ -238,11 +238,11 @@ pub fn derive_identity_keys(
     let (mlkem_pk, mlkem_sk) = ml_kem_768::try_keygen_with_rng(&mut mlkem_rng)
         .map_err(|e| RecoveryError::KeyDerivationFailed(e.to_string()))?;
     
-    // Derive public-key identity (pubkey_hex). Legacy field name is four_words.
-    let identity_id = hex::encode(mldsa_pk);
+    // Derive identity from public key (pubkey_hex)
+    let pubkey_hex = hex::encode(mldsa_pk);
 
     Ok(IdentityKeys {
-        four_words: identity_id,
+        pubkey_hex,
         mldsa_public: MlDsaPublicKey::from_bytes(&mldsa_pk.into_bytes())?,
         mldsa_secret: MlDsaSecretKey::from_bytes(&mldsa_sk.into_bytes())?,
         mlkem_public: MlKemPublicKey::from_bytes(&mlkem_pk.into_bytes())?,
@@ -275,10 +275,10 @@ pub async fn recover_from_mnemonic(
     let identity_keys = derive_identity_keys(&mnemonic, passphrase)?;
     
     // Check if vault already exists for this identity
-    let vault_path = config.vault_dir.join(&identity_keys.four_words);
+    let vault_path = config.vault_dir.join(&identity_keys.pubkey_hex);
     if vault_path.exists() {
         return Err(RecoveryError::VaultAlreadyExists {
-            four_words: identity_keys.four_words.clone(),
+            pubkey_hex: identity_keys.pubkey_hex.clone(),
         });
     }
     
@@ -289,21 +289,21 @@ pub async fn recover_from_mnemonic(
     
     // Store identity keys in vault
     let vault = EncryptedVault::create(
-        identity_keys.four_words.clone(),
-        identity_keys.four_words.clone(), // Use identity fingerprint as initial display name
+        identity_keys.pubkey_hex.clone(),
+        identity_keys.pubkey_hex.clone(), // Use truncated pubkey as initial display name
         encryption_key,
         salt,
         config,
     ).await?;
-    
+
     // Store all key material
     vault.store("mldsa_secret", identity_keys.mldsa_secret.as_bytes()).await?;
     vault.store("mldsa_public", identity_keys.mldsa_public.as_bytes()).await?;
     vault.store("mlkem_secret", identity_keys.mlkem_secret.as_bytes()).await?;
     vault.store("mlkem_public", identity_keys.mlkem_public.as_bytes()).await?;
-    
+
     Ok(RecoveryResult {
-        four_words: identity_keys.four_words,
+        pubkey_hex: identity_keys.pubkey_hex,
         public_key: identity_keys.mldsa_public,
         recovery_method: RecoveryMethod::Mnemonic,
     })
@@ -477,8 +477,8 @@ pub struct EncryptedShard {
     pub version: u32,
     /// Owner's public key (who this shard belongs to)
     pub owner_pubkey: Vec<u8>,
-    /// Owner identity (pubkey_hex). Legacy field name retained for compatibility.
-    pub owner_four_words: String,
+    /// Owner identity (pubkey_hex)
+    pub owner_pubkey_hex: String,
     /// Shard index
     pub shard_index: usize,
     /// Total shards
@@ -582,7 +582,7 @@ pub async fn setup_social_recovery(
         let shard = EncryptedShard {
             version: 1,
             owner_pubkey: identity.mldsa_public.as_bytes().to_vec(),
-            owner_four_words: identity.four_words.clone(),
+            owner_pubkey_hex: identity.pubkey_hex.clone(),
             shard_index: guardian.shard_index,
             total_shards: config.total_guardians,
             threshold: config.threshold,
@@ -1375,7 +1375,7 @@ Mnemonic (24 words, 256 bits entropy)
     │              │
     │              └──► ChaCha20Rng → ML-KEM-768 keypair (encryption)
     │
-    └──► Four-word identity derived from ML-DSA public key (for display)
+    └──► Identity (pubkey_hex) = hex-encoded ML-DSA public key
 ```
 
 ### Shard Encryption Chain

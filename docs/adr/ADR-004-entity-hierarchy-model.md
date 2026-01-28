@@ -134,7 +134,7 @@ Members are stored in the entity's CRDT core document:
 
 ```rust
 MemberInfo {
-    member_id: String,    // Four-word address
+    member_id: String,    // Identity (pubkey_hex)
     role: String,         // "owner" | "admin" | "member"
     joined_at: i64,
     deleted: bool,        // Tombstone for pruning
@@ -153,9 +153,9 @@ MemberInfo {
 - **Flexible structure**: Supports flat teams to complex organizations
 - **Consistent model**: All entities work the same way
 - **Clear ownership**: Parent-child relationships define scope
-- **Four-word addressing**: Human-readable at every level
 - **Per-entity storage**: Clean data boundaries
 - **Local-first**: Entities work offline immediately
+- **Public-key identity**: Each entity has cryptographic identity (pubkey_hex)
 
 ### Trade-offs
 

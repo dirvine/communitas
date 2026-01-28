@@ -1,9 +1,9 @@
 //! Dioxus UI components for Communitas.
 
 pub mod announcer;
+pub mod app_shell;
 pub mod auth;
 pub mod auth_v2;
-pub mod app_shell;
 pub mod call;
 pub mod canvas;
 mod composer;
@@ -39,6 +39,8 @@ pub use canvas::{
 };
 pub use composer::MessageComposer;
 pub use drive::DriveBrowser;
+// Re-export identity switcher (will be integrated into ProfileHeader)
+#[allow(unused_imports)]
 pub use identity_switcher::IdentitySwitcher;
 // Re-export main kanban components for external use
 // Note: BoardListPage and BoardView are used in main.rs routes
@@ -115,8 +117,8 @@ pub use auth_v2::{
 // Re-export app shell components for main layout
 #[allow(unused_imports)]
 pub use app_shell::{
-    AppShell, ContactNavItem, EntityNavItem, ProfileHeader, QuickActionButton, SidebarSearch,
-    SidebarSection,
+    AppShell, ContactNavItem, EntityNavItem, ExpandableEntityNavItem, ProfileHeader,
+    QuickActionButton, SidebarSearch, SidebarSection,
 };
 
 // Re-export entity view components
@@ -129,6 +131,6 @@ pub use entity_view::{
 // Re-export enhanced messaging components (v2)
 #[allow(unused_imports)]
 pub use messaging_v2::{
-    ChatView, DateSeparator, MessageBubble, MessageComposerV2, MessageDisplay, MessageListContainer,
-    NewMessageIndicator, ReactionChip, ReactionDisplay, TypingIndicatorV2,
+    ChatView, DateSeparator, MessageBubble, MessageComposerV2, MessageDisplay,
+    MessageListContainer, NewMessageIndicator, ReactionChip, ReactionDisplay, TypingIndicatorV2,
 };

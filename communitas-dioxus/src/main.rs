@@ -40,6 +40,8 @@ use components::auth_v2::{
     AuthBackground, AuthLayoutV2, ErrorBanner, FormField, FormTextarea, PasswordStrength,
     PrimaryButton,
 };
+// Accessibility: Screen reader announcer
+use components::Announcer;
 use design_tokens::{gradients, motion, palette, radius, semantic, spacing, typography};
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
@@ -429,6 +431,9 @@ fn App() -> Element {
     rsx! {
         // Global styles for animations
         style { {GLOBAL_STYLES} }
+
+        // Screen reader announcer for accessibility (aria-live regions)
+        Announcer {}
 
         AppLifecycleManager {}
         // Note: RouteObserver removed - it used use_route() which panics outside Router context

@@ -58,6 +58,9 @@ use crate::components::{
     SecondaryButton,
     SidebarSearch,
     TypingIndicatorV2,
+    // Accessibility announcer
+    AnnouncementMode,
+    use_announcer,
 };
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
 use std::collections::HashSet;
@@ -974,6 +977,50 @@ pub fn MainAppV2(children: Element) -> Element {
     // Modal state for entity creation
     let mut show_create_modal: Signal<Option<CreateEntityType>> = use_signal(|| None);
     let mut create_modal_parent_id: Signal<Option<String>> = use_signal(|| None);
+
+    // Screen reader announcer for navigation changes
+    let announcer = use_announcer();
+    let mut last_route = use_signal(|| format!("{current_route:?}"));
+
+    // Announce navigation changes for screen readers
+    {
+        let route_clone = current_route.clone();
+        use_effect(move || {
+            let current = format!("{route_clone:?}");
+            let previous = last_route();
+            if current != previous {
+                // Determine page name from route
+                let page_name = match &route_clone {
+                    Route::LoginRoute {} => "Login".to_string(),
+                    Route::CreateIdentityRoute {} => "Create Identity".to_string(),
+                    Route::RecoverIdentityRoute {} => "Recover Identity".to_string(),
+                    Route::DashboardRoute {} => "Dashboard".to_string(),
+                    Route::MessagesRoute {} => "Messages".to_string(),
+                    Route::ProjectsRoute {} => "Projects".to_string(),
+                    Route::ContactsRoute {} => "Contacts".to_string(),
+                    Route::NetworkRoute {} => "Network".to_string(),
+                    Route::MoreRoute {} => "More options".to_string(),
+                    Route::EntityDetailRoute {
+                        entity_type,
+                        entity_id: _,
+                    } => format!("{} details", entity_type),
+                    Route::EntityChatRoute {
+                        entity_type,
+                        entity_id: _,
+                    } => format!("{} chat", entity_type),
+                    Route::EntityDriveRoute {
+                        entity_type,
+                        entity_id: _,
+                    } => format!("{} drive", entity_type),
+                    Route::ProjectBoardRoute { project_id: _ } => "Project board".to_string(),
+                    Route::ContactDetailRoute { contact_id: _ } => "Contact details".to_string(),
+                    Route::ContactChatRoute { contact_id: _ } => "Contact chat".to_string(),
+                };
+                announcer(format!("Navigated to {page_name}"), AnnouncementMode::Polite);
+                last_route.set(current);
+            }
+        });
+    }
 
     // Global keyboard shortcuts (Cmd+K / Ctrl+K to focus search)
     use_effect(|| {

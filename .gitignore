@@ -51,9 +51,14 @@ pids/
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
-coverage/
+# Coverage directory used by tools like istanbul (but not test modules)
+/coverage/
 *.lcov
+# Rust coverage reports
+/target/**/lcov.info
+/target/**/coverage/
+cobertura.xml
+tarpaulin-report.html
 
 # Dependency directories
 jspm_packages/

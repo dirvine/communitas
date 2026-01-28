@@ -8,7 +8,7 @@
 use crate::design_tokens::{
     gradients, layout, motion, palette, radius, semantic, spacing, typography,
 };
-use crate::styles_v2::{avatar, flex, presence};
+use crate::styles_v2::{self, avatar, flex, presence};
 use communitas_ui_api::{PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType};
 use dioxus::prelude::*;
 
@@ -27,6 +27,14 @@ pub fn AppShell(
     thread_panel: Option<Element>,
 ) -> Element {
     rsx! {
+        // Skip-to-content link for keyboard accessibility
+        a {
+            href: "#main-content",
+            style: styles_v2::skip_link(),
+            class: "skip-link",
+            "Skip to main content"
+        }
+
         div {
             style: format!(
                 "display: flex; \
@@ -58,13 +66,16 @@ pub fn AppShell(
 
             // Main content area
             main {
+                id: "main-content",
+                tabindex: "-1",
                 style: format!(
                     "flex: 1; \
                      display: flex; \
                      flex-direction: column; \
                      min-width: 0; \
                      background: {}; \
-                     overflow: hidden;",
+                     overflow: hidden; \
+                     outline: none;",
                     semantic::BG_PRIMARY
                 ),
                 {children}
@@ -105,6 +116,12 @@ pub fn AppShell(
                     opacity: 1;
                     transform: translateX(0);
                 }}
+            }}
+
+            .skip-link:focus {{
+                top: 12px;
+                outline: 2px solid rgba(16, 185, 129, 0.6);
+                outline-offset: 2px;
             }}
             "#
         }

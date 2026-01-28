@@ -579,3 +579,39 @@ pub mod flex {
         format!("gap: {};", size)
     }
 }
+
+/// Skip-to-content link for keyboard accessibility.
+/// Visually hidden until focused, then prominently displayed.
+pub fn skip_link() -> String {
+    format!(
+        "position: absolute; \
+         top: -100px; \
+         left: 50%; \
+         transform: translateX(-50%); \
+         background: {}; \
+         color: #ffffff; \
+         font-family: {}; \
+         font-size: {}; \
+         font-weight: {}; \
+         padding: {} {}; \
+         border-radius: {}; \
+         text-decoration: none; \
+         z-index: 10000; \
+         box-shadow: {}; \
+         transition: {};",
+        semantic::PRIMARY,
+        typography::FONT_BODY,
+        typography::SIZE_SM,
+        typography::WEIGHT_SEMIBOLD,
+        spacing::SM,
+        spacing::BASE,
+        radius::MD,
+        shadow::LG,
+        motion::transition("top")
+    )
+}
+
+/// Skip-to-content link focus state - moves into view.
+pub fn skip_link_focus() -> &'static str {
+    "top: 12px;"
+}

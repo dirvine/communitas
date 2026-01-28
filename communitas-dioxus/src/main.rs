@@ -45,13 +45,7 @@ use design_tokens::{gradients, motion, palette, radius, semantic, spacing, typog
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
 static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
-#[allow(clippy::expect_used)] // OnceLock guaranteed initialized in main() before UI renders
-fn ui_services() -> Arc<UiServices> {
-    UI_SERVICES
-        .get()
-        .expect("UI services not initialized")
-        .clone()
-}
+
 
 /// Main entry point for the Dioxus application.
 ///
@@ -377,7 +371,15 @@ const GLOBAL_STYLES: &str = r#"
 
 #[component]
 fn App() -> Element {
-    let services = ui_services();
+    // Get UI services from global singleton
+    // This is guaranteed to be initialized before dioxus::launch(App) in main()
+    let services = match UI_SERVICES.get().cloned() {
+        Some(svc) => svc,
+        None => {
+            error!("UI services not initialized - this should never happen");
+            std::process::exit(1);
+        }
+    };
     let services_clone = services.clone();
     use_context_provider(|| services_clone);
     use_context_provider(|| Signal::new(AuthState::default()));

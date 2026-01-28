@@ -378,6 +378,93 @@ pub mod text {
     pub fn link_hover() -> String {
         format!("color: {};", semantic::PRIMARY_HOVER)
     }
+
+    /// Truncate text with ellipsis.
+    pub fn truncate() -> &'static str {
+        "overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+    }
+
+    /// Small text style.
+    pub fn small() -> String {
+        format!(
+            "color: {}; \
+             font-family: {}; \
+             font-size: {}; \
+             line-height: {};",
+            semantic::TEXT_SECONDARY,
+            typography::FONT_BODY,
+            typography::SIZE_SM,
+            typography::LEADING_NORMAL
+        )
+    }
+
+    /// Extra small text style.
+    pub fn xs() -> String {
+        format!(
+            "color: {}; \
+             font-family: {}; \
+             font-size: {}; \
+             line-height: {};",
+            semantic::TEXT_MUTED,
+            typography::FONT_BODY,
+            typography::SIZE_XS,
+            typography::LEADING_NORMAL
+        )
+    }
+}
+
+/// Interactive element utilities.
+pub mod interactive {
+    use super::*;
+
+    /// Clickable element - cursor pointer only.
+    pub fn clickable() -> &'static str {
+        "cursor: pointer;"
+    }
+
+    /// Interactive element with hover transition.
+    pub fn hoverable() -> String {
+        format!(
+            "cursor: pointer; \
+             transition: {};",
+            motion::transition("all")
+        )
+    }
+
+    /// Focus ring for keyboard navigation.
+    pub fn focus_ring() -> String {
+        format!(
+            "outline: 2px solid {}; \
+             outline-offset: 2px;",
+            semantic::PRIMARY
+        )
+    }
+
+    /// Subtle focus ring (less prominent).
+    pub fn focus_ring_subtle() -> &'static str {
+        "outline: 2px solid rgba(16, 185, 129, 0.4); outline-offset: 2px;"
+    }
+
+    /// Hover background effect.
+    pub fn hover_bg() -> String {
+        format!("background: {};", semantic::BG_HOVER)
+    }
+
+    /// Button-like interactive element.
+    pub fn button_base() -> String {
+        format!(
+            "cursor: pointer; \
+             border: none; \
+             background: transparent; \
+             transition: {};",
+            motion::transition("all")
+        )
+    }
+
+    /// Disabled state.
+    pub fn disabled() -> &'static str {
+        "opacity: 0.5; cursor: not-allowed; pointer-events: none;"
+    }
 }
 
 /// Badge/chip styles.
@@ -575,8 +662,99 @@ pub mod flex {
         "display: flex; align-items: center; justify-content: flex-start;"
     }
 
+    pub fn end() -> &'static str {
+        "display: flex; align-items: center; justify-content: flex-end;"
+    }
+
     pub fn gap(size: &str) -> String {
         format!("gap: {};", size)
+    }
+
+    /// Flex grow to fill available space.
+    pub fn grow() -> &'static str {
+        "flex: 1;"
+    }
+
+    /// Prevent flex shrinking.
+    pub fn shrink_0() -> &'static str {
+        "flex-shrink: 0;"
+    }
+
+    /// Allow flex wrapping.
+    pub fn wrap() -> &'static str {
+        "flex-wrap: wrap;"
+    }
+
+    /// Row with vertical centering and gap.
+    pub fn row_center(gap_size: &str) -> String {
+        format!(
+            "display: flex; flex-direction: row; align-items: center; gap: {};",
+            gap_size
+        )
+    }
+
+    /// Column with gap.
+    pub fn col_gap(gap_size: &str) -> String {
+        format!("display: flex; flex-direction: column; gap: {};", gap_size)
+    }
+}
+
+/// Layout utilities for common container patterns.
+pub mod layout {
+    use super::*;
+
+    /// Full-height container that prevents overflow.
+    pub fn full_height() -> &'static str {
+        "height: 100%; overflow: hidden;"
+    }
+
+    /// Container that fills available width.
+    pub fn full_width() -> &'static str {
+        "width: 100%;"
+    }
+
+    /// Minimum width zero (prevents flex overflow).
+    pub fn min_w_0() -> &'static str {
+        "min-width: 0;"
+    }
+
+    /// Scrollable container with custom scrollbar.
+    pub fn scrollable() -> String {
+        format!(
+            "overflow-y: auto; \
+             overflow-x: hidden; \
+             {}",
+            custom_scrollbar()
+        )
+    }
+
+    /// Hidden overflow for clipping content.
+    pub fn overflow_hidden() -> &'static str {
+        "overflow: hidden;"
+    }
+
+    /// Relative positioning context.
+    pub fn relative() -> &'static str {
+        "position: relative;"
+    }
+
+    /// Absolute positioning.
+    pub fn absolute() -> &'static str {
+        "position: absolute;"
+    }
+
+    /// Panel background with border.
+    pub fn panel_bg() -> String {
+        format!(
+            "background: {}; border: 1px solid {};",
+            semantic::BG_SECONDARY,
+            semantic::BORDER_SUBTLE
+        )
+    }
+
+    /// Rounded corners with overflow hidden.
+    pub fn rounded(size: &str) -> String {
+        format!("border-radius: {}; overflow: hidden;", size)
     }
 }
 

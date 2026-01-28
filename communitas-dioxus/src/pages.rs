@@ -3,15 +3,15 @@
 //! These pages use the v2 components (auth_v2, app_shell, entity_view, messaging_v2)
 //! to create a cohesive, stunning user experience.
 
-use communitas_ui_api::{
-    OrganizationCategory, PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType,
-};
+use communitas_ui_api::{PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType};
 use communitas_ui_service::UiServices;
 use dioxus::document::eval;
 use dioxus::prelude::*;
 use std::sync::Arc;
 
 use crate::Route;
+use crate::components::sidebar::{ContactListSection, EntityListSection};
+use crate::hooks::CategorizedEntities;
 
 // Route helper functions
 fn entity_type_segment(entity_type: UnifiedEntityType) -> &'static str {
@@ -37,28 +37,16 @@ fn contact_route(contact: &UnifiedContact) -> Route {
     }
 }
 
-/// Get children of an entity (channels, projects, groups with matching parent_id).
-fn get_entity_children(entities: &[UnifiedEntity], parent_id: &str) -> Vec<UnifiedEntity> {
-    entities
-        .iter()
-        .filter(|e| e.parent_id.as_deref() == Some(parent_id))
-        .cloned()
-        .collect()
-}
-
 use crate::components::{
     // New v2 components
     AppShell as AppShellV2,
     AuthLayoutV2,
     // Messaging v2
     ChatView,
-    ContactNavItem,
     DateSeparator,
     EmptyState,
     EntityDetailView,
-    EntityNavItem,
     EntityTab,
-    ExpandableEntityNavItem,
     HeaderAction,
     MessageBubble,
     MessageComposerV2,
@@ -66,11 +54,9 @@ use crate::components::{
     MessageListContainer,
     PrimaryButton,
     ProfileHeader,
-    QuickActionButton,
     ReactionDisplay,
     SecondaryButton,
     SidebarSearch,
-    SidebarSection,
     TypingIndicatorV2,
 };
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
@@ -983,7 +969,7 @@ pub fn MainAppV2(children: Element) -> Element {
 
     let mut search_query = use_signal(String::new);
     let thread_panel_open = use_signal(|| false);
-    let mut expanded_entities: Signal<HashSet<String>> = use_signal(HashSet::new);
+    let expanded_entities: Signal<HashSet<String>> = use_signal(HashSet::new);
 
     // Modal state for entity creation
     let mut show_create_modal: Signal<Option<CreateEntityType>> = use_signal(|| None);
@@ -1022,69 +1008,18 @@ pub fn MainAppV2(children: Element) -> Element {
         });
     });
 
-    // Categorize entities
-    // Note: personal_groups have no parent_id; org_groups have parent_id pointing to org
-    let (organizations, communities, projects, personal_groups, _org_groups, _channels) = {
-        let mut orgs = Vec::new();
-        let mut comms = Vec::new();
-        let mut projs = Vec::new();
-        let mut personal_grps = Vec::new();
-        let mut org_grps = Vec::new();
-        let mut chans = Vec::new();
+    // Categorize entities using efficient single-pass hook
+    let categorized = CategorizedEntities::from_snapshot(&dir_snapshot);
+    let organizations = categorized.organizations;
+    let communities = categorized.communities;
+    let projects = categorized.projects;
+    let personal_groups = categorized.personal_groups;
+    let contacts = categorized.contacts;
 
-        for entity in &dir_snapshot.entities {
-            match entity.entity_type {
-                UnifiedEntityType::Organization => {
-                    if entity.category == Some(OrganizationCategory::Community) {
-                        comms.push(entity.clone());
-                    } else {
-                        orgs.push(entity.clone());
-                    }
-                }
-                UnifiedEntityType::Project => projs.push(entity.clone()),
-                UnifiedEntityType::Group => {
-                    // Personal groups have no parent; org groups have a parent
-                    if entity.parent_id.is_none() {
-                        personal_grps.push(entity.clone());
-                    } else {
-                        org_grps.push(entity.clone());
-                    }
-                }
-                UnifiedEntityType::Channel => chans.push(entity.clone()),
-                _ => {}
-            }
-        }
-        (orgs, comms, projs, personal_grps, org_grps, chans)
-    };
-
-    let contacts = dir_snapshot.contacts.clone();
-
-    // Filter based on search
-    let filter_entities = |entities: Vec<UnifiedEntity>| -> Vec<UnifiedEntity> {
-        let query = search_query().to_lowercase();
-        if query.is_empty() {
-            entities
-        } else {
-            entities
-                .into_iter()
-                .filter(|e| e.name.to_lowercase().contains(&query))
-                .collect()
-        }
-    };
-
-    let filter_contacts = |contacts: Vec<communitas_ui_api::UnifiedContact>| -> Vec<communitas_ui_api::UnifiedContact> {
-        let query = search_query().to_lowercase();
-        if query.is_empty() {
-            contacts
-        } else {
-            contacts.into_iter().filter(|c| c.display_name.to_lowercase().contains(&query)).collect()
-        }
-    };
-
-    // Check if an entity is currently selected based on the route
-    let is_entity_selected = |entity: &UnifiedEntity| -> bool {
+    // Check if an entity is selected (current_route must be cloned for each use in callbacks)
+    let check_entity_selected = |entity: &UnifiedEntity, route: &Route| -> bool {
         let target_route = entity_route(entity);
-        match (&current_route, &target_route) {
+        match (route, &target_route) {
             (
                 Route::EntityDetailRoute {
                     entity_type: et1,
@@ -1120,8 +1055,8 @@ pub fn MainAppV2(children: Element) -> Element {
     };
 
     // Check if a contact is currently selected based on the route
-    let is_contact_selected = |contact: &UnifiedContact| -> bool {
-        match &current_route {
+    let check_contact_selected = |contact: &UnifiedContact, route: &Route| -> bool {
+        match route {
             Route::ContactDetailRoute { contact_id } => contact_id == &contact.id,
             Route::ContactChatRoute { contact_id } => contact_id == &contact.id,
             _ => false,
@@ -1169,222 +1104,118 @@ pub fn MainAppV2(children: Element) -> Element {
                     ),
 
                     // My Organizations
-                    SidebarSection {
-                        title: "My Organizations".to_string(),
-                        action: Some(rsx! {
-                            QuickActionButton {
-                                icon: "+".to_string(),
-                                label: "Create Organization".to_string(),
-                                onclick: move |_| {
+                    {
+                        let route_for_orgs = current_route.clone();
+                        rsx! {
+                            EntityListSection {
+                                title: "My Organizations".to_string(),
+                                entities: organizations.clone(),
+                                all_entities: dir_snapshot.entities.clone(),
+                                search_filter: search_query(),
+                                expanded_ids: expanded_entities,
+                                expandable: true,
+                                add_button_label: Some("Create Organization".to_string()),
+                                is_selected: move |entity| check_entity_selected(&entity, &route_for_orgs),
+                                on_navigate: move |entity| {
+                                    navigator.push(entity_route(&entity));
+                                },
+                                on_add: move |_| {
                                     create_modal_parent_id.set(None);
                                     show_create_modal.set(Some(CreateEntityType::Organization));
                                 },
                             }
-                        }),
-                        {filter_entities(organizations.clone()).into_iter().map(|org| {
-                            let selected = is_entity_selected(&org);
-                            let route = entity_route(&org);
-                            let nav = navigator;
-                            let children = get_entity_children(&dir_snapshot.entities, &org.id);
-                            let has_children = !children.is_empty();
-                            let is_expanded = expanded_entities().contains(&org.id);
-                            let org_id = org.id.clone();
-                            let org_id_toggle = org.id.clone();
-
-                            rsx! {
-                                ExpandableEntityNavItem {
-                                    key: "{org_id}",
-                                    entity: org.clone(),
-                                    selected: selected,
-                                    unread_count: 0,
-                                    expanded: is_expanded,
-                                    has_children: has_children,
-                                    onclick: move |_| {
-                                        nav.push(route.clone());
-                                    },
-                                    ontoggle: move |_expanded| {
-                                        let id = org_id_toggle.clone();
-                                        if expanded_entities().contains(&id) {
-                                            expanded_entities.write().remove(&id);
-                                        } else {
-                                            expanded_entities.write().insert(id);
-                                        }
-                                    },
-
-                                    // Child entities
-                                    {children.into_iter().map(|child| {
-                                        let child_selected = is_entity_selected(&child);
-                                        let child_route = entity_route(&child);
-                                        let child_nav = navigator;
-                                        rsx! {
-                                            EntityNavItem {
-                                                key: "{child.id}",
-                                                entity: child.clone(),
-                                                selected: child_selected,
-                                                unread_count: 0,
-                                                onclick: move |_| {
-                                                    child_nav.push(child_route.clone());
-                                                },
-                                            }
-                                        }
-                                    })}
-                                }
-                            }
-                        })}
+                        }
                     }
 
                     // Communities
-                    if !communities.is_empty() {
-                        SidebarSection {
-                            title: "Communities".to_string(),
-                            {filter_entities(communities.clone()).into_iter().map(|community| {
-                                let selected = is_entity_selected(&community);
-                                let route = entity_route(&community);
-                                let nav = navigator;
-                                let children = get_entity_children(&dir_snapshot.entities, &community.id);
-                                let has_children = !children.is_empty();
-                                let is_expanded = expanded_entities().contains(&community.id);
-                                let community_id = community.id.clone();
-                                let community_id_toggle = community.id.clone();
-
-                                rsx! {
-                                    ExpandableEntityNavItem {
-                                        key: "{community_id}",
-                                        entity: community.clone(),
-                                        selected: selected,
-                                        unread_count: 0,
-                                        expanded: is_expanded,
-                                        has_children: has_children,
-                                        onclick: move |_| {
-                                            nav.push(route.clone());
-                                        },
-                                        ontoggle: move |_expanded| {
-                                            let id = community_id_toggle.clone();
-                                            if expanded_entities().contains(&id) {
-                                                expanded_entities.write().remove(&id);
-                                            } else {
-                                                expanded_entities.write().insert(id);
-                                            }
-                                        },
-
-                                        // Child entities
-                                        {children.into_iter().map(|child| {
-                                            let child_selected = is_entity_selected(&child);
-                                            let child_route = entity_route(&child);
-                                            let child_nav = navigator;
-                                            rsx! {
-                                                EntityNavItem {
-                                                    key: "{child.id}",
-                                                    entity: child.clone(),
-                                                    selected: child_selected,
-                                                    unread_count: 0,
-                                                    onclick: move |_| {
-                                                        child_nav.push(child_route.clone());
-                                                    },
-                                                }
-                                            }
-                                        })}
-                                    }
+                    {
+                        if communities.is_empty() {
+                            rsx! {}
+                        } else {
+                            let route_for_communities = current_route.clone();
+                            rsx! {
+                                EntityListSection {
+                                    title: "Communities".to_string(),
+                                    entities: communities.clone(),
+                                    all_entities: dir_snapshot.entities.clone(),
+                                    search_filter: search_query(),
+                                    expanded_ids: expanded_entities,
+                                    expandable: true,
+                                    is_selected: move |entity| check_entity_selected(&entity, &route_for_communities),
+                                    on_navigate: move |entity| {
+                                        navigator.push(entity_route(&entity));
+                                    },
                                 }
-                            })}
+                            }
                         }
                     }
 
                     // Projects
-                    if !projects.is_empty() {
-                        SidebarSection {
-                            title: "Projects".to_string(),
-                            action: Some(rsx! {
-                                QuickActionButton {
-                                    icon: "+".to_string(),
-                                    label: "Create Project".to_string(),
-                                    onclick: move |_| {
+                    {
+                        if projects.is_empty() {
+                            rsx! {}
+                        } else {
+                            let route_for_projects = current_route.clone();
+                            rsx! {
+                                EntityListSection {
+                                    title: "Projects".to_string(),
+                                    entities: projects.clone(),
+                                    search_filter: search_query(),
+                                    add_button_label: Some("Create Project".to_string()),
+                                    is_selected: move |entity| check_entity_selected(&entity, &route_for_projects),
+                                    on_navigate: move |entity| {
+                                        navigator.push(entity_route(&entity));
+                                    },
+                                    on_add: move |_| {
                                         create_modal_parent_id.set(None);
                                         show_create_modal.set(Some(CreateEntityType::Project));
                                     },
                                 }
-                            }),
-                            {filter_entities(projects.clone()).into_iter().map(|entity| {
-                                let selected = is_entity_selected(&entity);
-                                let route = entity_route(&entity);
-                                let nav = navigator;
-                                rsx! {
-                                    EntityNavItem {
-                                        key: "{entity.id}",
-                                        entity: entity.clone(),
-                                        selected: selected,
-                                        unread_count: 0,
-                                        onclick: move |_| {
-                                            nav.push(route.clone());
-                                        },
-                                    }
-                                }
-                            })}
+                            }
                         }
                     }
 
                     // Personal Groups (groups without a parent org)
-                    if !personal_groups.is_empty() {
-                        SidebarSection {
-                            title: "Personal Groups".to_string(),
-                            action: Some(rsx! {
-                                QuickActionButton {
-                                    icon: "+".to_string(),
-                                    label: "Create Group".to_string(),
-                                    onclick: move |_| {
+                    {
+                        if personal_groups.is_empty() {
+                            rsx! {}
+                        } else {
+                            let route_for_groups = current_route.clone();
+                            rsx! {
+                                EntityListSection {
+                                    title: "Personal Groups".to_string(),
+                                    entities: personal_groups.clone(),
+                                    search_filter: search_query(),
+                                    add_button_label: Some("Create Group".to_string()),
+                                    is_selected: move |entity| check_entity_selected(&entity, &route_for_groups),
+                                    on_navigate: move |entity| {
+                                        navigator.push(entity_route(&entity));
+                                    },
+                                    on_add: move |_| {
                                         create_modal_parent_id.set(None);
                                         show_create_modal.set(Some(CreateEntityType::Group));
                                     },
                                 }
-                            }),
-                            {filter_entities(personal_groups.clone()).into_iter().map(|entity| {
-                                let selected = is_entity_selected(&entity);
-                                let route = entity_route(&entity);
-                                let nav = navigator;
-                                rsx! {
-                                    EntityNavItem {
-                                        key: "{entity.id}",
-                                        entity: entity.clone(),
-                                        selected: selected,
-                                        unread_count: 0,
-                                        onclick: move |_| {
-                                            nav.push(route.clone());
-                                        },
-                                    }
-                                }
-                            })}
+                            }
                         }
                     }
 
                     // Direct Messages (contacts with presence indicators)
-                    SidebarSection {
-                        title: "Direct Messages".to_string(),
-                        action: Some(rsx! {
-                            QuickActionButton {
-                                icon: "+".to_string(),
-                                label: "Add Contact".to_string(),
-                                onclick: move |_| {},
+                    {
+                        let route_for_contacts = current_route.clone();
+                        rsx! {
+                            ContactListSection {
+                                title: "Direct Messages".to_string(),
+                                contacts: contacts.clone(),
+                                search_filter: search_query(),
+                                add_button_label: Some("Add Contact".to_string()),
+                                is_selected: move |contact| check_contact_selected(&contact, &route_for_contacts),
+                                on_navigate: move |contact| {
+                                    navigator.push(contact_route(&contact));
+                                },
+                                on_add: move |_| {},
                             }
-                        }),
-                        {filter_contacts(contacts.clone()).into_iter().map(|contact| {
-                            let selected = is_contact_selected(&contact);
-                            let route = contact_route(&contact);
-                            let nav = navigator;
-                            // Use contact's presence status if available
-                            let presence = contact.presence;
-                            rsx! {
-                                ContactNavItem {
-                                    key: "{contact.id}",
-                                    contact: contact.clone(),
-                                    selected: selected,
-                                    unread_count: 0,
-                                    presence: presence,
-                                    onclick: move |_| {
-                                        nav.push(route.clone());
-                                    },
-                                }
-                            }
-                        })}
+                        }
                     }
                 }
             },

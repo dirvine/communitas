@@ -19,6 +19,7 @@ pub mod offline;
 mod presence_badge;
 mod search_bar;
 pub mod settings;
+pub mod sidebar;
 pub mod skeleton;
 mod thread_list;
 
@@ -133,4 +134,10 @@ pub use entity_view::{
 pub use messaging_v2::{
     ChatView, DateSeparator, MessageBubble, MessageComposerV2, MessageDisplay,
     MessageListContainer, NewMessageIndicator, ReactionChip, ReactionDisplay, TypingIndicatorV2,
+};
+
+// Re-export sidebar components for main app layout
+#[allow(unused_imports)]
+pub use sidebar::{
+    ContactListSection, EntityListSection, filter_contacts, filter_entities, get_entity_children,
 };

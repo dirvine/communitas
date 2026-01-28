@@ -324,6 +324,12 @@ pub fn EntityHeader(
                                 typography::SIZE_SM,
                                 semantic::TEXT_SECONDARY
                             ),
+                            aria_expanded: if description_expanded() { "true" } else { "false" },
+                            aria_label: format!(
+                                "{} description for {}",
+                                if description_expanded() { "Collapse" } else { "Expand" },
+                                type_label
+                            ),
                             onclick: move |_| description_expanded.set(!description_expanded()),
 
                             span {
@@ -398,6 +404,8 @@ pub fn EntityTabBar(
                 semantic::BORDER_SUBTLE,
                 semantic::BG_SECONDARY
             ),
+            role: "tablist",
+            aria_label: "Entity view tabs",
 
             for tab in tabs {
                 TabButton {
@@ -448,6 +456,9 @@ fn TabButton(tab: EntityTab, is_active: bool, onclick: EventHandler<MouseEvent>)
                 if is_active { typography::WEIGHT_SEMIBOLD } else { typography::WEIGHT_MEDIUM },
                 motion::transition("color")
             ),
+            role: "tab",
+            aria_selected: if is_active { "true" } else { "false" },
+            aria_label: format!("{} tab", tab.label()),
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
@@ -592,11 +603,12 @@ pub fn HeaderAction(
                 typography::WEIGHT_MEDIUM,
                 motion::transition("all")
             ),
+            aria_label: "{label}",
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
 
-            span { "{icon}" }
+            span { aria_hidden: "true", "{icon}" }
             span { "{label}" }
         }
     }

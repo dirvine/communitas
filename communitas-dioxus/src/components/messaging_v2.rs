@@ -394,9 +394,10 @@ pub fn MessageBubble(
                         typography::SIZE_XS,
                         motion::transition("color")
                     ),
+                    aria_label: format!("View {} repl{} in thread", message.reply_count, if message.reply_count == 1 { "y" } else { "ies" }),
                     onclick: move |_| on_reply.call(message_id_for_thread.clone()),
 
-                    span { "💬" }
+                    span { aria_hidden: "true", "💬" }
                     span { "{message.reply_count} replies" }
                 }
             }
@@ -439,11 +440,12 @@ fn MessageActionButton(
                 radius::MD,
                 motion::transition("background")
             ),
+            aria_label: "{tooltip}",
             title: "{tooltip}",
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
-            "{icon}"
+            span { aria_hidden: "true", "{icon}" }
         }
     }
 }
@@ -472,6 +474,14 @@ pub fn ReactionChip(
         semantic::BORDER_SUBTLE
     };
 
+    let reaction_label = format!(
+        "{} reaction{}, {} {}",
+        count,
+        if count == 1 { "" } else { "s" },
+        emoji,
+        if has_reacted { "- you reacted" } else { "" }
+    );
+
     rsx! {
         button {
             style: format!(
@@ -492,12 +502,15 @@ pub fn ReactionChip(
                 radius::FULL,
                 motion::transition("all")
             ),
+            aria_label: "{reaction_label}",
+            aria_pressed: if has_reacted { "true" } else { "false" },
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
 
             span {
                 style: format!("font-size: {};", typography::SIZE_SM),
+                aria_hidden: "true",
                 "{emoji}"
             }
 
@@ -620,6 +633,7 @@ pub fn MessageComposerV2(
                     value: "{value}",
                     disabled: disabled,
                     rows: "1",
+                    aria_label: "Message input. Press Enter to send, Shift+Enter for new line.",
                     style: format!(
                         "flex: 1; \
                          background: transparent; \
@@ -713,11 +727,12 @@ fn ComposerButton(icon: String, tooltip: String, onclick: EventHandler<MouseEven
                 radius::MD,
                 motion::transition("background")
             ),
+            aria_label: "{tooltip}",
             title: "{tooltip}",
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |evt| onclick.call(evt),
-            "{icon}"
+            span { aria_hidden: "true", "{icon}" }
         }
     }
 }
@@ -756,6 +771,7 @@ fn SendButton(disabled: bool, onclick: EventHandler<MouseEvent>) -> Element {
                 motion::transition("all"),
                 if disabled { "opacity: 0.5;" } else { "" }
             ),
+            aria_label: "Send message",
             disabled: disabled,
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
@@ -768,6 +784,7 @@ fn SendButton(disabled: bool, onclick: EventHandler<MouseEvent>) -> Element {
                     if disabled { semantic::TEXT_MUTED } else { "white" },
                     typography::SIZE_BASE
                 ),
+                aria_hidden: "true",
                 "➤"
             }
         }
@@ -849,6 +866,12 @@ pub fn NewMessageIndicator(count: u32) -> Element {
         return rsx! { Fragment {} };
     }
 
+    let message_text = if count == 1 {
+        format!("{} new message", count)
+    } else {
+        format!("{} new messages", count)
+    };
+
     rsx! {
         button {
             style: format!(
@@ -879,9 +902,10 @@ pub fn NewMessageIndicator(count: u32) -> Element {
                 typography::WEIGHT_MEDIUM,
                 shadow::LG
             ),
+            aria_label: format!("Scroll to {}. Click to jump to latest messages.", message_text),
 
-            span { "↓" }
-            span { "{count} new message" if count == 1 { "" } else { "s" } }
+            span { aria_hidden: "true", "↓" }
+            span { "{message_text}" }
         }
 
         style {

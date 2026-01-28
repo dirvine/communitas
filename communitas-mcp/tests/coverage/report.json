@@ -1,5 +1,5 @@
 {
-  "generated": "2026-01-28T14:29:57Z",
+  "generated": "2026-01-28T22:59:12Z",
   "total_tools": 197,
   "tested_tools": 190,
   "overall_coverage": 96.44670050761421,
@@ -272,8 +272,8 @@
       "category": "call",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -292,8 +292,8 @@
       "category": "call",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 2
     },
@@ -386,8 +386,8 @@
       "category": "canvas",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 2
     },
@@ -416,8 +416,8 @@
       "category": "canvas",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 2
     },
@@ -446,8 +446,8 @@
       "category": "canvas",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "generated_stubs.rs"
+        "generated_stubs.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -456,8 +456,8 @@
       "category": "canvas_history",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 2
     },
@@ -475,9 +475,9 @@
       "category": "canvas_history",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
         "golden_test.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 3
     },
@@ -568,9 +568,9 @@
       "category": "contacts",
       "tested": true,
       "test_files": [
+        "comprehensive_e2e.rs",
         "parity_test.rs",
-        "mcp_e2e.rs",
-        "comprehensive_e2e.rs"
+        "mcp_e2e.rs"
       ],
       "test_count": 3
     },
@@ -626,10 +626,10 @@
       "category": "contacts",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "generated_stubs.rs",
         "parity_test.rs",
-        "mcp_e2e.rs"
+        "mcp_e2e.rs",
+        "generated_stubs.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 4
     },
@@ -638,9 +638,9 @@
       "category": "contacts",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
         "parity_test.rs",
-        "generated_stubs.rs"
+        "generated_stubs.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 3
     },
@@ -689,8 +689,8 @@
       "category": "drive",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
         "generated_stubs.rs",
+        "parity_test.rs",
         "e2e_workflows.rs"
       ],
       "test_count": 3
@@ -711,9 +711,9 @@
       "category": "drive",
       "tested": true,
       "test_files": [
-        "e2e_workflows.rs",
+        "comprehensive_e2e.rs",
         "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "e2e_workflows.rs"
       ],
       "test_count": 3
     },
@@ -752,10 +752,10 @@
       "category": "drive",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
+        "golden_test.rs",
         "generated_stubs.rs",
-        "e2e_workflows.rs",
-        "golden_test.rs"
+        "parity_test.rs",
+        "e2e_workflows.rs"
       ],
       "test_count": 4
     },
@@ -764,10 +764,10 @@
       "category": "drive",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "e2e_workflows.rs",
+        "mcp_e2e.rs",
         "parity_test.rs",
-        "mcp_e2e.rs"
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs"
       ],
       "test_count": 4
     },
@@ -786,10 +786,10 @@
       "category": "drive",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
+        "e2e_workflows.rs",
         "parity_test.rs",
-        "mcp_e2e.rs",
-        "e2e_workflows.rs"
+        "comprehensive_e2e.rs",
+        "mcp_e2e.rs"
       ],
       "test_count": 4
     },
@@ -798,10 +798,10 @@
       "category": "drive",
       "tested": true,
       "test_files": [
+        "mcp_e2e.rs",
         "e2e_workflows.rs",
-        "comprehensive_e2e.rs",
         "parity_test.rs",
-        "mcp_e2e.rs"
+        "comprehensive_e2e.rs"
       ],
       "test_count": 4
     },
@@ -1061,11 +1061,11 @@
       "category": "entities",
       "tested": true,
       "test_files": [
-        "e2e_workflows.rs",
-        "parity_test.rs",
-        "comprehensive_e2e.rs",
         "mcp_e2e.rs",
-        "generated_stubs.rs"
+        "generated_stubs.rs",
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs",
+        "parity_test.rs"
       ],
       "test_count": 5
     },
@@ -1074,9 +1074,9 @@
       "category": "entities",
       "tested": true,
       "test_files": [
+        "e2e_workflows.rs",
         "parity_test.rs",
-        "comprehensive_e2e.rs",
-        "e2e_workflows.rs"
+        "comprehensive_e2e.rs"
       ],
       "test_count": 3
     },
@@ -1092,9 +1092,9 @@
       "category": "entities",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
+        "comprehensive_e2e.rs",
         "generated_stubs.rs",
-        "comprehensive_e2e.rs"
+        "parity_test.rs"
       ],
       "test_count": 3
     },
@@ -1119,13 +1119,13 @@
       "category": "entities",
       "tested": true,
       "test_files": [
+        "golden_test.rs",
+        "mcp_e2e.rs",
         "mod.rs",
         "comprehensive_e2e.rs",
-        "parity_test.rs",
-        "e2e_workflows.rs",
-        "mcp_e2e.rs",
         "generated_stubs.rs",
-        "golden_test.rs",
+        "e2e_workflows.rs",
+        "parity_test.rs",
         "harness_test.rs"
       ],
       "test_count": 8
@@ -1149,9 +1149,9 @@
       "category": "entities",
       "tested": true,
       "test_files": [
-        "e2e_workflows.rs",
+        "parity_test.rs",
         "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "e2e_workflows.rs"
       ],
       "test_count": 3
     },
@@ -1188,10 +1188,10 @@
       "category": "identity",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "mod.rs",
+        "harness_test.rs",
         "mcp_e2e.rs",
-        "harness_test.rs"
+        "comprehensive_e2e.rs",
+        "mod.rs"
       ],
       "test_count": 4
     },
@@ -1200,8 +1200,8 @@
       "category": "identity",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 2
     },
@@ -1248,8 +1248,8 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -1258,11 +1258,11 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
         "e2e_workflows.rs",
-        "golden_test.rs",
+        "comprehensive_e2e.rs",
+        "mcp_e2e.rs",
         "parity_test.rs",
-        "mcp_e2e.rs"
+        "golden_test.rs"
       ],
       "test_count": 5
     },
@@ -1271,10 +1271,10 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "mcp_e2e.rs",
         "parity_test.rs",
-        "e2e_workflows.rs",
-        "comprehensive_e2e.rs"
+        "mcp_e2e.rs",
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs"
       ],
       "test_count": 4
     },
@@ -1283,9 +1283,9 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "mcp_e2e.rs",
-        "e2e_workflows.rs",
         "parity_test.rs",
+        "e2e_workflows.rs",
+        "mcp_e2e.rs",
         "comprehensive_e2e.rs"
       ],
       "test_count": 4
@@ -1306,8 +1306,8 @@
       "tested": true,
       "test_files": [
         "e2e_workflows.rs",
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 3
     },
@@ -1336,10 +1336,10 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "mcp_e2e.rs",
+        "comprehensive_e2e.rs",
         "parity_test.rs",
         "e2e_workflows.rs",
-        "comprehensive_e2e.rs"
+        "mcp_e2e.rs"
       ],
       "test_count": 4
     },
@@ -1369,8 +1369,8 @@
       "tested": true,
       "test_files": [
         "e2e_workflows.rs",
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 3
     },
@@ -1380,8 +1380,8 @@
       "tested": true,
       "test_files": [
         "parity_test.rs",
-        "comprehensive_e2e.rs",
-        "e2e_workflows.rs"
+        "e2e_workflows.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 3
     },
@@ -1410,10 +1410,10 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "mcp_e2e.rs",
         "parity_test.rs",
-        "e2e_workflows.rs",
-        "comprehensive_e2e.rs"
+        "mcp_e2e.rs",
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs"
       ],
       "test_count": 4
     },
@@ -1443,8 +1443,8 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 2
     },
@@ -1453,8 +1453,8 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 2
     },
@@ -1473,8 +1473,8 @@
       "category": "kanban",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 2
     },
@@ -1543,8 +1543,8 @@
       "category": "kanban_extras",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -1553,8 +1553,8 @@
       "category": "members",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -1563,8 +1563,8 @@
       "category": "members",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -1573,8 +1573,8 @@
       "category": "members",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -1612,8 +1612,8 @@
       "category": "members",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -1643,9 +1643,9 @@
       "category": "messaging",
       "tested": true,
       "test_files": [
+        "mcp_e2e.rs",
         "parity_test.rs",
-        "comprehensive_e2e.rs",
-        "mcp_e2e.rs"
+        "comprehensive_e2e.rs"
       ],
       "test_count": 3
     },
@@ -1654,9 +1654,9 @@
       "category": "messaging",
       "tested": true,
       "test_files": [
+        "e2e_workflows.rs",
         "comprehensive_e2e.rs",
-        "parity_test.rs",
-        "e2e_workflows.rs"
+        "parity_test.rs"
       ],
       "test_count": 3
     },
@@ -1666,9 +1666,9 @@
       "tested": true,
       "test_files": [
         "comprehensive_e2e.rs",
+        "parity_test.rs",
         "mcp_e2e.rs",
-        "e2e_workflows.rs",
-        "parity_test.rs"
+        "e2e_workflows.rs"
       ],
       "test_count": 4
     },
@@ -1688,9 +1688,9 @@
       "tested": true,
       "test_files": [
         "parity_test.rs",
+        "e2e_workflows.rs",
         "comprehensive_e2e.rs",
-        "mcp_e2e.rs",
-        "e2e_workflows.rs"
+        "mcp_e2e.rs"
       ],
       "test_count": 4
     },
@@ -1718,8 +1718,8 @@
       "category": "messaging",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 2
     },
@@ -1746,10 +1746,10 @@
       "category": "messaging",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "e2e_workflows.rs",
         "parity_test.rs",
-        "golden_test.rs"
+        "generated_stubs.rs",
+        "golden_test.rs",
+        "e2e_workflows.rs"
       ],
       "test_count": 4
     },
@@ -1776,8 +1776,8 @@
       "category": "messaging",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "comprehensive_e2e.rs"
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -1797,8 +1797,8 @@
       "test_files": [
         "comprehensive_e2e.rs",
         "parity_test.rs",
-        "e2e_workflows.rs",
-        "mcp_e2e.rs"
+        "mcp_e2e.rs",
+        "e2e_workflows.rs"
       ],
       "test_count": 4
     },
@@ -1834,8 +1834,8 @@
       "category": "network",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 2
     },
@@ -1874,8 +1874,8 @@
       "category": "network",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 2
     },
@@ -1894,10 +1894,10 @@
       "category": "network",
       "tested": true,
       "test_files": [
+        "golden_test.rs",
         "comprehensive_e2e.rs",
-        "parity_test.rs",
         "mcp_e2e.rs",
-        "golden_test.rs"
+        "parity_test.rs"
       ],
       "test_count": 4
     },
@@ -2017,8 +2017,8 @@
       "category": "presence",
       "tested": true,
       "test_files": [
-        "parity_test.rs",
-        "generated_stubs.rs"
+        "generated_stubs.rs",
+        "parity_test.rs"
       ],
       "test_count": 2
     },
@@ -2064,8 +2064,8 @@
       "category": "presence",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 2
     },
@@ -2074,8 +2074,8 @@
       "category": "presence",
       "tested": true,
       "test_files": [
-        "generated_stubs.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "generated_stubs.rs"
       ],
       "test_count": 2
     },
@@ -2084,8 +2084,8 @@
       "category": "presence",
       "tested": true,
       "test_files": [
-        "comprehensive_e2e.rs",
-        "parity_test.rs"
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
       ],
       "test_count": 2
     },

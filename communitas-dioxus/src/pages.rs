@@ -3274,7 +3274,7 @@ pub fn CreateEntityModal(
             ),
             role: "dialog",
             aria_modal: "true",
-            aria_label: "Create {entity_label}",
+            aria_labelledby: "create-entity-modal-title",
             tabindex: "0",
             autofocus: true,
             onkeydown: on_keydown,
@@ -3316,10 +3316,12 @@ pub fn CreateEntityModal(
 
                     span {
                         style: format!("font-size: {};", typography::SIZE_XL),
+                        aria_hidden: "true",
                         "{entity_icon}"
                     }
 
                     h2 {
+                        id: "create-entity-modal-title",
                         style: format!(
                             "flex: 1; \
                              margin: 0; \
@@ -3350,8 +3352,9 @@ pub fn CreateEntityModal(
                             semantic::TEXT_MUTED,
                             motion::transition("background")
                         ),
+                        aria_label: "Close dialog",
                         onclick: move |_| on_close.call(()),
-                        "✕"
+                        span { aria_hidden: "true", "✕" }
                     }
                 }
 
@@ -3597,7 +3600,7 @@ pub fn InviteMemberModal(
             ),
             role: "dialog",
             aria_modal: "true",
-            aria_label: "Invite Member",
+            aria_labelledby: "invite-member-modal-title",
             tabindex: "0",
             autofocus: true,
             onkeydown: on_keydown,
@@ -3639,10 +3642,12 @@ pub fn InviteMemberModal(
 
                     span {
                         style: format!("font-size: {};", typography::SIZE_XL),
+                        aria_hidden: "true",
                         "👋"
                     }
 
                     h2 {
+                        id: "invite-member-modal-title",
                         style: format!(
                             "flex: 1; \
                              margin: 0; \
@@ -3671,8 +3676,9 @@ pub fn InviteMemberModal(
                             radius::MD,
                             semantic::TEXT_MUTED
                         ),
+                        aria_label: "Close dialog",
                         onclick: move |_| on_close.call(()),
-                        "✕"
+                        span { aria_hidden: "true", "✕" }
                     }
                 }
 
@@ -3942,7 +3948,7 @@ pub fn EditEntityModal(
             ),
             role: "dialog",
             aria_modal: "true",
-            aria_label: "Edit {entity_label}",
+            aria_labelledby: "edit-entity-modal-title",
             tabindex: "0",
             autofocus: true,
             onkeydown: on_keydown,
@@ -3984,10 +3990,12 @@ pub fn EditEntityModal(
 
                     span {
                         style: format!("font-size: {};", typography::SIZE_XL),
+                        aria_hidden: "true",
                         "{entity_icon}"
                     }
 
                     h2 {
+                        id: "edit-entity-modal-title",
                         style: format!(
                             "flex: 1; \
                              margin: 0; \
@@ -4018,8 +4026,9 @@ pub fn EditEntityModal(
                             semantic::TEXT_MUTED,
                             motion::transition("background")
                         ),
+                        aria_label: "Close dialog",
                         onclick: move |_| on_close.call(()),
-                        "✕"
+                        span { aria_hidden: "true", "✕" }
                     }
                 }
 

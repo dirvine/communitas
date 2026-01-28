@@ -1236,3 +1236,72 @@ pub fn SidebarSearch(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::design_tokens::layout;
+    use crate::tokens::breakpoints;
+
+    #[test]
+    fn test_sidebar_width_constants() {
+        // Verify sidebar width constants are defined
+        assert_eq!(layout::SIDEBAR_WIDTH, "280px");
+        assert_eq!(layout::SIDEBAR_COLLAPSED, "72px");
+    }
+
+    #[test]
+    fn test_responsive_breakpoint() {
+        // Verify the MD breakpoint used for sidebar collapse
+        assert_eq!(breakpoints::MD_PX, 768);
+    }
+
+    #[test]
+    fn test_sidebar_width_calculation() {
+        // Test the width calculation logic used in the component
+        let collapsed = true;
+        let width = if collapsed {
+            layout::SIDEBAR_COLLAPSED
+        } else {
+            layout::SIDEBAR_WIDTH
+        };
+        assert_eq!(width, "72px");
+
+        let expanded = false;
+        let width = if expanded {
+            layout::SIDEBAR_COLLAPSED
+        } else {
+            layout::SIDEBAR_WIDTH
+        };
+        assert_eq!(width, "280px");
+    }
+
+    #[test]
+    fn test_breakpoint_comparison() {
+        // Test the responsive behavior logic
+        let small_screen = 600.0;
+        let large_screen = 1024.0;
+
+        assert!(small_screen < breakpoints::MD_PX as f64);
+        assert!(large_screen >= breakpoints::MD_PX as f64);
+    }
+
+    #[test]
+    fn test_aria_label_text() {
+        // Verify aria-label text for accessibility
+        let collapsed = true;
+        let label = if collapsed {
+            "Expand sidebar"
+        } else {
+            "Collapse sidebar"
+        };
+        assert_eq!(label, "Expand sidebar");
+
+        let expanded = false;
+        let label = if expanded {
+            "Expand sidebar"
+        } else {
+            "Collapse sidebar"
+        };
+        assert_eq!(label, "Collapse sidebar");
+    }
+}

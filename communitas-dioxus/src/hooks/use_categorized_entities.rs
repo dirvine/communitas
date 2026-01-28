@@ -250,4 +250,71 @@ mod tests {
         assert_eq!(categorized.personal_groups.len(), 1);
         assert_eq!(categorized.personal_groups[0].name, "Personal Group");
     }
+
+    #[test]
+    fn test_empty_entities() {
+        let categorized = CategorizedEntities::from_entities(&[]);
+
+        assert_eq!(categorized.organizations.len(), 0);
+        assert_eq!(categorized.communities.len(), 0);
+        assert_eq!(categorized.projects.len(), 0);
+        assert_eq!(categorized.groups.len(), 0);
+        assert_eq!(categorized.channels.len(), 0);
+        assert_eq!(categorized.personal_groups.len(), 0);
+        assert_eq!(categorized.contacts.len(), 0);
+    }
+
+    #[test]
+    fn test_from_snapshot_with_empty() {
+        let snapshot = DirectorySnapshot {
+            identity: None,
+            entities: vec![],
+            contacts: vec![],
+        };
+
+        let categorized = CategorizedEntities::from_snapshot(&snapshot);
+
+        assert_eq!(categorized.organizations.len(), 0);
+        assert_eq!(categorized.contacts.len(), 0);
+    }
+
+    #[test]
+    fn test_channels_categorized() {
+        let entities = vec![
+            make_entity("chan1", "General", UnifiedEntityType::Channel),
+            make_entity("chan2", "Random", UnifiedEntityType::Channel),
+        ];
+
+        let categorized = CategorizedEntities::from_entities(&entities);
+
+        assert_eq!(categorized.channels.len(), 2);
+        assert_eq!(categorized.channels[0].name, "General");
+        assert_eq!(categorized.channels[1].name, "Random");
+    }
+
+    #[test]
+    fn test_from_snapshot_preserves_contacts() {
+        use communitas_ui_api::PresenceStatus;
+
+        let snapshot = DirectorySnapshot {
+            identity: None,
+            entities: vec![make_entity(
+                "org1",
+                "Test Org",
+                UnifiedEntityType::Organization,
+            )],
+            contacts: vec![UnifiedContact {
+                id: "contact1".to_string(),
+                display_name: "Alice".to_string(),
+                status: "online".to_string(),
+                presence: PresenceStatus::Online,
+            }],
+        };
+
+        let categorized = CategorizedEntities::from_snapshot(&snapshot);
+
+        assert_eq!(categorized.organizations.len(), 1);
+        assert_eq!(categorized.contacts.len(), 1);
+        assert_eq!(categorized.contacts[0].display_name, "Alice");
+    }
 }

@@ -1,0 +1,2148 @@
+{
+  "generated": "2026-01-28T14:29:57Z",
+  "total_tools": 197,
+  "tested_tools": 190,
+  "overall_coverage": 96.44670050761421,
+  "categories": [
+    {
+      "name": "call",
+      "description": "Voice/video call operations",
+      "total_tools": 11,
+      "tested_tools": 11,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "call_history",
+      "description": "Call history and missed calls",
+      "total_tools": 3,
+      "tested_tools": 3,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "call_recording",
+      "description": "Call recording operations",
+      "total_tools": 3,
+      "tested_tools": 3,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "canvas",
+      "description": "Canvas elements and operations",
+      "total_tools": 9,
+      "tested_tools": 9,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "canvas_history",
+      "description": "Canvas history and state",
+      "total_tools": 6,
+      "tested_tools": 6,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "canvas_view",
+      "description": "Canvas view and collaboration",
+      "total_tools": 5,
+      "tested_tools": 5,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "contacts",
+      "description": "Contact management and favorites",
+      "total_tools": 13,
+      "tested_tools": 11,
+      "coverage_percent": 84.61538461538461,
+      "untested": [
+        "contacts",
+        "favorites"
+      ]
+    },
+    {
+      "name": "drive",
+      "description": "File and directory operations",
+      "total_tools": 11,
+      "tested_tools": 11,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "drive_access",
+      "description": "Disk access types",
+      "total_tools": 3,
+      "tested_tools": 3,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "drive_download",
+      "description": "File download operations",
+      "total_tools": 4,
+      "tested_tools": 4,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "drive_sharing",
+      "description": "File sharing links",
+      "total_tools": 4,
+      "tested_tools": 4,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "drive_staging",
+      "description": "Upload staging and conflict resolution",
+      "total_tools": 11,
+      "tested_tools": 11,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "drive_upload",
+      "description": "File upload operations",
+      "total_tools": 5,
+      "tested_tools": 5,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "entities",
+      "description": "Groups, channels, projects, and entity management",
+      "total_tools": 11,
+      "tested_tools": 6,
+      "coverage_percent": 54.54545454545454,
+      "untested": [
+        "group",
+        "channel",
+        "project",
+        "person",
+        "entities"
+      ]
+    },
+    {
+      "name": "identity",
+      "description": "Authentication, profiles, and identity management",
+      "total_tools": 9,
+      "tested_tools": 9,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "kanban",
+      "description": "Kanban boards, columns, cards, and tags",
+      "total_tools": 22,
+      "tested_tools": 22,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "kanban_extras",
+      "description": "Kanban comments and steps",
+      "total_tools": 7,
+      "tested_tools": 7,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "members",
+      "description": "Membership and invitation management",
+      "total_tools": 8,
+      "tested_tools": 8,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "messaging",
+      "description": "Messages, threads, and reactions",
+      "total_tools": 20,
+      "tested_tools": 20,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "network",
+      "description": "Network and connectivity",
+      "total_tools": 9,
+      "tested_tools": 9,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "offline_queue",
+      "description": "Offline message queue management",
+      "total_tools": 6,
+      "tested_tools": 6,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "presence",
+      "description": "User presence and status",
+      "total_tools": 13,
+      "tested_tools": 13,
+      "coverage_percent": 100.0,
+      "untested": []
+    },
+    {
+      "name": "website",
+      "description": "Website publishing",
+      "total_tools": 4,
+      "tested_tools": 4,
+      "coverage_percent": 100.0,
+      "untested": []
+    }
+  ],
+  "tools": [
+    {
+      "name": "end_call",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_call_participants",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_call_quality",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_call_status",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "join_call",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_active_calls",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_media_devices",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "share_screen",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "start_voice_call",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "toggle_mute",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "toggle_video",
+      "category": "call",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "acknowledge_missed_call",
+      "category": "call_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_call_history",
+      "category": "call_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_missed_calls",
+      "category": "call_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_call_recording",
+      "category": "call_recording",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "start_call_recording",
+      "category": "call_recording",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "stop_call_recording",
+      "category": "call_recording",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "canvas_add_chart",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_add_image",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_add_text",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_clear",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_deselect_all",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_element_at",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_remove_element",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_select_element",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_update_transform",
+      "category": "canvas",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_export",
+      "category": "canvas_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_get_history",
+      "category": "canvas_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "canvas_get_snapshot",
+      "category": "canvas_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "golden_test.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "canvas_import",
+      "category": "canvas_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_redo",
+      "category": "canvas_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "canvas_undo",
+      "category": "canvas_history",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "canvas_broadcast_cursor",
+      "category": "canvas_view",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "canvas_flush_offline_queue",
+      "category": "canvas_view",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "canvas_get_remote_cursors",
+      "category": "canvas_view",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "canvas_set_view",
+      "category": "canvas_view",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "canvas_set_viewport",
+      "category": "canvas_view",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "contacts",
+      "category": "contacts",
+      "tested": false,
+      "test_files": [],
+      "test_count": 0
+    },
+    {
+      "name": "create_contact",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "mcp_e2e.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "delete_contact",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "favorites",
+      "category": "contacts",
+      "tested": false,
+      "test_files": [],
+      "test_count": 0
+    },
+    {
+      "name": "get_contact",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_contact_presence",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "link_contact",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_contacts",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "generated_stubs.rs",
+        "parity_test.rs",
+        "mcp_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "list_favourite_contacts",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "remove_favourite_contact",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "search_contacts",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "set_favourite_contact",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "update_contact",
+      "category": "contacts",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "copy_file",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs",
+        "e2e_workflows.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "create_directory",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "e2e_workflows.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "delete_file",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "e2e_workflows.rs",
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "get_disk_stats",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_file_preview",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_media_metadata",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_disks",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs",
+        "e2e_workflows.rs",
+        "golden_test.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "list_files",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs",
+        "parity_test.rs",
+        "mcp_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "move_file",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "read_file",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "mcp_e2e.rs",
+        "e2e_workflows.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "write_file",
+      "category": "drive",
+      "tested": true,
+      "test_files": [
+        "e2e_workflows.rs",
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "mcp_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "private",
+      "category": "drive_access",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "public",
+      "category": "drive_access",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "shared",
+      "category": "drive_access",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "cancel_download",
+      "category": "drive_download",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_download_progress",
+      "category": "drive_download",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "resume_download",
+      "category": "drive_download",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "start_streaming_download",
+      "category": "drive_download",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "create_share_link",
+      "category": "drive_sharing",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_file_share_links",
+      "category": "drive_sharing",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "list_share_links",
+      "category": "drive_sharing",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "revoke_share_link",
+      "category": "drive_sharing",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_staged_upload",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_staging_status",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "keep_both",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "keep_local",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "keep_remote",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "list_staged_uploads",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "remove_staged_upload",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "resolve_staging_conflict",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "retry_staged_upload",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "stage_upload",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "sync_staging_queue",
+      "category": "drive_staging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "cancel_upload",
+      "category": "drive_upload",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_upload_progress",
+      "category": "drive_upload",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "resume_upload",
+      "category": "drive_upload",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "start_streaming_upload",
+      "category": "drive_upload",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "upload_with_metadata",
+      "category": "drive_upload",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "channel",
+      "category": "entities",
+      "tested": false,
+      "test_files": [],
+      "test_count": 0
+    },
+    {
+      "name": "create_entity",
+      "category": "entities",
+      "tested": true,
+      "test_files": [
+        "e2e_workflows.rs",
+        "parity_test.rs",
+        "comprehensive_e2e.rs",
+        "mcp_e2e.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 5
+    },
+    {
+      "name": "delete_entity",
+      "category": "entities",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "entities",
+      "category": "entities",
+      "tested": false,
+      "test_files": [],
+      "test_count": 0
+    },
+    {
+      "name": "get_entity",
+      "category": "entities",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "group",
+      "category": "entities",
+      "tested": false,
+      "test_files": [],
+      "test_count": 0
+    },
+    {
+      "name": "join_entity",
+      "category": "entities",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "list_entities",
+      "category": "entities",
+      "tested": true,
+      "test_files": [
+        "mod.rs",
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "e2e_workflows.rs",
+        "mcp_e2e.rs",
+        "generated_stubs.rs",
+        "golden_test.rs",
+        "harness_test.rs"
+      ],
+      "test_count": 8
+    },
+    {
+      "name": "person",
+      "category": "entities",
+      "tested": false,
+      "test_files": [],
+      "test_count": 0
+    },
+    {
+      "name": "project",
+      "category": "entities",
+      "tested": false,
+      "test_files": [],
+      "test_count": 0
+    },
+    {
+      "name": "update_entity",
+      "category": "entities",
+      "tested": true,
+      "test_files": [
+        "e2e_workflows.rs",
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "create_identity",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "export_audit_log",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_audit_log",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_profile",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "mod.rs",
+        "mcp_e2e.rs",
+        "harness_test.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "get_session",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "recover_identity",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "update_profile",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "validate_mnemonic",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "workspace_init",
+      "category": "identity",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "change_card_state",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "create_kanban_board",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs",
+        "golden_test.rs",
+        "parity_test.rs",
+        "mcp_e2e.rs"
+      ],
+      "test_count": 5
+    },
+    {
+      "name": "create_kanban_card",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "mcp_e2e.rs",
+        "parity_test.rs",
+        "e2e_workflows.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "create_kanban_column",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "mcp_e2e.rs",
+        "e2e_workflows.rs",
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "create_kanban_tag",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "delete_kanban_board",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "e2e_workflows.rs",
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "delete_kanban_card",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "delete_kanban_column",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_kanban_board",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "mcp_e2e.rs",
+        "parity_test.rs",
+        "e2e_workflows.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "get_kanban_card",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_kanban_column",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_kanban_boards",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "e2e_workflows.rs",
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "list_kanban_cards",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs",
+        "e2e_workflows.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "list_kanban_columns",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_kanban_tags",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "move_kanban_card",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "mcp_e2e.rs",
+        "parity_test.rs",
+        "e2e_workflows.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "move_kanban_column",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "tag_card",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "mcp_e2e.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "untag_card",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "update_kanban_board",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "update_kanban_card",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "update_kanban_column",
+      "category": "kanban",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "add_comment",
+      "category": "kanban_extras",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "add_step",
+      "category": "kanban_extras",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "delete_comment",
+      "category": "kanban_extras",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "delete_step",
+      "category": "kanban_extras",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_step",
+      "category": "kanban_extras",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_comments",
+      "category": "kanban_extras",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "toggle_step",
+      "category": "kanban_extras",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "accept_invite",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "add_member",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "assign_user",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "create_invite",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "list_members",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "list_pending_invites",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "remove_member",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "unassign_user",
+      "category": "members",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "add_reaction",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "mcp_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "create_thread",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs",
+        "mcp_e2e.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "delete_message",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "e2e_workflows.rs"
+      ],
+      "test_count": 3
+    },
+    {
+      "name": "edit_message",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "mcp_e2e.rs",
+        "e2e_workflows.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "get_available_reactions",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_messages",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs",
+        "mcp_e2e.rs",
+        "e2e_workflows.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "get_pinned_threads",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_reactions",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_thread_messages",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_typing_users",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "list_messages",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "list_threads",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "e2e_workflows.rs",
+        "parity_test.rs",
+        "golden_test.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "mark_thread_read",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "pin_thread",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "remove_reaction",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "search_messages",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "send_message",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "e2e_workflows.rs",
+        "mcp_e2e.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "send_typing_indicator",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "unpin_thread",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "unread",
+      "category": "messaging",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "connect_by_words",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_connection_words",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "network_connect",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "network_peers",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "network_request_external_address",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "network_start",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "network_status",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs",
+        "mcp_e2e.rs",
+        "golden_test.rs"
+      ],
+      "test_count": 4
+    },
+    {
+      "name": "network_stop",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "set_network_available",
+      "category": "network",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "cancel_pending_message",
+      "category": "offline_queue",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_pending_messages",
+      "category": "offline_queue",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "queue_offline_message",
+      "category": "offline_queue",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "retry",
+      "category": "offline_queue",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "retry_pending_messages",
+      "category": "offline_queue",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "skip",
+      "category": "offline_queue",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "announce_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "away",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "busy",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_cached_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_our_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "generated_stubs.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "get_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "parity_test.rs",
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "invisible",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "offline",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "online",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "query_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "set_my_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "generated_stubs.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "set_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "subscribe_to_presence",
+      "category": "presence",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs",
+        "parity_test.rs"
+      ],
+      "test_count": 2
+    },
+    {
+      "name": "create_website",
+      "category": "website",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "delete_website",
+      "category": "website",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "get_website",
+      "category": "website",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    },
+    {
+      "name": "update_website",
+      "category": "website",
+      "tested": true,
+      "test_files": [
+        "comprehensive_e2e.rs"
+      ],
+      "test_count": 1
+    }
+  ],
+  "untested_tools": [
+    "channel",
+    "contacts",
+    "entities",
+    "favorites",
+    "group",
+    "person",
+    "project"
+  ]
+}

@@ -6,6 +6,15 @@
 #
 # Each instance uses the other as bootstrap, creating a peer-to-peer network.
 
+
+# =============================================================================
+# SECURITY NOTE
+# =============================================================================
+# This script is for LOCAL TESTING ONLY on your local machine.
+# It creates two instances connecting to each other via localhost.
+# All communication is local and not exposed to external networks.
+# =============================================================================
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

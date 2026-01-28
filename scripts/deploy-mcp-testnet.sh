@@ -26,6 +26,27 @@
 set -eo pipefail
 
 # =============================================================================
+# SECURITY WARNING
+# =============================================================================
+# This script is for TESTNET ONLY in controlled environments.
+#
+# WARNING: The deployed service:
+#   - Runs as root (elevated privileges)
+#   - Listens on 0.0.0.0 (ALL network interfaces)
+#   - Uses HTTP without TLS encryption
+#   - Runs in demo mode without authentication
+#
+# DO NOT use this script:
+#   - In production environments
+#   - On public networks
+#   - With sensitive data
+#   - Without proper network isolation
+#
+# Usage: Only on trusted, isolated test networks with proper firewall rules.
+# =============================================================================
+
+
+# =============================================================================
 # Configuration
 # =============================================================================
 

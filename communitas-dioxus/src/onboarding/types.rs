@@ -149,10 +149,10 @@ pub const TOUR_STEPS: &[TourStep] = &[
     },
     TourStep {
         id: "identity",
-        title: "Your Identity",
-        description: "This is your unique identity on the network. \
-                      Share your four-word connection phrase to let others connect with you securely. \
-                      Your identity is cryptographically protected.",
+        title: "Your Connection Address",
+        description: "Share your four-word connection address to let others find you on the network. \
+                      This tells others WHERE to connect, not WHO you are. \
+                      Your actual identity is your cryptographic public key.",
         target_selector: Some("[data-tour='identity']"),
         position: TooltipPosition::Bottom,
     },

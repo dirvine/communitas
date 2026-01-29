@@ -11,6 +11,7 @@ use tokio::time::sleep;
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 struct TestNode {
+    #[allow(dead_code)]
     name: String,
     process: std::process::Child,
     port: u16,

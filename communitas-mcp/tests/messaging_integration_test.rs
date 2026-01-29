@@ -11,6 +11,8 @@ use tokio::time::sleep;
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 struct TestNode {
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     name: String,
     process: std::process::Child,
     port: u16,
@@ -232,9 +234,7 @@ async fn test_complete_messaging_workflow() {
         .await;
 
     assert_eq!(
-        verify_msg["result"]["content"]
-            .as_str()
-            .unwrap_or(""),
+        verify_msg["result"]["content"].as_str().unwrap_or(""),
         "Hello everyone! Check out this AMAZING feature",
         "Edited content should be reflected"
     );
@@ -272,9 +272,7 @@ async fn test_complete_messaging_workflow() {
     );
 
     println!("✓ Complete workflow verified successfully!");
-    println!(
-        "Full flow: Message → Thread → Reactions → Edits → State Sync all working"
-    );
+    println!("Full flow: Message → Thread → Reactions → Edits → State Sync all working");
 }
 
 #[tokio::test]
@@ -316,10 +314,7 @@ async fn test_messaging_with_search() {
 
     // Verify found messages
     if let Some(results) = search_result["result"]["messages"].as_array() {
-        assert!(
-            !results.is_empty(),
-            "Should find messages matching query"
-        );
+        assert!(!results.is_empty(), "Should find messages matching query");
     }
 
     println!("✓ Search workflow verified!");

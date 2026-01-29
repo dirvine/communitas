@@ -12,6 +12,8 @@ static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 /// Test node that spawns an MCP server process
 struct TestNode {
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     name: String,
     process: std::process::Child,
     port: u16,
@@ -69,11 +71,7 @@ impl TestNode {
         format!("http://127.0.0.1:{}/mcp", self.port)
     }
 
-    async fn call_tool(
-        &self,
-        tool: &str,
-        input: serde_json::Value,
-    ) -> serde_json::Value {
+    async fn call_tool(&self, tool: &str, input: serde_json::Value) -> serde_json::Value {
         let client = reqwest::Client::new();
         client
             .post(self.url())
@@ -382,10 +380,7 @@ async fn test_search_pagination() {
     );
 
     if let Some(results) = page1["result"]["messages"].as_array() {
-        assert!(
-            results.len() <= 3,
-            "Result count should respect limit"
-        );
+        assert!(results.len() <= 3, "Result count should respect limit");
     }
 
     // Get second page

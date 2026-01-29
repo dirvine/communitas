@@ -116,6 +116,7 @@ const ALL_TOOLS: &[&str] = &[
 ];
 
 struct TestNode {
+    #[allow(dead_code)]
     name: String,
     process: Child,
     port: u16,

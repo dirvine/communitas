@@ -33,6 +33,7 @@ static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 /// Test node that spawns an MCP server process
 struct TestNode {
+    #[allow(dead_code)]
     name: String,
     process: std::process::Child,
     port: u16,

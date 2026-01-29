@@ -114,29 +114,27 @@ async fn test_get_messages() {
     let channel_id = r.get_str("id").unwrap();
 
     // Send some messages
-    node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "First message"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "First message"
+        }),
+    )
+    .await
+    .assert_success();
 
-    node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Second message"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Second message"
+        }),
+    )
+    .await
+    .assert_success();
 
     // Get messages
     let r = node
@@ -167,17 +165,16 @@ async fn test_list_messages() {
     let channel_id = r.get_str("id").unwrap();
 
     // Send a message
-    node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Test message"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Test message"
+        }),
+    )
+    .await
+    .assert_success();
 
     // List messages
     let r = node
@@ -353,16 +350,15 @@ async fn test_list_threads() {
     r.assert_success();
     let parent_id = r.get_str("id").unwrap();
 
-    node
-        .call_tool(
-            "create_thread",
-            json!({
-                "channel_id": channel_id,
-                "parent_message_id": parent_id
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "create_thread",
+        json!({
+            "channel_id": channel_id,
+            "parent_message_id": parent_id
+        }),
+    )
+    .await
+    .assert_success();
 
     // List threads
     let r = node
@@ -405,31 +401,29 @@ async fn test_get_thread_messages() {
     let thread_id = r.get_str("id").unwrap();
 
     // Add thread replies
-    node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Thread reply 1",
-                "thread_id": thread_id
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Thread reply 1",
+            "thread_id": thread_id
+        }),
+    )
+    .await
+    .assert_success();
 
-    node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Thread reply 2",
-                "thread_id": thread_id
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Thread reply 2",
+            "thread_id": thread_id
+        }),
+    )
+    .await
+    .assert_success();
 
     // Get thread messages
     let r = node
@@ -553,15 +547,14 @@ async fn test_unpin_thread() {
     let thread_id = r.get_str("id").unwrap();
 
     // Pin then unpin
-    node
-        .call_tool(
-            "pin_thread",
-            json!({
-                "thread_id": thread_id
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "pin_thread",
+        json!({
+            "thread_id": thread_id
+        }),
+    )
+    .await
+    .assert_success();
 
     let r = node
         .call_tool(
@@ -603,15 +596,14 @@ async fn test_get_pinned_threads() {
     let thread_id = r.get_str("id").unwrap();
 
     // Pin the thread
-    node
-        .call_tool(
-            "pin_thread",
-            json!({
-                "thread_id": thread_id
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "pin_thread",
+        json!({
+            "thread_id": thread_id
+        }),
+    )
+    .await
+    .assert_success();
 
     // Get pinned threads
     let r = node
@@ -760,18 +752,17 @@ async fn test_remove_reaction() {
     let message_id = r.get_str("id").unwrap();
 
     // Add then remove reaction
-    node
-        .call_tool(
-            "add_reaction",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "message_id": message_id,
-                "emoji": "thumbsup"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "add_reaction",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "message_id": message_id,
+            "emoji": "thumbsup"
+        }),
+    )
+    .await
+    .assert_success();
 
     let r = node
         .call_tool(
@@ -816,31 +807,29 @@ async fn test_get_reactions() {
     let message_id = r.get_str("id").unwrap();
 
     // Add reactions
-    node
-        .call_tool(
-            "add_reaction",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "message_id": message_id,
-                "emoji": "thumbsup"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "add_reaction",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "message_id": message_id,
+            "emoji": "thumbsup"
+        }),
+    )
+    .await
+    .assert_success();
 
-    node
-        .call_tool(
-            "add_reaction",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "message_id": message_id,
-                "emoji": "rocket"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "add_reaction",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "message_id": message_id,
+            "emoji": "rocket"
+        }),
+    )
+    .await
+    .assert_success();
 
     // Get reactions
     let r = node
@@ -931,17 +920,16 @@ async fn test_get_pending_messages() {
     let channel_id = r.get_str("id").unwrap();
 
     // Queue a message
-    node
-        .call_tool(
-            "queue_offline_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Pending message"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "queue_offline_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Pending message"
+        }),
+    )
+    .await
+    .assert_success();
 
     // Get pending messages
     let r = node
@@ -971,17 +959,16 @@ async fn test_retry_pending_messages() {
     let channel_id = r.get_str("id").unwrap();
 
     // Queue a message
-    node
-        .call_tool(
-            "queue_offline_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Retry this message"
-            }),
-        )
-        .await
-        .assert_success();
+    node.call_tool(
+        "queue_offline_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Retry this message"
+        }),
+    )
+    .await
+    .assert_success();
 
     // Retry pending messages
     let r = node

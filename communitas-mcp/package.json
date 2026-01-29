@@ -6,7 +6,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e:debug": "playwright test --debug",
+    "coverage": "node ui-bundles/e2e/coverage-report.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0"

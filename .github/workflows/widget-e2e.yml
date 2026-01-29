@@ -1,0 +1,69 @@
+name: Widget E2E Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'communitas-mcp/ui-bundles/**'
+      - 'communitas-mcp/package.json'
+      - 'communitas-mcp/playwright.config.js'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'communitas-mcp/ui-bundles/**'
+      - 'communitas-mcp/package.json'
+      - 'communitas-mcp/playwright.config.js'
+
+jobs:
+  playwright-tests:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: communitas-mcp/package.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Playwright dependencies
+        working-directory: communitas-mcp
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox webkit
+
+      - name: Build MCP server
+        run: cargo build -p communitas-mcp --release
+
+      - name: Run Playwright tests
+        working-directory: communitas-mcp
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: communitas-mcp/playwright-report/
+          retention-days: 30
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: communitas-mcp/test-results/
+          retention-days: 7

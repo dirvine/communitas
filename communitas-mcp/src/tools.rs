@@ -29,7 +29,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         // Pre-auth tools (always available)
         Tool {
             name: "authenticate".to_string(),
-            description: "Authenticate with four-word connection address and password".to_string(),
+            description: "Authenticate with connection address (four words) and password".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -42,7 +42,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         },
         Tool {
             name: "create_vault".to_string(),
-            description: "Create a new identity vault with four-word connection address".to_string(),
+            description: "Create a new identity vault with connection address (four words)".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {

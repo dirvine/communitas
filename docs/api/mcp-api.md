@@ -67,8 +67,8 @@ The following tools are available before authentication:
 
 | Tool | Description |
 |------|-------------|
-| `authenticate` | Authenticate with four-word connection address and password |
-| `create_vault` | Create a new identity vault with four-word connection address |
+| `authenticate` | Authenticate with connection address (four words) and password |
+| `create_vault` | Create a new identity vault with connection address (four words) |
 | `authenticate_token` | Authenticate using a delegate token (for AI agents) |
 | `health_check` | Check server health |
 | `list_vaults` | List available vaults on this device |
@@ -82,6 +82,7 @@ All other tools require authentication. The recommended flow for AI agents:
 
 #### Example: Authenticate
 
+**Request**:
 ```json
 {
   "jsonrpc": "2.0",
@@ -89,15 +90,29 @@ All other tools require authentication. The recommended flow for AI agents:
   "params": {
     "name": "authenticate",
     "arguments": {
-      "four_words": "ocean-forest-moon-star",
-      "password": "your-password"
+      "four_words": "ocean-forest-moon-star",  // WHERE you connect
+      "password": "your-password",
+      "device_name": "My Laptop"
     }
   },
   "id": 1
 }
 ```
 
-**Note**: The `four_words` parameter is your four-word connection address, not your identity. It encodes the network location (IP:port) for peer discovery.
+**Response**:
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "identity": "a1b2c3d4...",               // WHO you are (pubkey_hex, 3904 chars)
+    "display_name": "Alice",                  // SHOWN to others
+    "four_words": "ocean-forest-moon-star"    // WHERE to connect
+  },
+  "id": 1
+}
+```
+
+**Note**: The `four_words` parameter is your connection address (WHERE), not your identity (WHO). It identifies which vault to unlock on this device.
 
 ## Identity Model
 

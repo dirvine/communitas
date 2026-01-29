@@ -65,7 +65,7 @@ rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", 
 saorsa-pqc.workspace = true
 
 [dev-dependencies]
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tempfile = "3"
 proptest = "1.5"
 # For http.rs tests

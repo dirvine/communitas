@@ -60,22 +60,29 @@ jobs:
       run: |
         cd communitas-headless
         cargo build --release --bin communitas-headless
+        cd ../communitas-mcp
+        cargo build --release --bin communitas-mcp
 
     - name: Strip binaries
       run: |
         strip target/release/communitas-headless || true
+        strip target/release/communitas-mcp || true
 
-    - name: Create release archive (Linux target triple)
+    - name: Create release archives (Linux target triple)
       run: |
         cd target/release
         tar -czf communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
           communitas-headless
+        tar -czf communitas-mcp-x86_64-unknown-linux-gnu.tar.gz \
+          communitas-mcp
 
     - name: Upload Linux binaries
       uses: actions/upload-artifact@v4
       with:
-        name: communitas-headless-x86_64-unknown-linux-gnu
-        path: target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+        name: communitas-linux-x86_64
+        path: |
+          target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+          target/release/communitas-mcp-x86_64-unknown-linux-gnu.tar.gz
 
   build-macos:
     name: Build macOS Binaries

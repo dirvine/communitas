@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="300" fill="#f8f9fa" rx="8"/>
+
+  <!-- Title -->
+  <text x="200" y="30" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#212529">
+    Identity Model
+  </text>
+
+  <!-- WHO Section -->
+  <g transform="translate(0, 60)">
+    <rect x="20" y="0" width="360" height="65" fill="#e7f3ff" stroke="#0066cc" stroke-width="2" rx="6"/>
+    <text x="40" y="25" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#0066cc">
+      WHO you are
+    </text>
+    <text x="40" y="45" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#495057">
+      🔑 Cryptographic Public Key (ML-DSA-65)
+    </text>
+    <text x="40" y="58" font-family="monospace" font-size="10" fill="#6c757d">
+      Your unique, permanent identity
+    </text>
+  </g>
+
+  <!-- WHERE Section -->
+  <g transform="translate(0, 140)">
+    <rect x="20" y="0" width="360" height="65" fill="#e8f5e9" stroke="#28a745" stroke-width="2" rx="6"/>
+    <text x="40" y="25" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#28a745">
+      WHERE to find you
+    </text>
+    <text x="40" y="45" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#495057">
+      🌐 Four-Word Connection Address
+    </text>
+    <text x="40" y="58" font-family="monospace" font-size="10" fill="#6c757d">
+      Example: ocean-forest-moon-star
+    </text>
+  </g>
+
+  <!-- SHOWN Section -->
+  <g transform="translate(0, 220)">
+    <rect x="20" y="0" width="360" height="65" fill="#fff3e0" stroke="#fd7e14" stroke-width="2" rx="6"/>
+    <text x="40" y="25" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#fd7e14">
+      SHOWN to others
+    </text>
+    <text x="40" y="45" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#495057">
+      👤 Display Name
+    </text>
+    <text x="40" y="58" font-family="monospace" font-size="10" fill="#6c757d">
+      Your chosen friendly label
+    </text>
+  </g>
+</svg>

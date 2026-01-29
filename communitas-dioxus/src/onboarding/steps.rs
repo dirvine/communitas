@@ -2,6 +2,13 @@
 //!
 //! Provides individual step components with consistent structure and
 //! a dispatcher component that renders the appropriate step by ID.
+//!
+//! ## Identity Model Diagram
+//!
+//! A visual diagram of the WHO/WHERE/SHOWN identity model is available at:
+//! `src/assets/onboarding/identity-model-diagram.svg`
+//!
+//! This diagram illustrates the three-part identity model explained in [`WelcomeStep`].
 
 use dioxus::prelude::*;
 
@@ -16,6 +23,8 @@ pub fn WelcomeStep() -> Element {
                 "A local-first collaboration platform that puts you in control. "
                 "Communitas uses a three-part identity model:"
             }
+            // TODO: Embed identity-model-diagram.svg here when asset bundling configured
+            // Visual diagram available at: src/assets/onboarding/identity-model-diagram.svg
             ul { class: "tour-step-list",
                 li {
                     strong { "WHO you are:" }

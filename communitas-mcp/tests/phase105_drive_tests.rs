@@ -80,6 +80,8 @@ impl TestNode {
             sleep(Duration::from_millis(100)).await;
 
             // Attempt to connect and validate JSON-RPC response
+            // Note: collapsible_if suggests let-chains, but those require unstable features
+            #[allow(clippy::collapsible_if)]
             if let Ok(response) = client
                 .post(format!("http://127.0.0.1:{}/mcp", port))
                 .timeout(Duration::from_secs(5))
@@ -110,6 +112,11 @@ impl TestNode {
                 );
             }
         }
+
+        // Unreachable: loop always returns success or panics on failure
+        // Cleanup process to satisfy clippy::zombie_processes
+        let _ = process.kill();
+        let _ = process.wait();
         unreachable!("Start loop should have returned or panicked")
     }
 
@@ -217,11 +224,7 @@ async fn test_drive_get_disk_stats() {
             json!({"entity_id": "test-entity", "disk_type": "private"}),
         )
         .await;
-    assert!(
-        result.success,
-        "get_disk_stats failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_disk_stats");
 }
 
 #[tokio::test]
@@ -233,7 +236,7 @@ async fn test_drive_read_file() {
             json!({"entity_id": "test-entity", "disk_type": "private", "path": "/f.txt"}),
         )
         .await;
-    assert!(result.success, "read_file failed: {}", result.response_body);
+    assert_tool_success(&result, "read_file");
 }
 
 #[tokio::test]
@@ -243,11 +246,7 @@ async fn test_drive_write_file() {
         "write_file",
         json!({"entity_id": "test-entity", "disk_type": "private", "path": "/f.txt", "content": ""})
     ).await;
-    assert!(
-        result.success,
-        "write_file failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "write_file");
 }
 
 #[tokio::test]
@@ -259,11 +258,7 @@ async fn test_drive_delete_file() {
             json!({"disk_id": "test", "file_path": "/f.txt"}),
         )
         .await;
-    assert!(
-        result.success,
-        "delete_file failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "delete_file");
 }
 
 #[tokio::test]
@@ -275,11 +270,7 @@ async fn test_drive_create_directory() {
             json!({"disk_id": "test", "directory_path": "/d"}),
         )
         .await;
-    assert!(
-        result.success,
-        "create_directory failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "create_directory");
 }
 
 #[tokio::test]
@@ -291,11 +282,7 @@ async fn test_drive_get_file_preview() {
             json!({"disk_id": "test", "file_path": "/f.txt"}),
         )
         .await;
-    assert!(
-        result.success,
-        "get_file_preview failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_file_preview");
 }
 
 #[tokio::test]
@@ -307,11 +294,7 @@ async fn test_drive_get_media_metadata() {
             json!({"disk_id": "test", "file_path": "/f.png"}),
         )
         .await;
-    assert!(
-        result.success,
-        "get_media_metadata failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_media_metadata");
 }
 
 // TASK 2: Drive Upload Tests (5 tests)
@@ -324,11 +307,7 @@ async fn test_upload_with_metadata() {
             json!({"disk_id": "test", "file_path": "/f.txt", "content": "", "metadata": {}}),
         )
         .await;
-    assert!(
-        result.success,
-        "upload_with_metadata failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "upload_with_metadata");
 }
 
 #[tokio::test]
@@ -338,11 +317,7 @@ async fn test_start_streaming_upload() {
         "start_streaming_upload",
         json!({"disk_id": "test", "file_path": "/f.bin", "content_type": "application/octet-stream"})
     ).await;
-    assert!(
-        result.success,
-        "start_streaming_upload failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "start_streaming_upload");
 }
 
 #[tokio::test]
@@ -351,11 +326,7 @@ async fn test_get_upload_progress() {
     let result = node
         .call_tool("get_upload_progress", json!({"upload_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "get_upload_progress failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_upload_progress");
 }
 
 #[tokio::test]
@@ -364,11 +335,7 @@ async fn test_cancel_upload() {
     let result = node
         .call_tool("cancel_upload", json!({"upload_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "cancel_upload failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "cancel_upload");
 }
 
 #[tokio::test]
@@ -380,11 +347,7 @@ async fn test_resume_upload() {
             json!({"upload_id": "test", "from_byte": 0}),
         )
         .await;
-    assert!(
-        result.success,
-        "resume_upload failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "resume_upload");
 }
 
 // TASK 3: Drive Download Tests (4 tests)
@@ -397,11 +360,7 @@ async fn test_start_streaming_download() {
             json!({"disk_id": "test", "file_path": "/f.txt"}),
         )
         .await;
-    assert!(
-        result.success,
-        "start_streaming_download failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "start_streaming_download");
 }
 
 #[tokio::test]
@@ -410,11 +369,7 @@ async fn test_get_download_progress() {
     let result = node
         .call_tool("get_download_progress", json!({"download_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "get_download_progress failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_download_progress");
 }
 
 #[tokio::test]
@@ -423,11 +378,7 @@ async fn test_cancel_download() {
     let result = node
         .call_tool("cancel_download", json!({"download_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "cancel_download failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "cancel_download");
 }
 
 #[tokio::test]
@@ -439,11 +390,7 @@ async fn test_resume_download() {
             json!({"download_id": "test", "from_byte": 0}),
         )
         .await;
-    assert!(
-        result.success,
-        "resume_download failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "resume_download");
 }
 
 // TASK 4: Drive Sharing Tests (4 tests)
@@ -456,11 +403,7 @@ async fn test_create_share_link() {
             json!({"disk_id": "test", "file_path": "/f.txt", "expiration": "2026-02-28T00:00:00Z"}),
         )
         .await;
-    assert!(
-        result.success,
-        "create_share_link failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "create_share_link");
 }
 
 #[tokio::test]
@@ -469,11 +412,7 @@ async fn test_list_share_links() {
     let result = node
         .call_tool("list_share_links", json!({"disk_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "list_share_links failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "list_share_links");
 }
 
 #[tokio::test]
@@ -485,11 +424,7 @@ async fn test_get_file_share_links() {
             json!({"disk_id": "test", "file_path": "/f.txt"}),
         )
         .await;
-    assert!(
-        result.success,
-        "get_file_share_links failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_file_share_links");
 }
 
 #[tokio::test]
@@ -501,11 +436,7 @@ async fn test_revoke_share_link() {
             json!({"disk_id": "test", "share_link_id": "test"}),
         )
         .await;
-    assert!(
-        result.success,
-        "revoke_share_link failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "revoke_share_link");
 }
 
 // TASK 5: Drive Staging Tests (11 tests)
@@ -518,11 +449,7 @@ async fn test_stage_upload() {
             json!({"disk_id": "test", "file_path": "/f.txt", "content": ""}),
         )
         .await;
-    assert!(
-        result.success,
-        "stage_upload failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "stage_upload");
 }
 
 #[tokio::test]
@@ -531,11 +458,7 @@ async fn test_get_staged_upload() {
     let result = node
         .call_tool("get_staged_upload", json!({"staged_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "get_staged_upload failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_staged_upload");
 }
 
 #[tokio::test]
@@ -544,11 +467,7 @@ async fn test_list_staged_uploads() {
     let result = node
         .call_tool("list_staged_uploads", json!({"disk_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "list_staged_uploads failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "list_staged_uploads");
 }
 
 #[tokio::test]
@@ -557,11 +476,7 @@ async fn test_remove_staged_upload() {
     let result = node
         .call_tool("remove_staged_upload", json!({"staged_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "remove_staged_upload failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "remove_staged_upload");
 }
 
 #[tokio::test]
@@ -570,11 +485,7 @@ async fn test_retry_staged_upload() {
     let result = node
         .call_tool("retry_staged_upload", json!({"staged_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "retry_staged_upload failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "retry_staged_upload");
 }
 
 #[tokio::test]
@@ -583,11 +494,7 @@ async fn test_get_staging_status() {
     let result = node
         .call_tool("get_staging_status", json!({"disk_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "get_staging_status failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "get_staging_status");
 }
 
 #[tokio::test]
@@ -596,11 +503,7 @@ async fn test_sync_staging_queue() {
     let result = node
         .call_tool("sync_staging_queue", json!({"disk_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "sync_staging_queue failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "sync_staging_queue");
 }
 
 #[tokio::test]
@@ -612,11 +515,7 @@ async fn test_resolve_staging_conflict() {
             json!({"disk_id": "test", "file_path": "/f.txt", "resolution": "keep_local"}),
         )
         .await;
-    assert!(
-        result.success,
-        "resolve_staging_conflict failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "resolve_staging_conflict");
 }
 
 #[tokio::test]
@@ -628,11 +527,7 @@ async fn test_keep_local() {
             json!({"disk_id": "test", "file_path": "/f.txt"}),
         )
         .await;
-    assert!(
-        result.success,
-        "keep_local failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "keep_local");
 }
 
 #[tokio::test]
@@ -644,11 +539,7 @@ async fn test_keep_remote() {
             json!({"disk_id": "test", "file_path": "/f.txt"}),
         )
         .await;
-    assert!(
-        result.success,
-        "keep_remote failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "keep_remote");
 }
 
 #[tokio::test]
@@ -660,7 +551,7 @@ async fn test_keep_both() {
             json!({"disk_id": "test", "file_path": "/f.txt"}),
         )
         .await;
-    assert!(result.success, "keep_both failed: {}", result.response_body);
+    assert_tool_success(&result, "keep_both");
 }
 
 // TASK 6: Drive Access Tests (3 tests)
@@ -670,7 +561,7 @@ async fn test_private_disk() {
     let result = node
         .call_tool("private", json!({"entity_id": "test", "disk_id": "test"}))
         .await;
-    assert!(result.success, "private failed: {}", result.response_body);
+    assert_tool_success(&result, "private");
 }
 
 #[tokio::test]
@@ -679,7 +570,7 @@ async fn test_public_disk() {
     let result = node
         .call_tool("public", json!({"entity_id": "test", "disk_id": "test"}))
         .await;
-    assert!(result.success, "public failed: {}", result.response_body);
+    assert_tool_success(&result, "public");
 }
 
 #[tokio::test]
@@ -691,7 +582,7 @@ async fn test_shared_disk() {
             json!({"entity_id": "test", "disk_id": "test", "members": []}),
         )
         .await;
-    assert!(result.success, "shared failed: {}", result.response_body);
+    assert_tool_success(&result, "shared");
 }
 
 // TASK 7: Canvas Core Tests (9 tests)
@@ -704,11 +595,7 @@ async fn test_canvas_add_text() {
             json!({"canvas_id": "test", "text": "hello", "x": 0.0, "y": 0.0, "font_size": 16}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_add_text failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_add_text");
 }
 
 #[tokio::test]
@@ -718,11 +605,7 @@ async fn test_canvas_add_image() {
         "canvas_add_image",
         json!({"canvas_id": "test", "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "x": 0.0, "y": 0.0, "width": 100.0, "height": 100.0})
     ).await;
-    assert!(
-        result.success,
-        "canvas_add_image failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_add_image");
 }
 
 #[tokio::test]
@@ -734,11 +617,7 @@ async fn test_canvas_add_chart() {
             json!({"canvas_id": "test", "chart_type": "line", "data": {}, "x": 0.0, "y": 0.0}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_add_chart failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_add_chart");
 }
 
 #[tokio::test]
@@ -750,11 +629,7 @@ async fn test_canvas_remove_element() {
             json!({"canvas_id": "test", "element_id": "test"}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_remove_element failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_remove_element");
 }
 
 #[tokio::test]
@@ -764,11 +639,7 @@ async fn test_canvas_update_transform() {
         "canvas_update_transform",
         json!({"canvas_id": "test", "element_id": "test", "x": 0.0, "y": 0.0, "rotation": 0.0, "scale_x": 1.0, "scale_y": 1.0})
     ).await;
-    assert!(
-        result.success,
-        "canvas_update_transform failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_update_transform");
 }
 
 #[tokio::test]
@@ -780,11 +651,7 @@ async fn test_canvas_select_element() {
             json!({"canvas_id": "test", "element_id": "test"}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_select_element failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_select_element");
 }
 
 #[tokio::test]
@@ -793,11 +660,7 @@ async fn test_canvas_deselect_all() {
     let result = node
         .call_tool("canvas_deselect_all", json!({"canvas_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "canvas_deselect_all failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_deselect_all");
 }
 
 #[tokio::test]
@@ -809,11 +672,7 @@ async fn test_canvas_element_at() {
             json!({"canvas_id": "test", "x": 0.0, "y": 0.0}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_element_at failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_element_at");
 }
 
 #[tokio::test]
@@ -822,11 +681,7 @@ async fn test_canvas_clear() {
     let result = node
         .call_tool("canvas_clear", json!({"canvas_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "canvas_clear failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_clear");
 }
 
 // TASK 8: Canvas History Tests (6 tests)
@@ -836,11 +691,7 @@ async fn test_canvas_undo() {
     let result = node
         .call_tool("canvas_undo", json!({"canvas_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "canvas_undo failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_undo");
 }
 
 #[tokio::test]
@@ -849,11 +700,7 @@ async fn test_canvas_redo() {
     let result = node
         .call_tool("canvas_redo", json!({"canvas_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "canvas_redo failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_redo");
 }
 
 #[tokio::test]
@@ -865,11 +712,7 @@ async fn test_canvas_get_history() {
             json!({"canvas_id": "test", "limit": 10}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_get_history failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_get_history");
 }
 
 #[tokio::test]
@@ -878,11 +721,7 @@ async fn test_canvas_get_snapshot() {
     let result = node
         .call_tool("canvas_get_snapshot", json!({"canvas_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "canvas_get_snapshot failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_get_snapshot");
 }
 
 #[tokio::test]
@@ -894,11 +733,7 @@ async fn test_canvas_export() {
             json!({"canvas_id": "test", "format": "json"}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_export failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_export");
 }
 
 #[tokio::test]
@@ -910,11 +745,7 @@ async fn test_canvas_import() {
             json!({"canvas_id": "test", "data": {"elements": [], "viewport": {}}}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_import failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_import");
 }
 
 // TASK 9: Canvas View Tests (5 tests)
@@ -925,11 +756,7 @@ async fn test_canvas_set_view() {
         "canvas_set_view",
         json!({"canvas_id": "test", "x_min": 0.0, "x_max": 100.0, "y_min": 0.0, "y_max": 100.0})
     ).await;
-    assert!(
-        result.success,
-        "canvas_set_view failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_set_view");
 }
 
 #[tokio::test]
@@ -941,11 +768,7 @@ async fn test_canvas_set_viewport() {
             json!({"canvas_id": "test", "width": 800.0, "height": 600.0, "zoom": 1.0}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_set_viewport failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_set_viewport");
 }
 
 #[tokio::test]
@@ -957,11 +780,7 @@ async fn test_canvas_broadcast_cursor() {
             json!({"canvas_id": "test", "user_id": "test", "x": 0.0, "y": 0.0, "color": "#FF0000"}),
         )
         .await;
-    assert!(
-        result.success,
-        "canvas_broadcast_cursor failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_broadcast_cursor");
 }
 
 #[tokio::test]
@@ -970,11 +789,7 @@ async fn test_canvas_get_remote_cursors() {
     let result = node
         .call_tool("canvas_get_remote_cursors", json!({"canvas_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "canvas_get_remote_cursors failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_get_remote_cursors");
 }
 
 #[tokio::test]
@@ -983,9 +798,5 @@ async fn test_canvas_flush_offline_queue() {
     let result = node
         .call_tool("canvas_flush_offline_queue", json!({"canvas_id": "test"}))
         .await;
-    assert!(
-        result.success,
-        "canvas_flush_offline_queue failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "canvas_flush_offline_queue");
 }

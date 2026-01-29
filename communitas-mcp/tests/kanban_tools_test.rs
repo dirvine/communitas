@@ -170,13 +170,14 @@ async fn test_list_kanban_boards() {
 
     // Verify that created boards are in the list
     if let Some(parsed) = &r.parsed
-        && let Some(boards) = parsed.get("boards").and_then(|v| v.as_array()) {
-            assert!(!boards.is_empty(), "List should contain the created boards");
-            assert!(
-                boards.len() >= 2,
-                "List should contain at least 2 created boards"
-            );
-        }
+        && let Some(boards) = parsed.get("boards").and_then(|v| v.as_array())
+    {
+        assert!(!boards.is_empty(), "List should contain the created boards");
+        assert!(
+            boards.len() >= 2,
+            "List should contain at least 2 created boards"
+        );
+    }
 }
 
 #[tokio::test]
@@ -476,16 +477,17 @@ async fn test_list_kanban_columns() {
 
     // Verify that created columns are in the list
     if let Some(parsed) = &r.parsed
-        && let Some(columns) = parsed.get("columns").and_then(|v| v.as_array()) {
-            assert!(
-                !columns.is_empty(),
-                "List should contain the created columns"
-            );
-            assert!(
-                columns.len() >= 2,
-                "List should contain at least 2 created columns"
-            );
-        }
+        && let Some(columns) = parsed.get("columns").and_then(|v| v.as_array())
+    {
+        assert!(
+            !columns.is_empty(),
+            "List should contain the created columns"
+        );
+        assert!(
+            columns.len() >= 2,
+            "List should contain at least 2 created columns"
+        );
+    }
 }
 
 #[tokio::test]
@@ -884,13 +886,14 @@ async fn test_list_kanban_cards() {
 
     // Verify that created cards are in the list
     if let Some(parsed) = &r.parsed
-        && let Some(cards) = parsed.get("cards").and_then(|v| v.as_array()) {
-            assert!(!cards.is_empty(), "List should contain the created cards");
-            assert!(
-                cards.len() >= 2,
-                "List should contain at least 2 created cards"
-            );
-        }
+        && let Some(cards) = parsed.get("cards").and_then(|v| v.as_array())
+    {
+        assert!(!cards.is_empty(), "List should contain the created cards");
+        assert!(
+            cards.len() >= 2,
+            "List should contain at least 2 created cards"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1150,13 +1153,14 @@ async fn test_list_kanban_tags() {
 
     // Verify that created tags are in the list
     if let Some(parsed) = &r.parsed
-        && let Some(tags) = parsed.get("tags").and_then(|v| v.as_array()) {
-            assert!(!tags.is_empty(), "List should contain the created tags");
-            assert!(
-                tags.len() >= 2,
-                "List should contain at least 2 created tags"
-            );
-        }
+        && let Some(tags) = parsed.get("tags").and_then(|v| v.as_array())
+    {
+        assert!(!tags.is_empty(), "List should contain the created tags");
+        assert!(
+            tags.len() >= 2,
+            "List should contain at least 2 created tags"
+        );
+    }
 }
 
 #[tokio::test]

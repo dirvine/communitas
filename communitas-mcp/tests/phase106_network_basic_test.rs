@@ -74,11 +74,14 @@ impl TestNode {
             #[allow(clippy::collapsible_match)]
             if let Ok(response) = tokio::time::timeout(
                 Duration::from_millis(500),
-                client.post(format!("http://127.0.0.1:{}/mcp", port)).json(&json!({
-                    "jsonrpc": "2.0",
-                    "method": "tools/list",
-                    "id": 1
-                })).send(),
+                client
+                    .post(format!("http://127.0.0.1:{}/mcp", port))
+                    .json(&json!({
+                        "jsonrpc": "2.0",
+                        "method": "tools/list",
+                        "id": 1
+                    }))
+                    .send(),
             )
             .await
             {
@@ -97,7 +100,10 @@ impl TestNode {
 
         if !server_ready {
             let _ = process.kill();
-            panic!("{}: Server failed to start after {} attempts", name, max_attempts);
+            panic!(
+                "{}: Server failed to start after {} attempts",
+                name, max_attempts
+            );
         }
 
         Self { process, port }
@@ -127,15 +133,17 @@ impl TestNode {
         let http_status = response.status().as_u16();
         let response_body = response.text().await.expect("Failed to read response body");
 
-        let is_json_rpc_error = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_body) {
-            json.get("error").is_some() ||
-            json.get("result")
-                .and_then(|r| r.get("isError"))
-                .and_then(|e| e.as_bool())
-                .unwrap_or(false)
-        } else {
-            false
-        };
+        let is_json_rpc_error =
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_body) {
+                json.get("error").is_some()
+                    || json
+                        .get("result")
+                        .and_then(|r| r.get("isError"))
+                        .and_then(|e| e.as_bool())
+                        .unwrap_or(false)
+            } else {
+                false
+            };
 
         let success = http_status == 200 && !is_json_rpc_error;
 
@@ -163,23 +171,40 @@ impl Drop for TestNode {
 async fn test_network_start_default_port() {
     let node = TestNode::start("network_start_default").await;
     let result = node.call_tool("network_start", json!({})).await;
-    assert!(result.success, "network_start with default port should succeed: {}", result.response_body);
+    assert!(
+        result.success,
+        "network_start with default port should succeed: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
 async fn test_network_start_preferred_port() {
     let node = TestNode::start("network_start_preferred").await;
-    let result = node.call_tool("network_start", json!({
-        "port": 9000
-    })).await;
-    assert!(result.success, "network_start with preferred port should succeed: {}", result.response_body);
+    let result = node
+        .call_tool(
+            "network_start",
+            json!({
+                "port": 9000
+            }),
+        )
+        .await;
+    assert!(
+        result.success,
+        "network_start with preferred port should succeed: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
 async fn test_network_status_when_stopped() {
     let node = TestNode::start("network_status_stopped").await;
     let result = node.call_tool("network_status", json!({})).await;
-    assert!(result.success, "network_status should return status even when stopped: {}", result.response_body);
+    assert!(
+        result.success,
+        "network_status should return status even when stopped: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
@@ -191,14 +216,22 @@ async fn test_network_status_when_running() {
 
     // Get status
     let result = node.call_tool("network_status", json!({})).await;
-    assert!(result.success, "network_status should succeed when running: {}", result.response_body);
+    assert!(
+        result.success,
+        "network_status should succeed when running: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
 async fn test_network_peers_when_empty() {
     let node = TestNode::start("network_peers_empty").await;
     let result = node.call_tool("network_peers", json!({})).await;
-    assert!(result.success, "network_peers should succeed even with no peers: {}", result.response_body);
+    assert!(
+        result.success,
+        "network_peers should succeed even with no peers: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
@@ -210,7 +243,11 @@ async fn test_network_peers_when_connected() {
 
     // Get peers (in demo mode, may return mock peers)
     let result = node.call_tool("network_peers", json!({})).await;
-    assert!(result.success, "network_peers should succeed: {}", result.response_body);
+    assert!(
+        result.success,
+        "network_peers should succeed: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
@@ -222,7 +259,11 @@ async fn test_network_stop_gracefully() {
 
     // Stop network
     let result = node.call_tool("network_stop", json!({})).await;
-    assert!(result.success, "network_stop should succeed: {}", result.response_body);
+    assert!(
+        result.success,
+        "network_stop should succeed: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
@@ -233,24 +274,48 @@ async fn test_network_request_external_address() {
     let _ = node.call_tool("network_start", json!({})).await;
 
     // Request external address discovery
-    let result = node.call_tool("network_request_external_address", json!({})).await;
-    assert!(result.success, "network_request_external_address should succeed: {}", result.response_body);
+    let result = node
+        .call_tool("network_request_external_address", json!({}))
+        .await;
+    assert!(
+        result.success,
+        "network_request_external_address should succeed: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
 async fn test_set_network_available_online() {
     let node = TestNode::start("network_available_online").await;
-    let result = node.call_tool("set_network_available", json!({
-        "available": true
-    })).await;
-    assert!(result.success, "set_network_available(true) should succeed: {}", result.response_body);
+    let result = node
+        .call_tool(
+            "set_network_available",
+            json!({
+                "available": true
+            }),
+        )
+        .await;
+    assert!(
+        result.success,
+        "set_network_available(true) should succeed: {}",
+        result.response_body
+    );
 }
 
 #[tokio::test]
 async fn test_set_network_available_offline() {
     let node = TestNode::start("network_available_offline").await;
-    let result = node.call_tool("set_network_available", json!({
-        "available": false
-    })).await;
-    assert!(result.success, "set_network_available(false) should succeed: {}", result.response_body);
+    let result = node
+        .call_tool(
+            "set_network_available",
+            json!({
+                "available": false
+            }),
+        )
+        .await;
+    assert!(
+        result.success,
+        "set_network_available(false) should succeed: {}",
+        result.response_body
+    );
 }

@@ -170,12 +170,7 @@ impl Drop for TestNode {
 #[tokio::test]
 async fn test_set_presence_without_status() {
     let node = TestNode::start("pres-err-no-status").await;
-    let result = node
-        .call_tool(
-            "set_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("set_presence", json!({})).await;
 
     // Demo mode may handle gracefully
     assert!(result.http_status == 200, "HTTP should succeed");
@@ -200,12 +195,7 @@ async fn test_set_presence_invalid_status() {
 #[tokio::test]
 async fn test_get_presence_without_user_ids() {
     let node = TestNode::start("pres-err-no-users").await;
-    let result = node
-        .call_tool(
-            "get_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("get_presence", json!({})).await;
 
     // Demo mode handles gracefully
     assert!(result.http_status == 200, "HTTP should succeed");
@@ -230,12 +220,7 @@ async fn test_get_presence_empty_array() {
 #[tokio::test]
 async fn test_subscribe_without_entity_ids() {
     let node = TestNode::start("pres-err-no-ents").await;
-    let result = node
-        .call_tool(
-            "subscribe_to_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("subscribe_to_presence", json!({})).await;
 
     // Demo mode handles gracefully
     assert!(result.http_status == 200, "HTTP should succeed");
@@ -244,12 +229,7 @@ async fn test_subscribe_without_entity_ids() {
 #[tokio::test]
 async fn test_query_presence_without_pubkey() {
     let node = TestNode::start("pres-err-no-pubkey").await;
-    let result = node
-        .call_tool(
-            "query_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("query_presence", json!({})).await;
 
     // Demo mode handles gracefully
     assert!(result.http_status == 200, "HTTP should succeed");

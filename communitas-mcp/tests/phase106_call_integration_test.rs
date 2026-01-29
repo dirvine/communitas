@@ -172,23 +172,39 @@ async fn test_voice_call_workflow() {
     let node = TestNode::start("call-int-voice").await;
 
     // Start voice call
-    let start = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let start = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(start.success);
 
     // Get status
-    let status = node.call_tool("get_call_status", json!({"call_id": "test-call"})).await;
+    let status = node
+        .call_tool("get_call_status", json!({"call_id": "test-call"}))
+        .await;
     assert!(status.success);
 
     // Toggle mute
-    let mute = node.call_tool("toggle_mute", json!({"call_id": "test-call", "mute": true})).await;
+    let mute = node
+        .call_tool("toggle_mute", json!({"call_id": "test-call", "mute": true}))
+        .await;
     assert!(mute.success);
 
     // Unmute
-    let unmute = node.call_tool("toggle_mute", json!({"call_id": "test-call", "mute": false})).await;
+    let unmute = node
+        .call_tool(
+            "toggle_mute",
+            json!({"call_id": "test-call", "mute": false}),
+        )
+        .await;
     assert!(unmute.success);
 
     // End call
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -197,19 +213,36 @@ async fn test_video_call_workflow() {
     let node = TestNode::start("call-int-video").await;
 
     // Start with video
-    let start = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": true})).await;
+    let start = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": true}),
+        )
+        .await;
     assert!(start.success);
 
     // Toggle video off
-    let vid_off = node.call_tool("toggle_video", json!({"call_id": "test-call", "enable": false})).await;
+    let vid_off = node
+        .call_tool(
+            "toggle_video",
+            json!({"call_id": "test-call", "enable": false}),
+        )
+        .await;
     assert!(vid_off.success);
 
     // Toggle video on
-    let vid_on = node.call_tool("toggle_video", json!({"call_id": "test-call", "enable": true})).await;
+    let vid_on = node
+        .call_tool(
+            "toggle_video",
+            json!({"call_id": "test-call", "enable": true}),
+        )
+        .await;
     assert!(vid_on.success);
 
     // End
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -218,19 +251,36 @@ async fn test_screen_sharing_workflow() {
     let node = TestNode::start("call-int-screen").await;
 
     // Start call
-    let start = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let start = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(start.success);
 
     // Start screen share
-    let share_start = node.call_tool("share_screen", json!({"call_id": "test-call", "enable": true})).await;
+    let share_start = node
+        .call_tool(
+            "share_screen",
+            json!({"call_id": "test-call", "enable": true}),
+        )
+        .await;
     assert!(share_start.success);
 
     // Stop screen share
-    let share_stop = node.call_tool("share_screen", json!({"call_id": "test-call", "enable": false})).await;
+    let share_stop = node
+        .call_tool(
+            "share_screen",
+            json!({"call_id": "test-call", "enable": false}),
+        )
+        .await;
     assert!(share_stop.success);
 
     // End call
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -239,23 +289,36 @@ async fn test_recording_workflow() {
     let node = TestNode::start("call-int-record").await;
 
     // Start call
-    let start = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let start = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(start.success);
 
     // Start recording
-    let rec_start = node.call_tool("start_call_recording", json!({"call_id": "test-call"})).await;
+    let rec_start = node
+        .call_tool("start_call_recording", json!({"call_id": "test-call"}))
+        .await;
     assert!(rec_start.success);
 
     // Get recording status
-    let rec_status = node.call_tool("get_call_recording", json!({"call_id": "test-call"})).await;
+    let rec_status = node
+        .call_tool("get_call_recording", json!({"call_id": "test-call"}))
+        .await;
     assert!(rec_status.success);
 
     // Stop recording
-    let rec_stop = node.call_tool("stop_call_recording", json!({"call_id": "test-call"})).await;
+    let rec_stop = node
+        .call_tool("stop_call_recording", json!({"call_id": "test-call"}))
+        .await;
     assert!(rec_stop.success);
 
     // End call
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -264,23 +327,42 @@ async fn test_multi_participant_workflow() {
     let node = TestNode::start("call-int-multi").await;
 
     // Start call
-    let start = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let start = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(start.success);
 
     // Join as participant 1
-    let join1 = node.call_tool("join_call", json!({"call_id": "test-call", "entity_id": "participant-1"})).await;
+    let join1 = node
+        .call_tool(
+            "join_call",
+            json!({"call_id": "test-call", "entity_id": "participant-1"}),
+        )
+        .await;
     assert!(join1.success);
 
     // Join as participant 2
-    let join2 = node.call_tool("join_call", json!({"call_id": "test-call", "entity_id": "participant-2"})).await;
+    let join2 = node
+        .call_tool(
+            "join_call",
+            json!({"call_id": "test-call", "entity_id": "participant-2"}),
+        )
+        .await;
     assert!(join2.success);
 
     // Get participants
-    let parts = node.call_tool("get_call_participants", json!({"call_id": "test-call"})).await;
+    let parts = node
+        .call_tool("get_call_participants", json!({"call_id": "test-call"}))
+        .await;
     assert!(parts.success);
 
     // End call
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -289,10 +371,17 @@ async fn test_call_history_tracking() {
     let node = TestNode::start("call-int-history").await;
 
     // Make a call
-    let start = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let start = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(start.success);
 
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 
     // Check history
@@ -305,11 +394,18 @@ async fn test_missed_call_workflow() {
     let node = TestNode::start("call-int-missed").await;
 
     // Start call (simulated missed)
-    let start = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let start = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(start.success);
 
     // End without joining
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 
     // Check missed calls
@@ -317,6 +413,8 @@ async fn test_missed_call_workflow() {
     assert!(missed.success);
 
     // Acknowledge
-    let ack = node.call_tool("acknowledge_missed_call", json!({"call_id": "test-call"})).await;
+    let ack = node
+        .call_tool("acknowledge_missed_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(ack.success);
 }

@@ -255,7 +255,10 @@ async fn test_get_presence_single_user() {
         )
         .await;
 
-    assert!(result.success, "get_presence for single user should succeed");
+    assert!(
+        result.success,
+        "get_presence for single user should succeed"
+    );
 }
 
 #[tokio::test]
@@ -270,7 +273,10 @@ async fn test_get_presence_multiple_users() {
         )
         .await;
 
-    assert!(result.success, "get_presence for multiple users should succeed");
+    assert!(
+        result.success,
+        "get_presence for multiple users should succeed"
+    );
 }
 
 #[tokio::test]

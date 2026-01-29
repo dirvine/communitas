@@ -170,12 +170,7 @@ impl Drop for TestNode {
 #[tokio::test]
 async fn test_announce_presence() {
     let node = TestNode::start("pres-announce").await;
-    let result = node
-        .call_tool(
-            "announce_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("announce_presence", json!({})).await;
 
     assert!(result.success, "announce_presence should succeed");
 }
@@ -214,12 +209,7 @@ async fn test_query_presence_invalid_pubkey() {
 #[tokio::test]
 async fn test_get_our_presence() {
     let node = TestNode::start("pres-our").await;
-    let result = node
-        .call_tool(
-            "get_our_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("get_our_presence", json!({})).await;
 
     assert!(result.success, "get_our_presence should succeed");
 }
@@ -227,12 +217,7 @@ async fn test_get_our_presence() {
 #[tokio::test]
 async fn test_get_cached_presence_empty() {
     let node = TestNode::start("pres-cached-empty").await;
-    let result = node
-        .call_tool(
-            "get_cached_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("get_cached_presence", json!({})).await;
 
     assert!(result.success, "get_cached_presence should succeed");
 }
@@ -245,12 +230,7 @@ async fn test_get_cached_presence_with_data() {
     let _ = node.call_tool("announce_presence", json!({})).await;
 
     // Then get cached
-    let result = node
-        .call_tool(
-            "get_cached_presence",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("get_cached_presence", json!({})).await;
 
     assert!(result.success, "get_cached_presence should succeed");
 }

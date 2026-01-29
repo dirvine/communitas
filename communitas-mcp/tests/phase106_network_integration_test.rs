@@ -25,7 +25,7 @@ async fn validate_startup_response(response: reqwest::Response) -> bool {
     }
     let body = match response.text().await {
         Ok(text) => text,
-        Err(_) => return false;
+        Err(_) => return false,
     };
     match serde_json::from_str::<serde_json::Value>(&body) {
         Ok(json) => json.get("error").is_none(),
@@ -193,7 +193,9 @@ async fn test_network_and_presence_announce() {
     assert!(start.success);
 
     // Set presence
-    let pres = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let pres = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(pres.success);
 
     // Announce presence
@@ -214,7 +216,12 @@ async fn test_peer_connection_workflow() {
     assert!(start.success);
 
     // Connect to peer (demo mode)
-    let connect = node.call_tool("connect_by_words", json!({"words": "ocean-forest-moon-star"})).await;
+    let connect = node
+        .call_tool(
+            "connect_by_words",
+            json!({"words": "ocean-forest-moon-star"}),
+        )
+        .await;
     assert!(connect.success);
 
     // List peers
@@ -227,7 +234,9 @@ async fn test_presence_subscription_workflow() {
     let node = TestNode::start("net-int-sub").await;
 
     // Set presence
-    let pres = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let pres = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(pres.success);
 
     // Announce
@@ -235,7 +244,9 @@ async fn test_presence_subscription_workflow() {
     assert!(announce.success);
 
     // Query
-    let query = node.call_tool("query_presence", json!({"pubkey": "test-pubkey"})).await;
+    let query = node
+        .call_tool("query_presence", json!({"pubkey": "test-pubkey"}))
+        .await;
     assert!(query.success);
 
     // Get cached
@@ -248,15 +259,21 @@ async fn test_network_availability_and_presence() {
     let node = TestNode::start("net-int-avail").await;
 
     // Set network available (online)
-    let online = node.call_tool("set_network_available", json!({"available": true})).await;
+    let online = node
+        .call_tool("set_network_available", json!({"available": true}))
+        .await;
     assert!(online.success);
 
     // Set presence to online
-    let pres = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let pres = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(pres.success);
 
     // Set network unavailable (offline)
-    let offline = node.call_tool("set_network_available", json!({"available": false})).await;
+    let offline = node
+        .call_tool("set_network_available", json!({"available": false}))
+        .await;
     assert!(offline.success);
 }
 
@@ -273,7 +290,9 @@ async fn test_full_bootstrap_workflow() {
     assert!(words.success);
 
     // 3. Set presence
-    let pres = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let pres = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(pres.success);
 
     // 4. Announce presence
@@ -281,7 +300,9 @@ async fn test_full_bootstrap_workflow() {
     assert!(announce.success);
 
     // 5. Query presence
-    let query = node.call_tool("query_presence", json!({"pubkey": "test-pubkey"})).await;
+    let query = node
+        .call_tool("query_presence", json!({"pubkey": "test-pubkey"}))
+        .await;
     assert!(query.success);
 }
 
@@ -290,11 +311,21 @@ async fn test_presence_sync_across_entities() {
     let node = TestNode::start("net-int-entity").await;
 
     // Set presence for entity 1
-    let p1 = node.call_tool("set_presence", json!({"status": "online", "entity_id": "entity-1"})).await;
+    let p1 = node
+        .call_tool(
+            "set_presence",
+            json!({"status": "online", "entity_id": "entity-1"}),
+        )
+        .await;
     assert!(p1.success);
 
     // Set presence for entity 2
-    let p2 = node.call_tool("set_presence", json!({"status": "away", "entity_id": "entity-2"})).await;
+    let p2 = node
+        .call_tool(
+            "set_presence",
+            json!({"status": "away", "entity_id": "entity-2"}),
+        )
+        .await;
     assert!(p2.success);
 
     // Get all presence
@@ -315,7 +346,9 @@ async fn test_network_status_monitoring() {
     assert!(status.success);
 
     // Request external address
-    let ext = node.call_tool("network_request_external_address", json!({})).await;
+    let ext = node
+        .call_tool("network_request_external_address", json!({}))
+        .await;
     assert!(ext.success);
 
     // Check peers

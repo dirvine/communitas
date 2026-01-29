@@ -176,7 +176,9 @@ async fn test_full_call_network_presence_workflow() {
     assert!(net.success);
 
     // 2. Set presence to online
-    let pres = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let pres = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(pres.success);
 
     // 3. Announce presence
@@ -184,19 +186,30 @@ async fn test_full_call_network_presence_workflow() {
     assert!(ann.success);
 
     // 4. Start call
-    let call = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let call = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(call.success);
 
     // 5. Update presence to busy
-    let busy = node.call_tool("set_my_presence", json!({"status": "busy"})).await;
+    let busy = node
+        .call_tool("set_my_presence", json!({"status": "busy"}))
+        .await;
     assert!(busy.success);
 
     // 6. End call
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 
     // 7. Update presence back to online
-    let online = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let online = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(online.success);
 }
 
@@ -205,15 +218,30 @@ async fn test_multi_entity_presence_isolation() {
     let node = TestNode::start("full-int-entity").await;
 
     // Org presence
-    let org = node.call_tool("set_presence", json!({"status": "online", "entity_id": "org-123"})).await;
+    let org = node
+        .call_tool(
+            "set_presence",
+            json!({"status": "online", "entity_id": "org-123"}),
+        )
+        .await;
     assert!(org.success);
 
     // Group presence
-    let grp = node.call_tool("set_presence", json!({"status": "away", "entity_id": "group-456"})).await;
+    let grp = node
+        .call_tool(
+            "set_presence",
+            json!({"status": "away", "entity_id": "group-456"}),
+        )
+        .await;
     assert!(grp.success);
 
     // Channel presence
-    let ch = node.call_tool("set_presence", json!({"status": "busy", "entity_id": "channel-789"})).await;
+    let ch = node
+        .call_tool(
+            "set_presence",
+            json!({"status": "busy", "entity_id": "channel-789"}),
+        )
+        .await;
     assert!(ch.success);
 
     // Verify all cached
@@ -226,23 +254,36 @@ async fn test_call_quality_during_network_changes() {
     let node = TestNode::start("full-int-quality").await;
 
     // Start call
-    let call = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let call = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(call.success);
 
     // Get quality
-    let q1 = node.call_tool("get_call_quality", json!({"call_id": "test-call"})).await;
+    let q1 = node
+        .call_tool("get_call_quality", json!({"call_id": "test-call"}))
+        .await;
     assert!(q1.success);
 
     // Network change
-    let net = node.call_tool("set_network_available", json!({"available": false})).await;
+    let net = node
+        .call_tool("set_network_available", json!({"available": false}))
+        .await;
     assert!(net.success);
 
     // Get quality again
-    let q2 = node.call_tool("get_call_quality", json!({"call_id": "test-call"})).await;
+    let q2 = node
+        .call_tool("get_call_quality", json!({"call_id": "test-call"}))
+        .await;
     assert!(q2.success);
 
     // End
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -255,15 +296,24 @@ async fn test_device_switching_during_call() {
     assert!(dev.success);
 
     // Start call
-    let call = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let call = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(call.success);
 
     // Toggle mute
-    let mute = node.call_tool("toggle_mute", json!({"call_id": "test-call", "mute": true})).await;
+    let mute = node
+        .call_tool("toggle_mute", json!({"call_id": "test-call", "mute": true}))
+        .await;
     assert!(mute.success);
 
     // End
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -272,23 +322,36 @@ async fn test_presence_updates_during_call() {
     let node = TestNode::start("full-int-pres-call").await;
 
     // Set online
-    let online = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let online = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(online.success);
 
     // Start call
-    let call = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let call = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(call.success);
 
     // Update to busy (in call)
-    let busy = node.call_tool("set_my_presence", json!({"status": "busy"})).await;
+    let busy = node
+        .call_tool("set_my_presence", json!({"status": "busy"}))
+        .await;
     assert!(busy.success);
 
     // End call
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 
     // Back to online
-    let online2 = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let online2 = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(online2.success);
 }
 
@@ -301,23 +364,36 @@ async fn test_network_reconnection_with_call_recovery() {
     assert!(net.success);
 
     // Start call
-    let call = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let call = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(call.success);
 
     // Simulate network drop
-    let drop = node.call_tool("set_network_available", json!({"available": false})).await;
+    let drop = node
+        .call_tool("set_network_available", json!({"available": false}))
+        .await;
     assert!(drop.success);
 
     // Reconnect
-    let reconnect = node.call_tool("set_network_available", json!({"available": true})).await;
+    let reconnect = node
+        .call_tool("set_network_available", json!({"available": true}))
+        .await;
     assert!(reconnect.success);
 
     // Get call status
-    let status = node.call_tool("get_call_status", json!({"call_id": "test-call"})).await;
+    let status = node
+        .call_tool("get_call_status", json!({"call_id": "test-call"}))
+        .await;
     assert!(status.success);
 
     // End
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }
 
@@ -326,17 +402,31 @@ async fn test_call_history_across_network_sessions() {
     let node = TestNode::start("full-int-history").await;
 
     // Session 1: Make a call
-    let call1 = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let call1 = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(call1.success);
 
-    let end1 = node.call_tool("end_call", json!({"call_id": "test-call-1"})).await;
+    let end1 = node
+        .call_tool("end_call", json!({"call_id": "test-call-1"}))
+        .await;
     assert!(end1.success);
 
     // Session 2: Make another call
-    let call2 = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": true})).await;
+    let call2 = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": true}),
+        )
+        .await;
     assert!(call2.success);
 
-    let end2 = node.call_tool("end_call", json!({"call_id": "test-call-2"})).await;
+    let end2 = node
+        .call_tool("end_call", json!({"call_id": "test-call-2"}))
+        .await;
     assert!(end2.success);
 
     // Check history
@@ -349,7 +439,9 @@ async fn test_media_device_changes_with_presence() {
     let node = TestNode::start("full-int-media-pres").await;
 
     // Set presence
-    let pres = node.call_tool("set_my_presence", json!({"status": "online"})).await;
+    let pres = node
+        .call_tool("set_my_presence", json!({"status": "online"}))
+        .await;
     assert!(pres.success);
 
     // List devices
@@ -357,14 +449,23 @@ async fn test_media_device_changes_with_presence() {
     assert!(dev.success);
 
     // Start call
-    let call = node.call_tool("start_voice_call", json!({"entity_id": "test-entity", "video_enabled": false})).await;
+    let call = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": "test-entity", "video_enabled": false}),
+        )
+        .await;
     assert!(call.success);
 
     // Update presence
-    let busy = node.call_tool("set_my_presence", json!({"status": "busy"})).await;
+    let busy = node
+        .call_tool("set_my_presence", json!({"status": "busy"}))
+        .await;
     assert!(busy.success);
 
     // End
-    let end = node.call_tool("end_call", json!({"call_id": "test-call"})).await;
+    let end = node
+        .call_tool("end_call", json!({"call_id": "test-call"}))
+        .await;
     assert!(end.success);
 }

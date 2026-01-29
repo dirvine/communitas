@@ -300,12 +300,7 @@ async fn test_get_participants_invalid_call() {
 #[tokio::test]
 async fn test_list_active_calls_empty() {
     let node = TestNode::start("call-err-list-empty").await;
-    let result = node
-        .call_tool(
-            "list_active_calls",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("list_active_calls", json!({})).await;
 
     // Should succeed and return empty list
     assert!(result.success, "list_active_calls should succeed");

@@ -170,12 +170,7 @@ impl Drop for TestNode {
 #[tokio::test]
 async fn test_get_call_history_all() {
     let node = TestNode::start("call-hist-all").await;
-    let result = node
-        .call_tool(
-            "get_call_history",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("get_call_history", json!({})).await;
 
     assert!(result.success, "get_call_history should succeed");
 }
@@ -192,7 +187,10 @@ async fn test_get_call_history_by_entity() {
         )
         .await;
 
-    assert!(result.success, "get_call_history with entity filter should succeed");
+    assert!(
+        result.success,
+        "get_call_history with entity filter should succeed"
+    );
 }
 
 #[tokio::test]
@@ -207,18 +205,16 @@ async fn test_get_call_history_by_type() {
         )
         .await;
 
-    assert!(result.success, "get_call_history with type filter should succeed");
+    assert!(
+        result.success,
+        "get_call_history with type filter should succeed"
+    );
 }
 
 #[tokio::test]
 async fn test_get_missed_calls_all() {
     let node = TestNode::start("call-missed-all").await;
-    let result = node
-        .call_tool(
-            "get_missed_calls",
-            json!({}),
-        )
-        .await;
+    let result = node.call_tool("get_missed_calls", json!({})).await;
 
     assert!(result.success, "get_missed_calls should succeed");
 }
@@ -235,7 +231,10 @@ async fn test_get_missed_calls_unread() {
         )
         .await;
 
-    assert!(result.success, "get_missed_calls with unread filter should succeed");
+    assert!(
+        result.success,
+        "get_missed_calls with unread filter should succeed"
+    );
 }
 
 #[tokio::test]
@@ -265,7 +264,10 @@ async fn test_acknowledge_all_missed_calls() {
         )
         .await;
 
-    assert!(result.success, "acknowledge all missed calls should succeed");
+    assert!(
+        result.success,
+        "acknowledge all missed calls should succeed"
+    );
 }
 
 #[tokio::test]

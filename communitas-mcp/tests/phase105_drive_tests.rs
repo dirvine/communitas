@@ -18,6 +18,7 @@ static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 /// - `response_body`: Full response body for debugging
 /// - `is_json_rpc_error`: True if JSON-RPC error field is present
 #[derive(Debug)]
+#[allow(dead_code)]
 struct ToolCallResult {
     success: bool,
     http_status: u16,
@@ -186,6 +187,17 @@ impl Drop for TestNode {
     }
 }
 
+/// Helper to assert tool call success with comprehensive error messages.
+/// Uses all ToolCallResult fields to provide detailed debugging information.
+#[allow(dead_code)]
+fn assert_tool_success(result: &ToolCallResult, tool_name: &str) {
+    assert!(
+        result.success,
+        "{} failed with HTTP {} (JSON-RPC error: {}): {}",
+        tool_name, result.http_status, result.is_json_rpc_error, result.response_body
+    );
+}
+
 // TASK 1: Drive Core Tests (8 tests)
 #[tokio::test]
 async fn test_drive_list_disks() {
@@ -193,11 +205,7 @@ async fn test_drive_list_disks() {
     let result = node
         .call_tool("list_disks", json!({"entity_id": "test-entity"}))
         .await;
-    assert!(
-        result.success,
-        "list_disks failed: {}",
-        result.response_body
-    );
+    assert_tool_success(&result, "list_disks");
 }
 
 #[tokio::test]

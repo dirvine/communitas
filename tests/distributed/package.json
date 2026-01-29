@@ -1,0 +1,17 @@
+{
+  "name": "communitas-distributed-tests",
+  "version": "1.0.0",
+  "description": "Distributed E2E tests for Communitas testnet deployment",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}

@@ -821,6 +821,7 @@ fn LoginRoute() -> Element {
                                     // Vault info
                                     div {
                                         style: "flex: 1; min-width: 0;",
+                                        // Primary: Display name (SHOWN)
                                         div {
                                             style: format!(
                                                 "font-size: {}; \
@@ -835,6 +836,7 @@ fn LoginRoute() -> Element {
                                             ),
                                             "{vault.display_name}"
                                         }
+                                        // Secondary: Connection address (WHERE) - for vault identification on this device
                                         div {
                                             style: format!(
                                                 "font-size: {}; \
@@ -844,6 +846,7 @@ fn LoginRoute() -> Element {
                                                 semantic::TEXT_MUTED,
                                                 typography::FONT_MONO
                                             ),
+                                            title: "Connection address for peer discovery",
                                             "{vault.four_words}"
                                         }
                                     }

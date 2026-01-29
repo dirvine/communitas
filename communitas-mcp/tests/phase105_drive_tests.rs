@@ -10,21 +10,44 @@ use tokio::time::{Duration, sleep, timeout};
 
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
-/// Represents the result of a tool call with full validation
+/// Represents the result of a tool call with full validation.
+///
+/// Fields:
+/// - `success`: True if HTTP status is 2xx and no JSON-RPC error
+/// - `http_status`: HTTP response status code
+/// - `response_body`: Full response body for debugging
+/// - `is_json_rpc_error`: True if JSON-RPC error field is present
 #[derive(Debug)]
-#[allow(dead_code)]
 struct ToolCallResult {
     success: bool,
     http_status: u16,
     response_body: String,
     is_json_rpc_error: bool,
-    tool_error: bool,
+}
+
+/// Validates JSON-RPC response from server startup.
+/// Returns true if response indicates successful server initialization.
+async fn validate_startup_response(response: reqwest::Response) -> bool {
+    // Check HTTP status is successful
+    if !response.status().is_success() {
+        return false;
+    }
+
+    // Extract and parse response body
+    let body = match response.text().await {
+        Ok(text) => text,
+        Err(_) => return false, // Failed to read body
+    };
+
+    // Parse JSON and check for JSON-RPC error field
+    match serde_json::from_str::<serde_json::Value>(&body) {
+        Ok(json) => json.get("error").is_none(), // No error = success
+        Err(_) => false,                         // Failed to parse JSON
+    }
 }
 
 // Test helpers
 struct TestNode {
-    #[allow(dead_code)]
-    name: String,
     process: std::process::Child,
     port: u16,
 }
@@ -35,7 +58,9 @@ impl TestNode {
         let pid = std::process::id();
         // Use PID offset + counter to minimize port collisions
         // Base: 34000, PID offset: 0-999, counter spacing: 2 → range: 34000-35998
-        let port = 34000 + (pid % 1000) as u16 + (counter * 2);
+        // Bounds check: cap counter at 999 to prevent wraparound (34000 + 999 + 999*2 = 36997)
+        let capped_counter = std::cmp::min(counter, 999);
+        let port = 34000 + (pid % 1000) as u16 + (capped_counter * 2);
 
         let mut process = Command::new(env!("CARGO_BIN_EXE_communitas-mcp"))
             .args([
@@ -53,7 +78,7 @@ impl TestNode {
         for attempt in 0..50 {
             sleep(Duration::from_millis(100)).await;
 
-            // Validate actual JSON-RPC response, not just HTTP success
+            // Attempt to connect and validate JSON-RPC response
             if let Ok(response) = client
                 .post(format!("http://127.0.0.1:{}/mcp", port))
                 .timeout(Duration::from_secs(5))
@@ -70,21 +95,8 @@ impl TestNode {
                 .send()
                 .await
             {
-                // Check HTTP status is successful
-                if response.status().is_success() {
-                    // Validate JSON-RPC response structure
-                    if let Ok(body) = response.text().await {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-                            // Ensure no JSON-RPC error
-                            if json.get("error").is_none() {
-                                return Self {
-                                    name: name.to_string(),
-                                    process,
-                                    port,
-                                };
-                            }
-                        }
-                    }
+                if validate_startup_response(response).await {
+                    return Self { process, port };
                 }
             }
 
@@ -103,6 +115,8 @@ impl TestNode {
     async fn call_tool(&self, tool: &str, params: serde_json::Value) -> ToolCallResult {
         let client = reqwest::Client::new();
 
+        // 10-second timeout for tool calls: allows time for initialization and network roundtrips
+        // while preventing indefinite hangs in CI environments
         match timeout(
             Duration::from_secs(10),
             client
@@ -130,22 +144,20 @@ impl TestNode {
                             Err(_) => true, // Failed to parse is also an error
                         };
 
-                        // Tool-level errors (isError: true) are acceptable in demo mode
+                        // Tool-level errors are acceptable in demo mode
                         // They just indicate missing/invalid parameters, not a crash
                         ToolCallResult {
                             success: is_success && !json_rpc_error,
                             http_status,
                             response_body: body,
                             is_json_rpc_error: json_rpc_error,
-                            tool_error: false, // Don't fail on tool errors in demo mode
                         }
                     }
-                    Err(_) => ToolCallResult {
+                    Err(err) => ToolCallResult {
                         success: false,
                         http_status,
-                        response_body: String::new(),
+                        response_body: format!("Failed to read response body: {}", err),
                         is_json_rpc_error: true,
-                        tool_error: false,
                     },
                 }
             }
@@ -154,14 +166,12 @@ impl TestNode {
                 http_status: 0,
                 response_body: "Request failed".to_string(),
                 is_json_rpc_error: true,
-                tool_error: false,
             },
             Err(_) => ToolCallResult {
                 success: false,
                 http_status: 0,
                 response_body: "Request timeout".to_string(),
                 is_json_rpc_error: true,
-                tool_error: false,
             },
         }
     }
@@ -169,6 +179,8 @@ impl TestNode {
 
 impl Drop for TestNode {
     fn drop(&mut self) {
+        // Clean up MCP server process on test completion
+        // Ensures no orphaned processes remain; errors are safely ignored (process may have exited)
         let _ = self.process.kill();
         let _ = self.process.wait();
     }

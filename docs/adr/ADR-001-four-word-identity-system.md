@@ -131,6 +131,75 @@ The `id_fw` field remains in `UserProfile` for:
 
 New code should use `pubkey_hex` for all identity comparisons and lookups.
 
+### Common Migration Scenarios
+
+#### Scenario 1: UI Display
+
+```rust
+// BEFORE (incorrect)
+rsx! {
+    div { "User: {profile.id_fw}" }  // Showed connection address
+}
+
+// AFTER (correct)
+rsx! {
+    div { "User: {profile.display_name}" }  // Shows human name (SHOWN)
+    // Identity fingerprint for verification:
+    span { class: "text-muted text-xs",
+        title: "Identity: {profile.pubkey_hex}",
+        "{&profile.pubkey_hex[..16]}..."
+    }
+}
+```
+
+#### Scenario 2: Identity Verification
+
+```rust
+// BEFORE (insecure)
+fn is_trusted_user(four_words: &str) -> bool {
+    TRUSTED_ADDRESSES.contains(four_words)  // ❌ Connection addr can change
+}
+
+// AFTER (secure)
+fn is_trusted_user(pubkey_hex: &str) -> bool {
+    TRUSTED_IDENTITIES.contains(pubkey_hex)  // ✅ Identity never changes
+}
+```
+
+#### Scenario 3: Contact Storage
+
+```rust
+// BEFORE (problematic)
+struct Contact {
+    name: String,
+    four_words: String,  // ❌ Used as primary key - breaks when IP changes
+}
+
+// AFTER (correct)
+struct Contact {
+    pubkey_hex: String,           // WHO - primary key (identity)
+    display_name: String,          // SHOWN - what we call them
+    connection_words: Vec<String>, // WHERE - how to reach them (may change)
+}
+```
+
+#### Scenario 4: Message Attribution
+
+```rust
+// BEFORE (ambiguous)
+struct Message {
+    from: String,  // ❌ Could be four_words, display_name, or pubkey?
+    content: String,
+}
+
+// AFTER (explicit)
+struct Message {
+    from_pubkey: String,      // WHO - cryptographic proof of sender
+    from_display_name: String, // SHOWN - convenience for UI
+    content: String,
+}
+```
+
 ## Connection Words Reference
 
 The `four-word-networking` crate provides address encoding:

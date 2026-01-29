@@ -135,6 +135,23 @@ Communitas uses a three-part identity model that separates WHO you are, WHERE yo
 
 To verify someone's identity, compare their `pubkey_hex` fingerprint (first 16 characters), not their display name or four-words.
 
+### Additional Resources
+
+- **Detailed Identity Model**: See [ADR-001: Four-Word Connection Address System](../adr/ADR-001-four-word-identity-system.md) for architectural details
+- **Developer Guide**: See [Identity Model Guide](../guides/identity-model.md) for code examples and best practices
+- **Common Mistakes**: Both guides include sections on avoiding identity-related bugs
+
+### FAQ
+
+**Q: Why do I see four-words during authentication?**
+A: Four-words identify which vault to unlock on this device. Each vault contains a different identity (pubkey). Think of four-words as a "vault ID" for local storage.
+
+**Q: Can I use display_name to identify users programmatically?**
+A: No. Display names are not unique and can be changed. Always use `pubkey_hex` for identity verification and comparison.
+
+**Q: What happens if someone shares their four-words publicly?**
+A: Nothing bad. Four-words are connection addresses (WHERE), not secrets. They encode IP:port information meant to be shared. Your identity (WHO) is your pubkey, and your secret is your private key (never shared).
+
 ## Tool Categories
 
 ### Messaging Tools

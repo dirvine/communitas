@@ -14,10 +14,24 @@ pub fn WelcomeStep() -> Element {
             h4 { class: "tour-step-title", "Welcome to Communitas" }
             p { class: "tour-step-content",
                 "A local-first collaboration platform that puts you in control. "
-                "Connect with others using four-word connection addresses like "
-                "\"ocean-forest-moon-star\" - your network location, not your identity. "
-                "Your real identity is your cryptographic public key, and you choose "
-                "any display name to show others."
+                "Communitas uses a three-part identity model:"
+            }
+            ul { class: "tour-step-list",
+                li {
+                    strong { "WHO you are:" }
+                    " Your cryptographic public key (ML-DSA-65) - your unique identity"
+                }
+                li {
+                    strong { "WHERE to find you:" }
+                    " Four-word connection address (e.g. \"ocean-forest-moon-star\") - your network location"
+                }
+                li {
+                    strong { "SHOWN to others:" }
+                    " Your display name - a friendly label you choose"
+                }
+            }
+            p { class: "tour-step-content",
+                "This separation keeps your identity secure while making connections easy."
             }
         }
     }

@@ -36,6 +36,11 @@ We will implement the MCP Apps extension (SEP-1865) to provide interactive UI wi
    - Search: Global search across all entities
    - Notifications: Activity feed and alerts
 
+6. **Strict MCP Apps Compatibility**:
+   - UI extension advertised at top-level `extensions` (not nested in `capabilities`).
+   - UI widgets must call `ui/initialize` and use the returned `sessionToken`.
+   - `resources/list` returns `_meta.ui` (CSP + permissions) for `ui://` resources.
+
 ### Architecture
 
 ```
@@ -110,7 +115,8 @@ Tools and resources can include `_meta.ui` to indicate interactive rendering sup
       "csp": {
         "connectDomains": [],
         "resourceDomains": []
-      }
+      },
+      "permissions": []
     }
   }
 }
@@ -135,12 +141,22 @@ The server advertises MCP Apps support in the initialize response:
 }
 ```
 
+### UI Session Tokens
+
+UI widgets must call `ui/initialize` and include the returned `sessionToken` in
+`ui/context` and `ui/message`. Tokens are short-lived and scoped to the UI bridge.
+They are **not** a user auth token.
+
+Pre-auth `ui://` resources are allowed for login screens, but must avoid exposing
+model-visible secrets.
+
 ### Security Model
 
 1. **Iframe Sandboxing**: All UI widgets run in sandboxed iframes controlled by the MCP host
 2. **Content Security Policy**: Each UI resource can specify allowed domains for network and resource access
 3. **Visibility Scopes**: Tools can specify whether UI is visible to the model, app, or both
-4. **postMessage Origin**: Communication restricted to parent window
+4. **UI Session Tokens**: `ui/initialize` issues short-lived tokens for UI-only channels
+5. **postMessage Origin**: Communication restricted to parent window
 
 ## Consequences
 
@@ -181,6 +197,7 @@ The server advertises MCP Apps support in the initialize response:
 - Update `mcp-api.md` with MCP Apps sections
 - Update README with capability announcement
 - Create test suite for UI resource handling
+- Document the CRDT-aware tool checklist for MCP parity
 
 ### Phase 4: Production Hardening
 - Security audit of CSP configuration
@@ -194,3 +211,4 @@ The server advertises MCP Apps support in the initialize response:
 - [ADR-018: MCP External Integration](./ADR-018-mcp-external-integration.md)
 - [ADR-019: Shared Rust UI Service](./ADR-019-shared-rust-ui-service.md)
 - [communitas-mcp API Documentation](../api/mcp-api.md)
+- [MCP CRDT-aware tool checklist](../architecture/mcp-crdt-tool-checklist.md)

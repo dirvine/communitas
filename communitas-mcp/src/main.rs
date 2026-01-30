@@ -32,6 +32,7 @@ mod server;
 mod tls;
 mod tools;
 mod ui_resources;
+mod ui_session;
 
 use anyhow::Result;
 use clap::Parser;

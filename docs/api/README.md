@@ -51,3 +51,4 @@ See [core-api.md](core-api.md) for core library interfaces and data types.
 
 ## MCP API
 See [mcp-api.md](mcp-api.md) for comprehensive tool documentation, examples, and MCP-UI parity details.
+CRDT-backed tool rules are captured in the [MCP CRDT-aware tool checklist](../architecture/mcp-crdt-tool-checklist.md).

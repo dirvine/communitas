@@ -19,6 +19,7 @@ use communitas_core::{
 use communitas_ui_api::UnifiedEntityType;
 use communitas_ui_api::drive::DiskType as UiDiskType;
 use communitas_ui_service::UiServices;
+use communitas_ui_service::messaging::MessagingError;
 use serde_json::{Value, json};
 use tracing::warn;
 
@@ -2409,7 +2410,7 @@ pub async fn call_tool(
     if let Some(result) = dispatch_audit_tools(services, name, &args).await {
         return result;
     }
-    if let Some(result) = dispatch_misc_tools(app, name, &args).await {
+    if let Some(result) = dispatch_misc_tools(app, services, name, &args).await {
         return result;
     }
 
@@ -2474,14 +2475,14 @@ async fn dispatch_message_tools(
         "add_reaction" => Some(execute_add_reaction(services, args.clone()).await),
         "remove_reaction" => Some(execute_remove_reaction(services, args.clone()).await),
         // Reactions - not yet migrated, still use app directly
-        "get_reactions" => Some(execute_get_reactions(app, args.clone()).await),
+        "get_reactions" => Some(execute_get_reactions(services, args.clone()).await),
         "get_available_reactions" => Some(execute_get_available_reactions(app, args.clone()).await),
         // Thread operations - not yet migrated
         "create_thread" => Some(execute_create_thread(app, args.clone()).await),
-        "get_thread_messages" => Some(execute_get_thread_messages(app, args.clone()).await),
+        "get_thread_messages" => Some(execute_get_thread_messages(services, args.clone()).await),
         // Thread listing - migrated to use UiServices (PLAN-31)
         "list_threads" => Some(execute_list_threads(services, args.clone()).await),
-        "list_messages" => Some(execute_list_messages(app, args.clone()).await),
+        "list_messages" => Some(execute_list_messages(services, args.clone()).await),
         // Phase 6.2 messaging tools (PLAN-37)
         "mark_thread_read" => Some(execute_mark_thread_read(services, args.clone()).await),
         "search_messages" => Some(execute_search_messages(services, args.clone()).await),
@@ -2746,6 +2747,7 @@ async fn dispatch_social_tools(
 
 async fn dispatch_misc_tools(
     app: &CommunitasApp,
+    services: &UiServices,
     name: &str,
     args: &Value,
 ) -> Option<ToolCallResult> {
@@ -2756,7 +2758,7 @@ async fn dispatch_misc_tools(
         "delete_website" => Some(execute_delete_website(app, args.clone()).await),
         "get_website" => Some(execute_get_website(app, args.clone()).await),
         // Workspace initialization
-        "workspace_init" => Some(execute_workspace_init(app, args.clone()).await),
+        "workspace_init" => Some(execute_workspace_init(app, services, args.clone()).await),
         _ => None,
     }
 }
@@ -3044,7 +3046,7 @@ async fn execute_remove_member(app: &CommunitasApp, args: Value) -> ToolCallResu
 async fn execute_send_message(services: &UiServices, args: Value) -> ToolCallResult {
     let thread_id = str_or_default(&args, "entity_id");
     let text = str_or_default(&args, "text");
-    let reply_to = opt_str(&args, "reply_to_id");
+    let reply_to = opt_str(&args, "reply_to_id").or_else(|| opt_str(&args, "thread_id"));
 
     // Use MessagingService for parity with Dioxus UI
     match services
@@ -3152,26 +3154,24 @@ async fn execute_remove_reaction(services: &UiServices, args: Value) -> ToolCall
     }
 }
 
-async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_get_reactions(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = str_or_default(&args, "entity_id");
     let message_id = str_or_default(&args, "message_id");
 
-    let query = Query::GetMessage {
-        entity_id,
-        message_id,
-    };
-
-    match app.query(query).await {
-        Ok(QueryResponse::Message(msg)) => {
-            let reactions: Vec<serde_json::Value> = msg
+    match services
+        .messaging()
+        .get_message(&entity_id, &message_id)
+        .await
+    {
+        Ok(message) => {
+            let reactions: Vec<Value> = message
                 .reactions
                 .into_iter()
                 .map(|r| {
                     json!({
                         "emoji": r.emoji,
                         "count": r.count,
-                        "user_reacted": r.user_reacted,
-                        "peer_ids": r.peer_ids
+                        "reacted_by_me": r.reacted_by_me
                     })
                 })
                 .collect();
@@ -3180,7 +3180,6 @@ async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResu
                 "reactions": reactions
             }))
         }
-        Ok(_) => error_result("Unexpected response type"),
         Err(e) => error_result(&format!("Failed to get reactions: {e}")),
     }
 }
@@ -3552,9 +3551,9 @@ async fn execute_list_threads(services: &UiServices, args: Value) -> ToolCallRes
 
 /// Get messages from a specific thread with pagination support.
 ///
-/// Thread IDs are formatted as "entity:{entity_id}" or "contact:{contact_id}".
-#[tracing::instrument(skip(app), name = "mcp.tools.list_messages")]
-async fn execute_list_messages(app: &CommunitasApp, args: Value) -> ToolCallResult {
+/// Thread IDs are formatted as "entity:{entity_id}", "contact:{contact_id}", or "dm:{peer_id}".
+#[tracing::instrument(skip(services), name = "mcp.tools.list_messages")]
+async fn execute_list_messages(services: &UiServices, args: Value) -> ToolCallResult {
     let thread_id = match args["thread_id"].as_str() {
         Some(id) => id,
         None => return error_result("thread_id is required"),
@@ -3562,49 +3561,48 @@ async fn execute_list_messages(app: &CommunitasApp, args: Value) -> ToolCallResu
     let limit = args["limit"].as_u64().unwrap_or(50).min(100) as usize;
     let before_timestamp = args["before"].as_u64();
 
-    // Parse thread_id to determine if entity or contact
-    let (entity_id, _is_contact) = if let Some(stripped) = thread_id.strip_prefix("entity:") {
+    let (thread_lookup_id, is_direct) = if let Some(stripped) = thread_id.strip_prefix("entity:") {
         (stripped.to_string(), false)
     } else if let Some(stripped) = thread_id.strip_prefix("contact:") {
+        (stripped.to_string(), true)
+    } else if let Some(stripped) = thread_id.strip_prefix("dm:") {
         (stripped.to_string(), true)
     } else {
         // Fallback: treat as entity_id directly for backwards compatibility
         (thread_id.to_string(), false)
     };
 
-    // Query messages from the entity
-    let query = Query::GetEntityMessages {
-        entity_id: entity_id.clone(),
+    let messages_result = if is_direct {
+        services
+            .messaging()
+            .get_direct_messages(&thread_lookup_id, limit, before_timestamp)
+            .await
+    } else {
+        services
+            .messaging()
+            .get_messages(&thread_lookup_id, limit, before_timestamp)
+            .await
     };
 
-    match app.query(query).await {
-        Ok(QueryResponse::Messages(mut messages)) => {
-            // Apply before filter if provided (convert u64 to i64 for comparison)
-            if let Some(before_ts) = before_timestamp {
-                let before_ts_i64 = before_ts as i64;
-                messages.retain(|m| m.timestamp < before_ts_i64);
-            }
-
-            // Sort by timestamp descending and limit
-            messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-            messages.truncate(limit);
-
-            // Reverse to get chronological order (oldest first)
-            messages.reverse();
-
+    match messages_result {
+        Ok(messages) => {
             let list: Vec<Value> = messages
                 .iter()
                 .map(|m| {
                     json!({
                         "id": m.id,
                         "thread_id": thread_id,
-                        "sender_id": m.author,
-                        "sender_name": m.author, // TODO: resolve display name
+                        "sender_id": m.sender_id,
+                        "sender_name": m.sender_name,
                         "text": m.text,
                         "timestamp": m.timestamp,
                         "reply_to_id": m.reply_to_id,
-                        "edited": false,
-                        "reactions": []
+                        "edited": m.edited,
+                        "reactions": m.reactions.iter().map(|r| json!({
+                            "emoji": r.emoji,
+                            "count": r.count,
+                            "reacted_by_me": r.reacted_by_me
+                        })).collect::<Vec<_>>()
                     })
                 })
                 .collect();
@@ -3614,8 +3612,11 @@ async fn execute_list_messages(app: &CommunitasApp, args: Value) -> ToolCallResu
                 "has_more": messages.len() == limit
             }))
         }
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get messages: {}", e.message)),
+        Err(MessagingError::ThreadNotFound(_)) => json_result(&json!({
+            "messages": [],
+            "has_more": false
+        })),
+        Err(e) => error_result(&format!("Failed to get messages: {}", e)),
     }
 }
 
@@ -5596,23 +5597,27 @@ async fn execute_create_thread(_app: &CommunitasApp, args: Value) -> ToolCallRes
     }))
 }
 
-async fn execute_get_thread_messages(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_get_thread_messages(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "channel_id");
     let parent_message_id = require_str!(args, "thread_id");
+    let limit = args["limit"]
+        .as_u64()
+        .map(|v| v.min(1000) as usize)
+        .unwrap_or(usize::MAX);
+    let before = args["before"].as_u64();
 
-    let query = Query::GetThreadMessages {
-        entity_id: entity_id.clone(),
-        parent_message_id: parent_message_id.clone(),
-    };
-
-    match app.query(query).await {
-        Ok(QueryResponse::Messages(messages)) => {
+    match services
+        .messaging()
+        .get_thread_messages(&entity_id, &parent_message_id, limit, before)
+        .await
+    {
+        Ok(messages) => {
             let list: Vec<Value> = messages
                 .iter()
                 .map(|m| {
                     json!({
                         "id": m.id,
-                        "author": m.author,
+                        "author": m.sender_id,
                         "text": m.text,
                         "timestamp": m.timestamp,
                         "reply_to_id": m.reply_to_id
@@ -5625,8 +5630,7 @@ async fn execute_get_thread_messages(app: &CommunitasApp, args: Value) -> ToolCa
                 "thread_id": parent_message_id
             }))
         }
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get thread messages: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to get thread messages: {}", e)),
     }
 }
 
@@ -5728,7 +5732,11 @@ async fn execute_list_kanban_cards(services: &UiServices, args: Value) -> ToolCa
     }
 }
 
-async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_workspace_init(
+    app: &CommunitasApp,
+    services: &UiServices,
+    args: Value,
+) -> ToolCallResult {
     let name = require_str!(args, "name");
     let description = opt_str(&args, "description");
     let board_name = args["board_name"]
@@ -5749,7 +5757,7 @@ async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallRes
     let cmd = Command::CreateEntity {
         name: name.clone(),
         entity_type: EntityType::Project,
-        description,
+        description: description.clone(),
         initial_members: vec![],
     };
 
@@ -5766,53 +5774,34 @@ async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallRes
         None => return error_result("Project created but no entity_id returned"),
     };
 
-    let board_cmd = Command::CreateKanbanBoard {
-        entity_id: entity_id.clone(),
-        board_name: board_name.clone(),
-        description: Some(format!("Default board for {name}")),
+    let board = match services
+        .kanban()
+        .create_board(&entity_id, &board_name, description.as_deref())
+        .await
+    {
+        Ok(board) => board,
+        Err(e) => return error_result(&format!("Failed to create board: {e}")),
     };
-
-    let board_id = match app.execute(board_cmd).await {
-        Ok(events) => events.iter().find_map(|e| match e {
-            Event::KanbanBoardCreated { board_id, .. } => Some(board_id.clone()),
-            _ => None,
-        }),
-        Err(e) => return error_result(&format!("Failed to create board: {}", e.message)),
-    };
-
-    let board_id = match board_id {
-        Some(id) => id,
-        None => return error_result("Board created but no board_id returned"),
-    };
+    let board_id = board.id.clone();
 
     let mut column_ids = Vec::new();
     for (position, column_name) in columns.iter().enumerate() {
-        let col_cmd = Command::CreateKanbanColumn {
-            board_id: board_id.clone(),
-            column_name: column_name.clone(),
-            position: Some(position as u32),
+        let column = match services
+            .kanban()
+            .create_column(&board_id, column_name, position as u32)
+            .await
+        {
+            Ok(column) => column,
+            Err(e) => {
+                return error_result(&format!("Failed to create column '{column_name}': {e}"));
+            }
         };
 
-        match app.execute(col_cmd).await {
-            Ok(events) => {
-                if let Some(col_id) = events.iter().find_map(|e| match e {
-                    Event::KanbanColumnCreated { column_id, .. } => Some(column_id.clone()),
-                    _ => None,
-                }) {
-                    column_ids.push(json!({
-                        "id": col_id,
-                        "name": column_name,
-                        "position": position
-                    }));
-                }
-            }
-            Err(e) => {
-                return error_result(&format!(
-                    "Failed to create column '{}': {}",
-                    column_name, e.message
-                ));
-            }
-        }
+        column_ids.push(json!({
+            "id": column.id,
+            "name": column_name,
+            "position": position
+        }));
     }
 
     json_result(&json!({
@@ -5824,7 +5813,7 @@ async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallRes
         },
         "board": {
             "id": board_id,
-            "name": board_name
+            "name": board.name
         },
         "columns": column_ids
     }))

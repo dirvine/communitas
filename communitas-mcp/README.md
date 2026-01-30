@@ -81,6 +81,62 @@ The server advertises MCP Apps support via the `extensions` field:
 }
 ```
 
+### UI Session Handshake
+
+MCP Apps widgets must call `ui/initialize` before using `ui/context` or `ui/message`.
+The server returns a short-lived `sessionToken` to protect UI-only channels.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "ui/initialize",
+  "params": {
+    "capabilities": {
+      "context_tracking": true,
+      "messaging": true
+    }
+  }
+}
+```
+
+```json
+{
+  "success": true,
+  "sessionToken": "c27b...f91",
+  "expiresInSec": 600,
+  "server_capabilities": {
+    "context_tracking": true,
+    "messaging": true,
+    "tool_calls": true,
+    "resource_reads": true
+  }
+}
+```
+
+Include `sessionToken` in `ui/context` and `ui/message` requests. Tokens are scoped
+to the UI bridge and **are not** a user auth token. Pre-auth `ui://` resources are
+allowed for login screens, but must avoid model-visible secrets.
+
+### Resource Metadata
+
+`resources/list` returns `_meta.ui` for CSP and permission hints:
+
+```json
+{
+  "uri": "ui://communitas/contacts",
+  "name": "Contacts",
+  "mimeType": "text/html;profile=mcp-app",
+  "_meta": {
+    "ui": {
+      "csp": { "connectDomains": [], "resourceDomains": [] },
+      "permissions": [],
+      "prefersBorder": false
+    }
+  }
+}
+```
+
 ### Tool UI Enhancement
 
 Tools can return `_meta.ui.resourceUri` to trigger interactive rendering:
@@ -176,6 +232,7 @@ See `docs/MCP_PRODUCTION_READINESS_REPORT.md` for current production readiness a
 ## Related Documentation
 
 - [MCP API Reference](../docs/api/mcp-api.md) - Full API documentation
+- [MCP CRDT-aware tool checklist](../docs/architecture/mcp-crdt-tool-checklist.md) - Required rules for CRDT parity
 - [ADR-018: MCP External Integration](../docs/adr/ADR-018-mcp-external-integration.md) - Integration architecture
 - [ADR-019: Shared UI Service](../docs/adr/ADR-019-shared-rust-ui-service.md) - Service layer design
 - [ADR-022: MCP Apps Integration](../docs/adr/ADR-022-mcp-apps-integration.md) - MCP Apps architecture

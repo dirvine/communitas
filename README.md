@@ -248,9 +248,15 @@ Communitas implements the [MCP Apps extension](https://blog.modelcontextprotocol
 | **Search** | Global search | Cross-entity search, filters |
 | **Notifications** | Activity feed | Alerts, mentions, updates |
 
+**MCP Apps implementation notes (strict MCP Apps host compatibility):**
+- `initialize` advertises the UI extension in top-level `extensions` (not nested in `capabilities`).
+- UI widgets must call `ui/initialize` and use the returned `sessionToken` for `ui/context` and `ui/message`.
+- `resources/list` returns `ui://` entries with `_meta.ui` (CSP + permissions). Pre-auth UI is allowed, but must avoid model-visible secrets.
+- CRDT parity is mandatory for tool handlers; see the **CRDT-aware tool checklist**.
+
 **The MCP server IS the app.** Dioxus native and MCP Apps are both presentation layers over the same shared `communitas-ui-service` (ADR-019), ensuring identical behavior across AI agents and human users.
 
-See [ADR-022: MCP Apps Integration](docs/adr/ADR-022-mcp-apps-integration.md) for architecture details.
+See [ADR-022: MCP Apps Integration](docs/adr/ADR-022-mcp-apps-integration.md) for architecture details and [MCP CRDT-aware tool checklist](docs/architecture/mcp-crdt-tool-checklist.md) for implementation rules.
 
 ---
 

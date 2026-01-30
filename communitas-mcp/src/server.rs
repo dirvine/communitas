@@ -16,6 +16,7 @@ use crate::protocol::{
 };
 use crate::tools;
 use crate::ui_resources::UiResourceRegistry;
+use crate::ui_session::UiSessionStore;
 use anyhow::Result;
 use communitas_core::app::CommunitasApp;
 use communitas_core::auth_service::AuthService;
@@ -47,6 +48,8 @@ pub struct McpServer {
     ui_resources: UiResourceRegistry,
     /// Current UI context for AI context hints (Phase 9.3)
     ui_context: AiContext,
+    /// UI session tokens for widget communication
+    ui_sessions: UiSessionStore,
 }
 
 impl McpServer {
@@ -62,6 +65,7 @@ impl McpServer {
             token_manager: None,
             ui_resources: UiResourceRegistry::with_standard_widgets(),
             ui_context: AiContext::default(),
+            ui_sessions: UiSessionStore::with_default_ttl(),
         }
     }
 
@@ -815,6 +819,7 @@ impl McpServer {
                 name: "Current Identity".to_string(),
                 description: Some("The current user's identity and four-word address".to_string()),
                 mime_type: Some("application/json".to_string()),
+                _meta: None,
             },
             Resource {
                 uri: "communitas://entities".to_string(),
@@ -823,18 +828,21 @@ impl McpServer {
                     "List of all entities (orgs, groups, channels, projects)".to_string(),
                 ),
                 mime_type: Some("application/json".to_string()),
+                _meta: None,
             },
             Resource {
                 uri: "communitas://chats".to_string(),
                 name: "Chats".to_string(),
                 description: Some("List of all chat conversations".to_string()),
                 mime_type: Some("application/json".to_string()),
+                _meta: None,
             },
             Resource {
                 uri: "communitas://invites".to_string(),
                 name: "Invites".to_string(),
                 description: Some("Pending invitations".to_string()),
                 mime_type: Some("application/json".to_string()),
+                _meta: None,
             },
         ];
 
@@ -844,6 +852,7 @@ impl McpServer {
             name: "Contacts".to_string(),
             description: Some("All contacts".to_string()),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         });
 
         resources.push(Resource {
@@ -851,6 +860,7 @@ impl McpServer {
             name: "Network Status".to_string(),
             description: Some("P2P network status and connected peers".to_string()),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         });
 
         // Add UI resources from the MCP Apps registry
@@ -860,6 +870,7 @@ impl McpServer {
                 name: ui_resource.name,
                 description: ui_resource.description,
                 mime_type: ui_resource.mime_type,
+                _meta: ui_resource._meta,
             });
         }
 
@@ -869,18 +880,36 @@ impl McpServer {
 
     /// Handle resources/read request
     async fn handle_resources_read(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
-        if !self.is_authenticated() {
-            return Err(JsonRpcError::invalid_request(
-                "Authentication required to read resources",
-            ));
-        }
-
         let params: ResourceReadParams = params
             .map(|p| {
                 serde_json::from_value(p).map_err(|e| JsonRpcError::invalid_params(&e.to_string()))
             })
             .transpose()?
             .ok_or_else(|| JsonRpcError::invalid_params("Missing resource read params"))?;
+
+        if params.uri.starts_with("ui://") {
+            let (content, mime_type) = self.ui_resources.read(&params.uri).ok_or_else(|| {
+                JsonRpcError::invalid_params(&format!("Unknown UI resource: {}", params.uri))
+            })?;
+
+            let result = ResourceReadResult {
+                contents: vec![ResourceContent {
+                    uri: params.uri,
+                    mime_type: Some(mime_type),
+                    text: Some(content),
+                    blob: None,
+                }],
+            };
+
+            return serde_json::to_value(result)
+                .map_err(|e| JsonRpcError::internal_error(&e.to_string()));
+        }
+
+        if !self.is_authenticated() {
+            return Err(JsonRpcError::invalid_request(
+                "Authentication required to read resources",
+            ));
+        }
 
         let app_lock = self.app.read().await;
         let app = app_lock
@@ -998,26 +1027,6 @@ impl McpServer {
                 }))
                 .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
             }
-            uri if uri.starts_with("ui://") => {
-                // Handle MCP Apps UI resources
-                drop(app_lock); // Release the app lock since we don't need it for UI resources
-
-                let (content, mime_type) = self.ui_resources.read(uri).ok_or_else(|| {
-                    JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}"))
-                })?;
-
-                let result = ResourceReadResult {
-                    contents: vec![ResourceContent {
-                        uri: params.uri,
-                        mime_type: Some(mime_type),
-                        text: Some(content),
-                        blob: None,
-                    }],
-                };
-
-                return serde_json::to_value(result)
-                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()));
-            }
             uri => {
                 return Err(JsonRpcError::invalid_params(&format!(
                     "Unknown resource: {uri}"
@@ -1037,6 +1046,26 @@ impl McpServer {
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
+    fn ui_session_token_from_params(params: &Value) -> Option<&str> {
+        params
+            .get("sessionToken")
+            .and_then(|value| value.as_str())
+            .or_else(|| params.get("session_token").and_then(|value| value.as_str()))
+    }
+
+    fn validate_ui_session(&mut self, params: &Value) -> Result<(), JsonRpcError> {
+        let token = Self::ui_session_token_from_params(params)
+            .ok_or_else(|| JsonRpcError::invalid_request("Missing ui session token"))?;
+
+        if !self.ui_sessions.validate(token) {
+            return Err(JsonRpcError::invalid_request(
+                "UI session expired or invalid",
+            ));
+        }
+
+        Ok(())
+    }
+
     // ==========================================================================
     // UI Context Methods (Phase 9.3 - AI Context Integration)
     // ==========================================================================
@@ -1046,6 +1075,8 @@ impl McpServer {
         // Parse context update from widget
         let params =
             params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/context params"))?;
+
+        self.validate_ui_session(&params)?;
 
         // Extract context and changed field from params
         let context_value = params.get("context");
@@ -1077,9 +1108,11 @@ impl McpServer {
     }
 
     /// Handle ui/message - receive messages with optional context from widgets
-    async fn handle_ui_message(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
+    async fn handle_ui_message(&mut self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let params =
             params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/message params"))?;
+
+        self.validate_ui_session(&params)?;
 
         let content = params
             .get("content")
@@ -1107,7 +1140,7 @@ impl McpServer {
     }
 
     /// Handle ui/initialize - widget handshake
-    async fn handle_ui_initialize(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
+    async fn handle_ui_initialize(&mut self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let params =
             params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/initialize params"))?;
 
@@ -1119,9 +1152,14 @@ impl McpServer {
             capabilities
         );
 
+        let session = self.ui_sessions.issue();
+        let expires_in = session.expires_in(SystemTime::now());
+
         // Return acknowledgment with server capabilities
         Ok(serde_json::json!({
             "success": true,
+            "sessionToken": session.token,
+            "expiresInSec": expires_in,
             "server_capabilities": {
                 "context_tracking": true,
                 "messaging": true,

@@ -14,8 +14,8 @@
 
 use communitas_mcp::protocol::{
     InitializeResultWithExtensions, McpUiToolMeta, ResourceMeta, ResourceWithMeta,
-    ServerCapabilitiesWithExtensions, ServerExtensions, ServerInfo, ToolResultMeta,
-    UiExtensionCapability, UiResourceCsp, UiResourceMeta,
+    ServerExtensions, ServerInfo, ToolResultMeta, UiExtensionCapability, UiResourceCsp,
+    UiResourceMeta,
 };
 use communitas_mcp::ui_resources::{UiContent, UiResourceEntry, UiResourceRegistry};
 use serde_json::json;
@@ -282,7 +282,6 @@ fn test_initialize_result_with_ui_extension() {
 
     // Verify extensions include UI support
     let extensions = result
-        .capabilities
         .extensions
         .as_ref()
         .expect("Extensions should be present");
@@ -323,30 +322,6 @@ fn test_server_extensions_serialization() {
             .contains(&json!("text/html;profile=mcp-app")),
         "MIME types should include MCP App type"
     );
-}
-
-#[test]
-fn test_capabilities_include_extensions() {
-    let caps = ServerCapabilitiesWithExtensions::with_ui_extension(
-        Some(communitas_mcp::protocol::ToolsCapability {
-            list_changed: false,
-        }),
-        Some(communitas_mcp::protocol::ResourcesCapability {
-            subscribe: false,
-            list_changed: false,
-        }),
-    );
-
-    let json = serde_json::to_value(&caps).unwrap();
-
-    // Should have tools capability
-    assert!(json["tools"].is_object());
-
-    // Should have resources capability
-    assert!(json["resources"].is_object());
-
-    // Should have extensions with UI
-    assert!(json["extensions"]["io.modelcontextprotocol/ui"].is_object());
 }
 
 // =============================================================================

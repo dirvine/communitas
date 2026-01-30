@@ -8,6 +8,8 @@
 
 Communitas aims to provide first-class support for AI agents through the Model Context Protocol (MCP). This ADR documents the MCP tool inventory and parity strategy between the Dioxus UI and MCP automation interface.
 
+CRDT-backed tools must follow the [MCP CRDT-aware tool checklist](mcp-crdt-tool-checklist.md) to avoid drift between UI and automation.
+
 AI agents need the same capabilities as human users to effectively assist with collaboration tasks. This includes:
 - Authentication and session management
 - Entity and contact directory access
@@ -37,6 +39,16 @@ Authentication methods:
 - `authenticate_token`: Delegate token (for AI agents)
 - `create_vault`: New identity creation
 - `recover_identity`: BIP39 mnemonic recovery
+
+### MCP Apps Extension
+
+Communitas implements MCP Apps (SEP-1865) so MCP hosts can render interactive `ui://` widgets.
+Requirements:
+- UI capability advertised via top-level `extensions`
+- UI widgets call `ui/initialize` and use `sessionToken` for `ui/context` and `ui/message`
+- `resources/list` includes `_meta.ui` (CSP + permissions)
+
+Implementation details live in [ADR-022: MCP Apps Integration](../adr/ADR-022-mcp-apps-integration.md).
 
 ---
 

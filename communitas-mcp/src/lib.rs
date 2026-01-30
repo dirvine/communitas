@@ -23,7 +23,6 @@ pub use protocol::{
     McpUiToolMeta,
     ResourceMeta,
     ResourceWithMeta,
-    ServerCapabilitiesWithExtensions,
     ServerExtensions,
     ToolCallResultWithMeta,
     ToolDefinitionMeta,

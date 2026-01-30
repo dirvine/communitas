@@ -78,6 +78,12 @@ cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
 # See docs/api/mcp-api.md for details
 ```
 
+MCP Apps notes:
+- `initialize` advertises UI support in top-level `extensions`.
+- UI widgets must call `ui/initialize` and use `sessionToken` for `ui/context` and `ui/message`.
+- `resources/list` returns `_meta.ui` (CSP + permissions); pre-auth UI is allowed but must avoid model-visible secrets.
+- Follow the CRDT-aware tool checklist: `docs/architecture/mcp-crdt-tool-checklist.md`.
+
 ## Workspace Crates
 
 | Crate | Purpose |

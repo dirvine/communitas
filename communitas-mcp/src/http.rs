@@ -9,14 +9,15 @@
 
 use crate::Args;
 use crate::protocol::{
-    InitializeParams, InitializeResultWithExtensions, JsonRpcError, JsonRpcRequest,
+    AiContext, InitializeParams, InitializeResultWithExtensions, JsonRpcError, JsonRpcRequest,
     JsonRpcResponse, Resource, ResourceContent, ResourceListResult, ResourceReadParams,
-    ResourceReadResult, ResourcesCapability, ServerInfo, ToolCallParams, ToolListResult,
-    ToolsCapability,
+    ResourceReadResult, ResourcesCapability, ServerInfo, ToolCallParams, ToolCallResultWithContext,
+    ToolListResult, ToolsCapability,
 };
 use crate::tls::{ServerTlsConfig, ServerTlsConfigBuilder, TlsConfigError};
 use crate::tools;
 use crate::ui_resources::UiResourceRegistry;
+use crate::ui_session::UiSessionStore;
 use anyhow::Result;
 use axum::{
     Json, Router,
@@ -73,7 +74,7 @@ use std::net::SocketAddr;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 
@@ -93,6 +94,10 @@ pub struct HttpServerState {
     token_manager: RwLock<Option<TokenManager>>,
     /// UI resource registry for MCP Apps extension
     ui_resources: UiResourceRegistry,
+    /// Current UI context for AI hints
+    ui_context: RwLock<AiContext>,
+    /// UI session tokens for widget communication
+    ui_sessions: RwLock<UiSessionStore>,
     /// Prometheus metrics collection
     metrics: Metrics,
 }
@@ -107,6 +112,8 @@ impl HttpServerState {
             protocol_initialized: RwLock::new(false),
             token_manager: RwLock::new(None),
             ui_resources: UiResourceRegistry::with_standard_widgets(),
+            ui_context: RwLock::new(AiContext::default()),
+            ui_sessions: RwLock::new(UiSessionStore::with_default_ttl()),
             metrics: Metrics::new(),
         }
     }
@@ -433,6 +440,9 @@ async fn handle_request_inner(
         "tools/call" => handle_tools_call(state, request.params).await,
         "resources/list" => handle_resources_list(state).await,
         "resources/read" => handle_resources_read(state, request.params).await,
+        "ui/context" => handle_ui_context(state, request.params).await,
+        "ui/message" => handle_ui_message(state, request.params).await,
+        "ui/initialize" => handle_ui_initialize(state, request.params).await,
         "ping" => Ok(Value::Object(serde_json::Map::new())),
         method => {
             warn!("Unknown method: {}", method);
@@ -614,7 +624,12 @@ async fn handle_tools_call(
         .ok_or_else(|| JsonRpcError::internal_error("Services not initialized"))?;
 
     let result = tools::call_tool(app, services, &params.name, params.arguments).await;
-    serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+    let resource_uri = get_tool_resource_uri(&params.name);
+    let ui_context = state.ui_context.read().await.clone();
+    let result_with_context =
+        ToolCallResultWithContext::from_basic_with_context(result, resource_uri, ui_context);
+    serde_json::to_value(result_with_context)
+        .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
 }
 
 async fn handle_pre_auth_tool(
@@ -869,6 +884,7 @@ async fn handle_resources_list(state: &HttpServerState) -> Result<Value, JsonRpc
             name: "Current Identity".to_string(),
             description: Some("The current user's identity and four-word address".to_string()),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         },
         Resource {
             uri: "communitas://entities".to_string(),
@@ -877,30 +893,35 @@ async fn handle_resources_list(state: &HttpServerState) -> Result<Value, JsonRpc
                 "List of all entities (orgs, groups, channels, projects)".to_string(),
             ),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         },
         Resource {
             uri: "communitas://chats".to_string(),
             name: "Chats".to_string(),
             description: Some("List of all chat conversations".to_string()),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         },
         Resource {
             uri: "communitas://invites".to_string(),
             name: "Invites".to_string(),
             description: Some("Pending invitations".to_string()),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         },
         Resource {
             uri: "communitas://contacts".to_string(),
             name: "Contacts".to_string(),
             description: Some("All contacts".to_string()),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         },
         Resource {
             uri: "communitas://network".to_string(),
             name: "Network Status".to_string(),
             description: Some("P2P network status and connected peers".to_string()),
             mime_type: Some("application/json".to_string()),
+            _meta: None,
         },
     ];
 
@@ -911,6 +932,7 @@ async fn handle_resources_list(state: &HttpServerState) -> Result<Value, JsonRpc
             name: ui_resource.name,
             description: ui_resource.description,
             mime_type: ui_resource.mime_type,
+            _meta: ui_resource._meta,
         });
     }
 
@@ -922,18 +944,36 @@ async fn handle_resources_read(
     state: &HttpServerState,
     params: Option<Value>,
 ) -> Result<Value, JsonRpcError> {
-    if !state.is_authenticated().await {
-        return Err(JsonRpcError::invalid_request(
-            "Authentication required to read resources",
-        ));
-    }
-
     let params: ResourceReadParams = params
         .map(|p| {
             serde_json::from_value(p).map_err(|e| JsonRpcError::invalid_params(&e.to_string()))
         })
         .transpose()?
         .ok_or_else(|| JsonRpcError::invalid_params("Missing resource read params"))?;
+
+    if params.uri.starts_with("ui://") {
+        let (content, mime_type) = state.ui_resources.read(&params.uri).ok_or_else(|| {
+            JsonRpcError::invalid_params(&format!("Unknown UI resource: {}", params.uri))
+        })?;
+
+        let result = ResourceReadResult {
+            contents: vec![ResourceContent {
+                uri: params.uri,
+                mime_type: Some(mime_type),
+                text: Some(content),
+                blob: None,
+            }],
+        };
+
+        return serde_json::to_value(result)
+            .map_err(|e| JsonRpcError::internal_error(&e.to_string()));
+    }
+
+    if !state.is_authenticated().await {
+        return Err(JsonRpcError::invalid_request(
+            "Authentication required to read resources",
+        ));
+    }
 
     let app_lock = state.app.read().await;
     let app = app_lock
@@ -965,32 +1005,82 @@ async fn handle_resources_read(
             serde_json::to_string_pretty(&response)
                 .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
         }
-        "communitas://contacts" => serde_json::json!({"contacts": []}).to_string(),
-        "communitas://network" => serde_json::json!({
-            "status": "not_started",
-            "peers": [],
-            "connection_info": null
-        })
-        .to_string(),
-        uri if uri.starts_with("ui://") => {
-            // Handle MCP Apps UI resources
-            drop(app_lock); // Release the app lock since we don't need it for UI resources
-
-            let (content, mime_type) = state.ui_resources.read(uri).ok_or_else(|| {
-                JsonRpcError::invalid_params(&format!("Unknown UI resource: {uri}"))
-            })?;
-
-            let result = ResourceReadResult {
-                contents: vec![ResourceContent {
-                    uri: params.uri,
-                    mime_type: Some(mime_type),
-                    text: Some(content),
-                    blob: None,
-                }],
+        "communitas://contacts" => {
+            let response = app
+                .query(communitas_core::command::Query::ListContacts)
+                .await
+                .map_err(|e| JsonRpcError::internal_error(&e.message))?;
+            match response {
+                communitas_core::command::QueryResponse::ContactList(contacts) => {
+                    let list: Vec<serde_json::Value> = contacts
+                        .into_iter()
+                        .map(|c| {
+                            serde_json::json!({
+                                "id": c.id,
+                                "display_name": c.display_name,
+                                "four_words": c.four_words,
+                                "is_favourite": c.is_favourite,
+                                "is_online": c.is_online,
+                                "created_at": c.created_at,
+                                "last_seen": c.last_seen
+                            })
+                        })
+                        .collect();
+                    serde_json::to_string_pretty(&serde_json::json!({ "contacts": list }))
+                        .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
+                }
+                _ => {
+                    return Err(JsonRpcError::internal_error(
+                        "Unexpected response type for contacts",
+                    ));
+                }
+            }
+        }
+        "communitas://network" => {
+            let is_active = match app
+                .query(communitas_core::command::Query::IsNetworkingActive)
+                .await
+            {
+                Ok(communitas_core::command::QueryResponse::Bool(active)) => active,
+                _ => false,
             };
-
-            return serde_json::to_value(result)
-                .map_err(|e| JsonRpcError::internal_error(&e.to_string()));
+            let connection_identity = match app
+                .query(communitas_core::command::Query::GetConnectionIdentity)
+                .await
+            {
+                Ok(communitas_core::command::QueryResponse::OptionalString(value)) => value,
+                _ => None,
+            };
+            let connection_words = match app
+                .query(communitas_core::command::Query::GetConnectionWords)
+                .await
+            {
+                Ok(communitas_core::command::QueryResponse::OptionalString(value)) => value,
+                _ => None,
+            };
+            let external_address = match app
+                .query(communitas_core::command::Query::GetExternalAddress)
+                .await
+            {
+                Ok(communitas_core::command::QueryResponse::OptionalString(value)) => value,
+                _ => None,
+            };
+            let peers = match app
+                .query(communitas_core::command::Query::ListOnlinePeers)
+                .await
+            {
+                Ok(communitas_core::command::QueryResponse::PeerList(list)) => list,
+                _ => Vec::new(),
+            };
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": if is_active { "active" } else { "inactive" },
+                "connection_identity": connection_identity,
+                "connection_words": connection_words,
+                "external_address": external_address,
+                "peers": peers,
+                "peer_count": peers.len()
+            }))
+            .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
         }
         uri => {
             return Err(JsonRpcError::invalid_params(&format!(
@@ -1009,6 +1099,178 @@ async fn handle_resources_read(
     };
 
     serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+}
+
+fn get_tool_resource_uri(tool_name: &str) -> Option<&'static str> {
+    match tool_name {
+        // Contacts widget tools
+        "list_contacts" | "get_contact" | "create_contact" | "update_contact"
+        | "delete_contact" | "set_favourite" => Some("ui://communitas/contacts"),
+
+        // Messages widget tools
+        "list_threads" | "get_thread" | "create_thread" | "list_messages" | "get_message"
+        | "send_message" | "delete_message" | "mark_read" => Some("ui://communitas/messages"),
+
+        // Kanban widget tools
+        "list_kanban_boards"
+        | "get_kanban_board"
+        | "create_kanban_board"
+        | "delete_kanban_board"
+        | "create_kanban_column"
+        | "update_kanban_column"
+        | "delete_kanban_column"
+        | "create_kanban_card"
+        | "update_kanban_card"
+        | "delete_kanban_card"
+        | "move_kanban_card"
+        | "get_kanban_card" => Some("ui://communitas/kanban"),
+
+        // Drive widget tools
+        "list_files" | "list_disks" | "get_file_preview" | "upload_file" | "download_file"
+        | "delete_file" | "create_folder" | "move_file" | "copy_file" | "get_quota" => {
+            Some("ui://communitas/drive")
+        }
+
+        // Canvas widget tools
+        "canvas_get_snapshot"
+        | "canvas_get_history"
+        | "canvas_undo"
+        | "canvas_redo"
+        | "canvas_add_object"
+        | "canvas_remove_object"
+        | "canvas_update_object"
+        | "canvas_list_layers"
+        | "canvas_toggle_layer" => Some("ui://communitas/canvas"),
+
+        // Settings widget tools
+        "get_settings" | "update_settings" | "get_profile" | "update_profile" => {
+            Some("ui://communitas/settings")
+        }
+
+        // Search widget tools
+        "search" | "search_contacts" | "search_messages" | "search_files" => {
+            Some("ui://communitas/search")
+        }
+
+        // Notifications widget tools
+        "list_notifications" | "mark_notification_read" | "clear_notifications" => {
+            Some("ui://communitas/notifications")
+        }
+
+        // Tools without a specific UI widget
+        _ => None,
+    }
+}
+
+fn ui_session_token_from_params(params: &Value) -> Option<&str> {
+    params
+        .get("sessionToken")
+        .and_then(|value| value.as_str())
+        .or_else(|| params.get("session_token").and_then(|value| value.as_str()))
+}
+
+async fn validate_ui_session(state: &HttpServerState, params: &Value) -> Result<(), JsonRpcError> {
+    let token = ui_session_token_from_params(params)
+        .ok_or_else(|| JsonRpcError::invalid_request("Missing ui session token"))?;
+
+    let mut sessions = state.ui_sessions.write().await;
+    if !sessions.validate(token) {
+        return Err(JsonRpcError::invalid_request(
+            "UI session expired or invalid",
+        ));
+    }
+
+    Ok(())
+}
+
+async fn handle_ui_context(
+    state: &HttpServerState,
+    params: Option<Value>,
+) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/context params"))?;
+
+    validate_ui_session(state, &params).await?;
+
+    let context_value = params.get("context");
+    let changed_field = params
+        .get("changed")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    if let Some(ctx) = context_value {
+        let context: AiContext = serde_json::from_value(ctx.clone())
+            .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid context: {e}")))?;
+        let mut ui_context = state.ui_context.write().await;
+        *ui_context = context;
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "changed": changed_field
+    }))
+}
+
+async fn handle_ui_message(
+    state: &HttpServerState,
+    params: Option<Value>,
+) -> Result<Value, JsonRpcError> {
+    let params = params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/message params"))?;
+
+    validate_ui_session(state, &params).await?;
+
+    let content = params
+        .get("content")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing content in ui/message"))?;
+
+    let context = params.get("context").cloned();
+
+    debug!(
+        "HTTP UI message received: content_len={}, has_context={}",
+        content.len(),
+        context.is_some()
+    );
+
+    Ok(serde_json::json!({
+        "success": true,
+        "received": true,
+        "content_length": content.len(),
+        "has_context": context.is_some()
+    }))
+}
+
+async fn handle_ui_initialize(
+    state: &HttpServerState,
+    params: Option<Value>,
+) -> Result<Value, JsonRpcError> {
+    let params =
+        params.ok_or_else(|| JsonRpcError::invalid_params("Missing ui/initialize params"))?;
+
+    let capabilities = params.get("capabilities").cloned().unwrap_or_default();
+
+    debug!(
+        "HTTP UI widget initialized with capabilities: {:?}",
+        capabilities
+    );
+
+    let session = {
+        let mut sessions = state.ui_sessions.write().await;
+        sessions.issue()
+    };
+    let expires_in = session.expires_in(SystemTime::now());
+
+    Ok(serde_json::json!({
+        "success": true,
+        "sessionToken": session.token,
+        "expiresInSec": expires_in,
+        "server_capabilities": {
+            "context_tracking": true,
+            "messaging": true,
+            "tool_calls": true,
+            "resource_reads": true
+        }
+    }))
 }
 
 #[cfg(test)]

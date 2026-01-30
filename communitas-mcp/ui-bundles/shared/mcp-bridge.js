@@ -24,6 +24,10 @@ class McpBridge {
         };
         this.isReady = false;
         this.messageQueue = [];
+        this._hostOrigin = null;
+        this._uiSessionToken = null;
+        this._readyTimer = null;
+        this._sessionRefreshTimer = null;
 
         // AI context state (Phase 9.3)
         // This tracks the current UI state to help AI understand context
@@ -34,16 +38,16 @@ class McpBridge {
             error_state: null,
         };
 
-        // Configure allowed origins for postMessage validation
-        // In production, this should be configured based on the actual MCP host origin
-        this._allowedOrigins = this._initAllowedOrigins();
-
         // Set up message listener
         window.addEventListener('message', this._handleMessage.bind(this));
 
         // Initiate handshake with host
         this._sendHandshake();
+        this._scheduleReadyFallback();
     }
+
+
+
 
     /**
      * HTML escape utility to prevent XSS
@@ -54,78 +58,6 @@ class McpBridge {
         const div = document.createElement('div');
         div.textContent = str || '';
         return div.innerHTML;
-    }
-
-    /**
-     * Initialize allowed origins for postMessage validation
-     * @private
-     */
-    _initAllowedOrigins() {
-        const origins = new Set();
-
-        // Always allow same origin
-        origins.add(window.location.origin);
-
-        // Allow localhost for development (with various ports)
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            origins.add('http://localhost:8443');
-            origins.add('https://localhost:8443');
-            origins.add('http://127.0.0.1:8443');
-            origins.add('https://127.0.0.1:8443');
-        }
-
-        // Allow configured Saorsa Labs domains
-        const saorsaDomains = [
-            'https://saorsa-1.saorsalabs.com',
-            'https://saorsa-2.saorsalabs.com',
-            'https://saorsa-3.saorsalabs.com',
-            'https://saorsa-4.saorsalabs.com',
-            'https://saorsa-5.saorsalabs.com',
-            'https://saorsa-6.saorsalabs.com',
-            'https://saorsa-7.saorsalabs.com',
-            'https://saorsa-8.saorsalabs.com',
-            'https://saorsa-9.saorsalabs.com',
-            'https://saorsa-10.saorsalabs.com',
-        ];
-        saorsaDomains.forEach(domain => origins.add(domain));
-
-        // Allow parent window origin if it exists (for iframe embedding)
-        // This is safe because we're in an iframe and the parent is the MCP host
-        try {
-            if (window.parent && window.parent !== window) {
-                // We'll validate during message handling instead of here
-                // to avoid cross-origin access issues
-            }
-        } catch (e) {
-            // Cross-origin restriction - will validate per-message
-        }
-
-        return origins;
-    }
-
-    /**
-     * Validate postMessage origin
-     * @private
-     * @param {string} origin - The origin to validate
-     * @returns {boolean} True if origin is allowed
-     */
-    _isOriginAllowed(origin) {
-        if (!origin) return false;
-
-        // Check if origin is in allowed set
-        if (this._allowedOrigins.has(origin)) {
-            return true;
-        }
-
-        // For development, allow localhost on any port
-        if (origin.match(/^https?:\/\/localhost:\d+$/) || origin.match(/^https?:\/\/127\.0\.0\.1:\d+$/)) {
-            return true;
-        }
-
-        // Log rejected origin for security monitoring
-        console.error('MCP Bridge: Rejected message from untrusted origin:', origin);
-
-        return false;
     }
 
     /**
@@ -156,13 +88,7 @@ class McpBridge {
      * @param {object|string} content - Message content
      */
     sendMessage(content) {
-        this._postMessage({
-            jsonrpc: '2.0',
-            method: 'ui/message',
-            params: {
-                content: typeof content === 'string' ? content : JSON.stringify(content),
-            },
-        });
+        this.sendMessageWithContext(content, false);
     }
 
     /**
@@ -354,12 +280,17 @@ class McpBridge {
         this.eventHandlers.contextChange.forEach(cb => cb(context, changedField));
 
         // Send context update to MCP host
+        if (!this._uiSessionToken) {
+            return;
+        }
+
         this._postMessage({
             jsonrpc: '2.0',
             method: 'ui/context',
             params: {
                 context: context,
                 changed: changedField,
+                sessionToken: this._uiSessionToken,
             },
         });
     }
@@ -372,8 +303,14 @@ class McpBridge {
      * @param {boolean} [includeContext=true] - Whether to include UI context
      */
     sendMessageWithContext(content, includeContext = true) {
+        if (!this._uiSessionToken) {
+            console.warn('MCP Bridge: ui session not established; skipping ui/message');
+            return;
+        }
+
         const params = {
             content: typeof content === 'string' ? content : JSON.stringify(content),
+            sessionToken: this._uiSessionToken,
         };
 
         if (includeContext) {
@@ -392,27 +329,88 @@ class McpBridge {
 
     // Private methods
 
+    _setReady() {
+        if (this.isReady) return;
+        this.isReady = true;
+
+        if (this._readyTimer) {
+            clearTimeout(this._readyTimer);
+            this._readyTimer = null;
+        }
+
+        this.eventHandlers.ready.forEach(cb => cb());
+        this.messageQueue.forEach(msg => this._postMessage(msg));
+        this.messageQueue = [];
+    }
+
+    _scheduleReadyFallback() {
+        if (this._readyTimer) {
+            clearTimeout(this._readyTimer);
+        }
+
+        this._readyTimer = setTimeout(() => {
+            this._setReady();
+        }, 1500);
+    }
+
+    _setSessionToken(token, expiresInSec) {
+        this._uiSessionToken = token || null;
+
+        if (this._sessionRefreshTimer) {
+            clearTimeout(this._sessionRefreshTimer);
+            this._sessionRefreshTimer = null;
+        }
+
+        if (expiresInSec && expiresInSec > 0) {
+            const refreshMs = Math.max(1000, Math.floor(expiresInSec * 1000 * 0.8));
+            this._sessionRefreshTimer = setTimeout(() => {
+                this._sendHandshake();
+            }, refreshMs);
+        }
+    }
+
     _sendHandshake() {
-        this._postMessage({
-            jsonrpc: '2.0',
-            method: 'ui/initialize',
-            id: this._nextId(),
-            params: {
+        this._sendRequest(
+            'ui/initialize',
+            {
                 capabilities: {
                     toolCalls: true,
                     resourceReads: true,
                     messaging: true,
                 },
             },
-        });
+            { force: true }
+        )
+            .then(result => {
+                if (result) {
+                    const token = result.sessionToken || result.session_token;
+                    const expiresInSec = result.expiresInSec || result.expires_in_sec;
+                    if (token) {
+                        this._setSessionToken(token, expiresInSec);
+                    }
+                }
+                this._setReady();
+            })
+            .catch(() => {
+                this._setReady();
+            });
     }
 
     _handleMessage(event) {
-        // SECURITY: Validate origin before processing message
-        if (!this._isOriginAllowed(event.origin)) {
-            console.error('MCP Bridge: Rejected message from untrusted origin:', event.origin);
+        if (window.parent && event.source !== window.parent) {
             return;
         }
+
+        if (!this._hostOrigin && event.origin) {
+            this._hostOrigin = event.origin;
+        }
+
+        if (this._hostOrigin && event.origin && event.origin !== this._hostOrigin) {
+            console.error('MCP Bridge: Rejected message from unexpected origin:', event.origin);
+            return;
+        }
+
+        this._setReady();
 
         const message = event.data;
 
@@ -434,11 +432,14 @@ class McpBridge {
         // Handle events
         switch (message.method) {
             case 'ui/initialized':
-                this.isReady = true;
-                this.eventHandlers.ready.forEach(cb => cb());
-                // Process queued messages
-                this.messageQueue.forEach(msg => this._postMessage(msg));
-                this.messageQueue = [];
+                if (message.params) {
+                    const token = message.params.sessionToken || message.params.session_token;
+                    const expiresInSec = message.params.expiresInSec || message.params.expires_in_sec;
+                    if (token) {
+                        this._setSessionToken(token, expiresInSec);
+                    }
+                }
+                this._setReady();
                 break;
 
             case 'ui/toolInput':
@@ -455,7 +456,9 @@ class McpBridge {
         }
     }
 
-    _sendRequest(method, params) {
+    _sendRequest(method, params, options = {}) {
+        const { force = false } = options;
+
         return new Promise((resolve, reject) => {
             const id = this._nextId();
             this.pendingRequests.set(id, { resolve, reject });
@@ -467,7 +470,7 @@ class McpBridge {
                 params,
             };
 
-            if (this.isReady) {
+            if (this.isReady || force) {
                 this._postMessage(message);
             } else {
                 this.messageQueue.push(message);
@@ -486,9 +489,6 @@ class McpBridge {
     _postMessage(message) {
         // Post to parent window (MCP host)
         if (window.parent && window.parent !== window) {
-            // SECURITY: Use specific origin instead of wildcard
-            // For iframe communication, we use the parent's origin
-            // In production, this should be configured to the exact MCP host origin
             const targetOrigin = this._getTargetOrigin();
             window.parent.postMessage(message, targetOrigin);
         }
@@ -500,25 +500,19 @@ class McpBridge {
      * @returns {string} The target origin
      */
     _getTargetOrigin() {
-        // Try to get parent window origin
+        if (this._hostOrigin) {
+            return this._hostOrigin;
+        }
+
         try {
-            // In same-origin case, we can access parent.location.origin
             if (window.parent && window.parent !== window && window.parent.location) {
                 return window.parent.location.origin;
             }
         } catch (e) {
-            // Cross-origin restriction - use configured origins
+            // Cross-origin restriction - fall through to wildcard
         }
 
-        // For cross-origin iframe, use the first allowed origin that's not our own
-        for (const origin of this._allowedOrigins) {
-            if (origin !== window.location.origin) {
-                return origin;
-            }
-        }
-
-        // Fallback to same origin (should not happen in production)
-        return window.location.origin;
+        return '*';
     }
 
     _nextId() {

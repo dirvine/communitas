@@ -35,6 +35,15 @@ The Model Context Protocol (MCP) provides a standard interface for AI agents, bu
 - Demo mode for testing (`--demo` flag)
 - Delegate tokens for scoped access
 
+### MCP Apps (UI Extension)
+
+Communitas implements MCP Apps (SEP-1865) so MCP hosts can render interactive `ui://` widgets.
+This is documented in [ADR-022: MCP Apps Integration](ADR-022-mcp-apps-integration.md).
+Key requirements:
+- UI capability advertised in top-level `extensions`
+- UI widgets call `ui/initialize` and use `sessionToken` for `ui/context` and `ui/message`
+- `resources/list` includes `_meta.ui` (CSP + permissions)
+
 ## Decision
 
 ### MCP Server Architecture
@@ -371,6 +380,7 @@ For external tools integrating with Communitas MCP:
 - [ ] Handle tool responses and errors
 - [ ] Implement reconnection logic
 - [ ] Consider token refresh for long sessions
+- [ ] Follow the CRDT-aware tool checklist for any tool changes
 
 ## Alternatives Considered
 
@@ -393,4 +403,5 @@ For external tools integrating with Communitas MCP:
 - MCP implementation: `communitas-mcp/src/`
 - Token system: `communitas-mcp/src/token.rs`
 - Auth states: `communitas-mcp/src/auth.rs`
+- MCP CRDT-aware tool checklist: `docs/architecture/mcp-crdt-tool-checklist.md`
 - See also: [ADR-020](ADR-020-dioxus-desktop-adoption.md) for the Dioxus/Dioxus+MCP architecture

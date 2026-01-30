@@ -359,6 +359,8 @@ pub struct Resource {
     pub name: String,
     pub description: Option<String>,
     pub mime_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "_meta")]
+    pub _meta: Option<ResourceMeta>,
 }
 
 /// MCP Resource list result
@@ -602,7 +604,7 @@ impl From<Resource> for ResourceWithMeta {
             name: resource.name,
             description: resource.description,
             mime_type: resource.mime_type,
-            _meta: None,
+            _meta: resource._meta,
         }
     }
 }
@@ -652,48 +654,14 @@ impl ServerExtensions {
     }
 }
 
-/// Extended server capabilities with extensions support
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerCapabilitiesWithExtensions {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<ToolsCapability>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resources: Option<ResourcesCapability>,
-    /// MCP protocol extensions
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<ServerExtensions>,
-}
-
-impl From<ServerCapabilities> for ServerCapabilitiesWithExtensions {
-    fn from(caps: ServerCapabilities) -> Self {
-        Self {
-            tools: caps.tools,
-            resources: caps.resources,
-            extensions: None,
-        }
-    }
-}
-
-impl ServerCapabilitiesWithExtensions {
-    /// Create capabilities with MCP Apps UI extension enabled
-    pub fn with_ui_extension(
-        tools: Option<ToolsCapability>,
-        resources: Option<ResourcesCapability>,
-    ) -> Self {
-        Self {
-            tools,
-            resources,
-            extensions: Some(ServerExtensions::with_ui()),
-        }
-    }
-}
-
 /// Extended initialize result with extensions support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InitializeResultWithExtensions {
     pub protocol_version: String,
-    pub capabilities: ServerCapabilitiesWithExtensions,
+    pub capabilities: ServerCapabilities,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<ServerExtensions>,
     pub server_info: ServerInfo,
 }
 
@@ -707,7 +675,8 @@ impl InitializeResultWithExtensions {
     ) -> Self {
         Self {
             protocol_version: protocol_version.into(),
-            capabilities: ServerCapabilitiesWithExtensions::with_ui_extension(tools, resources),
+            capabilities: ServerCapabilities { tools, resources },
+            extensions: Some(ServerExtensions::with_ui()),
             server_info,
         }
     }
@@ -1282,7 +1251,7 @@ impl ToolCallResultWithContext {
             Some(ToolResultMetaWithContext {
                 ui: Some(McpUiToolMetaWithContext {
                     resource_uri: resource_uri.map(String::from),
-                    visibility: vec!["user".to_string(), "assistant".to_string()],
+                    visibility: vec!["model".to_string(), "app".to_string()],
                     context: if has_context { Some(context) } else { None },
                 }),
             })
@@ -1427,28 +1396,6 @@ mod tests {
         assert!(json.contains("ui://communitas/contacts"));
         assert!(json.contains("text/html;profile=mcp-app"));
         assert!(json.contains("prefersBorder"));
-    }
-
-    #[test]
-    fn test_capabilities_with_extensions() {
-        let caps = ServerCapabilitiesWithExtensions {
-            tools: Some(ToolsCapability {
-                list_changed: false,
-            }),
-            resources: Some(ResourcesCapability {
-                subscribe: false,
-                list_changed: false,
-            }),
-            extensions: Some(ServerExtensions {
-                ui: Some(UiExtensionCapability::default()),
-            }),
-        };
-
-        let json = serde_json::to_string(&caps).unwrap();
-        assert!(json.contains("tools"));
-        assert!(json.contains("resources"));
-        assert!(json.contains("extensions"));
-        assert!(json.contains("io.modelcontextprotocol/ui"));
     }
 
     // Security validation tests

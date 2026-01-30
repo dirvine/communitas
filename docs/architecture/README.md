@@ -157,6 +157,8 @@ For detailed rationale behind architectural decisions, see our ADRs:
 
 See the [ADR Index](../adr/README.md) for more details and templates for new ADRs.
 
+For MCP parity and offline-first requirements, see the [MCP CRDT-aware tool checklist](mcp-crdt-tool-checklist.md).
+
 ## Key Concepts
 
 ### Connection Words (Four-Word Networking)

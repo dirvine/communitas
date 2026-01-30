@@ -762,6 +762,157 @@ impl MessagingService {
         Ok(ui_messages)
     }
 
+    /// Get a specific message by ID.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the message cannot be retrieved.
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.get_message",
+        fields(thread_id, message_id)
+    )]
+    pub async fn get_message(
+        &self,
+        thread_id: &str,
+        message_id: &str,
+    ) -> Result<Message, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        match self
+            .app
+            .query(Query::GetMessage {
+                entity_id: thread_id.to_string(),
+                message_id: message_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Message(msg)) => Ok(core_message_to_ui(&msg)),
+            Ok(_) => {
+                warn!(
+                    thread_id,
+                    message_id, "Unexpected response type for GetMessage"
+                );
+                Err(MessagingError::Internal(
+                    "Unexpected response for GetMessage".to_string(),
+                ))
+            }
+            Err(e) => {
+                debug!(
+                    thread_id,
+                    message_id,
+                    error = %e.message,
+                    "Failed to retrieve message"
+                );
+                Err(MessagingError::Internal(format!(
+                    "Get message failed: {}",
+                    e.message
+                )))
+            }
+        }
+    }
+
+    /// Get messages that are replies to a specific parent message (thread view).
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::ThreadNotFound`] if the thread does not exist.
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.get_thread_messages",
+        fields(thread_id, parent_message_id, limit, before)
+    )]
+    pub async fn get_thread_messages(
+        &self,
+        thread_id: &str,
+        parent_message_id: &str,
+        limit: usize,
+        before: Option<u64>,
+    ) -> Result<Vec<Message>, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        let messages = match self
+            .app
+            .query(Query::GetThreadMessages {
+                entity_id: thread_id.to_string(),
+                parent_message_id: parent_message_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Messages(msgs)) => msgs,
+            Ok(_) => {
+                warn!(thread_id, "Unexpected response type for GetThreadMessages");
+                return Err(MessagingError::ThreadNotFound(thread_id.to_string()));
+            }
+            Err(e) => {
+                debug!(
+                    thread_id,
+                    error = %e.message,
+                    "Thread messages not found or query failed"
+                );
+                return Err(MessagingError::ThreadNotFound(thread_id.to_string()));
+            }
+        };
+
+        let mut ui_messages: Vec<Message> = messages.iter().map(core_message_to_ui).collect();
+        apply_pagination(&mut ui_messages, limit, before);
+        Ok(ui_messages)
+    }
+
+    /// Get direct messages with a specific peer.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::ThreadNotFound`] if the DM thread does not exist.
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.get_direct_messages",
+        fields(other_peer_id, limit, before)
+    )]
+    pub async fn get_direct_messages(
+        &self,
+        other_peer_id: &str,
+        limit: usize,
+        before: Option<u64>,
+    ) -> Result<Vec<Message>, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        let messages = match self
+            .app
+            .query(Query::GetDirectMessages {
+                other_peer_id: other_peer_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Messages(msgs)) => msgs,
+            Ok(_) => {
+                warn!(
+                    other_peer_id,
+                    "Unexpected response type for GetDirectMessages"
+                );
+                return Err(MessagingError::ThreadNotFound(other_peer_id.to_string()));
+            }
+            Err(e) => {
+                debug!(
+                    other_peer_id,
+                    error = %e.message,
+                    "Direct messages not found or query failed"
+                );
+                return Err(MessagingError::ThreadNotFound(other_peer_id.to_string()));
+            }
+        };
+
+        let mut ui_messages: Vec<Message> = messages.iter().map(core_message_to_ui).collect();
+        apply_pagination(&mut ui_messages, limit, before);
+        Ok(ui_messages)
+    }
+
     /// Search messages across all threads or within a specific thread.
     ///
     /// Returns messages matching the query with context about where they were found.

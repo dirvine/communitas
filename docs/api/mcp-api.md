@@ -4,7 +4,7 @@ Model Context Protocol (MCP) server API for AI agents and automation.
 
 ## Overview
 
-The MCP server exposes Communitas functionality through JSON-RPC 2.0 tools. All tools route through `UiServices` to ensure parity between AI agent operations and UI interactions.
+The MCP server exposes Communitas functionality through JSON-RPC 2.0 tools. **CRDT-backed tools route through `UiServices`** to ensure parity between AI agent operations and UI interactions. Some legacy read-only queries still use `CommunitasApp` directly and must follow the CRDT-aware tool checklist when they touch CRDT state.
 
 ### Architecture
 
@@ -39,6 +39,8 @@ All MCP tools route through the same `UiServices` layer used by the Dioxus UI. T
 - **Unified error handling**: Same error types and messages
 - **Watch channel updates**: UI automatically reflects MCP changes via reactive signals
 
+For implementation rules, follow the [MCP CRDT-aware tool checklist](../architecture/mcp-crdt-tool-checklist.md).
+
 ## Transport Options
 
 ### Stdio (Default)
@@ -58,6 +60,61 @@ cargo run -p communitas-mcp -- --http --demo --listen 127.0.0.1:8080
 ```bash
 cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
 ```
+
+## MCP Apps (Interactive UIs)
+
+Communitas implements the MCP Apps extension (SEP-1865) for interactive UI widgets.
+
+### Capability Negotiation
+
+MCP Apps support is advertised via top-level `extensions`:
+
+```json
+{
+  "protocolVersion": "2024-11-05",
+  "capabilities": {
+    "tools": { "listChanged": false },
+    "resources": { "subscribe": false, "listChanged": false }
+  },
+  "extensions": {
+    "io.modelcontextprotocol/ui": {
+      "mimeTypes": ["text/html;profile=mcp-app"]
+    }
+  }
+}
+```
+
+### UI Session Handshake
+
+Widgets must call `ui/initialize` and include the returned `sessionToken` in `ui/context`
+and `ui/message`. Tokens are short-lived and separate from user auth.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "ui/initialize",
+  "params": {
+    "capabilities": {
+      "context_tracking": true,
+      "messaging": true
+    }
+  }
+}
+```
+
+```json
+{
+  "success": true,
+  "sessionToken": "c27b...f91",
+  "expiresInSec": 600
+}
+```
+
+### UI Resources
+
+`resources/list` returns `ui://` entries with `_meta.ui` (CSP + permissions). Pre-auth
+UI resources are allowed for login screens, but must not expose secrets to the model.
 
 ## Authentication
 

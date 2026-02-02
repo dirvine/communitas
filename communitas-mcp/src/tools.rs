@@ -7608,3 +7608,61 @@ async fn execute_export_audit_log(services: &UiServices, args: Value) -> ToolCal
         Err(e) => error_result(&format!("Failed to export audit log: {e}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_tools_pre_auth() {
+        let tools = list_tools(false);
+        let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+        assert!(tool_names.contains(&"health_check"));
+        assert!(tool_names.contains(&"core_status"));
+        assert!(tool_names.contains(&"authenticate"));
+        assert!(tool_names.contains(&"create_vault"));
+        assert!(tool_names.contains(&"create_identity"));
+
+        assert!(!tool_names.contains(&"get_session"));
+        assert!(!tool_names.contains(&"logout"));
+    }
+
+    #[test]
+    fn test_list_tools_authenticated() {
+        let tools = list_tools(true);
+        let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+        assert!(tool_names.contains(&"health_check"));
+        assert!(tool_names.contains(&"get_session"));
+        assert!(tool_names.contains(&"logout"));
+    }
+
+    #[test]
+    fn test_tool_structure() {
+        let tools = list_tools(false);
+        for tool in &tools {
+            assert!(!tool.name.is_empty());
+            assert!(!tool.description.is_empty());
+            assert!(tool.input_schema.is_object());
+        }
+    }
+
+    #[test]
+    fn test_authenticate_tool_schema() {
+        let tools = list_tools(false);
+        let auth_tool = tools.iter().find(|t| t.name == "authenticate").unwrap();
+        let props = &auth_tool.input_schema["properties"];
+        assert!(props.get("four_words").is_some());
+        assert!(props.get("password").is_some());
+    }
+
+    #[test]
+    fn test_tool_count_reasonableness() {
+        let pre_auth_tools = list_tools(false);
+        let auth_tools = list_tools(true);
+        assert!(pre_auth_tools.len() >= 10);
+        assert!(auth_tools.len() >= 50);
+        assert!(auth_tools.len() > pre_auth_tools.len());
+    }
+}

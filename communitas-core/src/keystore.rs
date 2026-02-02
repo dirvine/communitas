@@ -136,3 +136,74 @@ impl Keystore {
         load_password_with_legacy("device_id").map_err(|e| format!("load device_id failed: {}", e))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_service_names() {
+        assert_eq!(SERVICE, "communitas");
+        assert_eq!(LEGACY_SERVICE, "communitas-tauri");
+    }
+
+    #[test]
+    fn test_keystore_default() {
+        let keystore = Keystore::default();
+        assert!(matches!(keystore, Keystore));
+    }
+
+    #[test]
+    fn test_keystore_new() {
+        let keystore = Keystore::new();
+        assert!(matches!(keystore, Keystore));
+    }
+
+    #[test]
+    fn test_words_join_format() {
+        let words = ["ocean", "forest", "moon", "star"];
+        let joined = words.join("-");
+        assert_eq!(joined, "ocean-forest-moon-star");
+    }
+
+    #[test]
+    fn test_words_split_format() {
+        let joined = "ocean-forest-moon-star";
+        let parts: Vec<&str> = joined.split('-').collect();
+        assert_eq!(parts.len(), 4);
+        assert_eq!(parts[0], "ocean");
+        assert_eq!(parts[1], "forest");
+        assert_eq!(parts[2], "moon");
+        assert_eq!(parts[3], "star");
+    }
+
+    #[test]
+    fn test_invalid_words_length() {
+        let joined = "one-two-three";
+        let parts: Vec<String> = joined.split('-').map(|s| s.to_string()).collect();
+        assert_ne!(parts.len(), 4);
+    }
+
+    #[test]
+    fn test_base64_encode_decode_roundtrip() {
+        let original = b"test data for encoding";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(original);
+        let decoded = base64::engine::general_purpose::STANDARD.decode(&encoded).unwrap();
+        assert_eq!(original.as_slice(), decoded.as_slice());
+    }
+
+    #[test]
+    fn test_base64_encode_decode_keys() {
+        let pk = vec![0u8; 32];
+        let sk = vec![0u8; 64];
+
+        let pk_b64 = base64::engine::general_purpose::STANDARD.encode(&pk);
+        let sk_b64 = base64::engine::general_purpose::STANDARD.encode(&sk);
+
+        let pk_decoded = base64::engine::general_purpose::STANDARD.decode(&pk_b64).unwrap();
+        let sk_decoded = base64::engine::general_purpose::STANDARD.decode(&sk_b64).unwrap();
+
+        assert_eq!(pk.len(), pk_decoded.len());
+        assert_eq!(sk.len(), sk_decoded.len());
+    }
+}

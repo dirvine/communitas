@@ -656,3 +656,156 @@ pub struct IntegrityStatus {
     pub verification_count: u64,
     pub corruption_detected: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use std::collections::HashMap;
+
+    struct MockDht {
+        storage: Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>,
+    }
+
+    impl MockDht {
+        fn new() -> Self {
+            Self {
+                storage: Arc::new(RwLock::new(HashMap::new())),
+            }
+        }
+    }
+
+    impl DhtStorage for MockDht {
+        fn put(&self, key: &[u8; 32], value: &[u8], _ttl: Option<u64>) -> anyhow::Result<()> {
+            futures::executor::block_on(async {
+                let mut map = self.storage.write().await;
+                map.insert(key.to_vec(), value.to_vec());
+                Ok(())
+            })
+        }
+
+        fn get(&self, key: &[u8; 32]) -> anyhow::Result<Vec<u8>> {
+            futures::executor::block_on(async {
+                let map = self.storage.read().await;
+                map.get(&key.to_vec())
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("Key not found"))
+            })
+        }
+    }
+
+    impl saorsa_seal::Dht for MockDht {}
+
+    #[test]
+    fn test_shard_type_variants() {
+        let data_shard = ShardType::Data;
+        let parity_shard = ShardType::Parity;
+        assert_ne!(data_shard, parity_shard);
+    }
+
+    #[test]
+    fn test_reed_solomon_config_for_small_group() {
+        let config = ReedSolomonConfig::for_group_size(3);
+        assert_eq!(config.data_shards, 3);
+        assert_eq!(config.parity_shards, 2);
+        assert_eq!(config.shard_size, 4096);
+    }
+
+    #[test]
+    fn test_reed_solomon_config_for_medium_group() {
+        let config = ReedSolomonConfig::for_group_size(10);
+        assert_eq!(config.data_shards, 8);
+        assert_eq!(config.parity_shards, 4);
+    }
+
+    #[test]
+    fn test_reed_solomon_config_for_large_group() {
+        let config = ReedSolomonConfig::for_group_size(30);
+        assert_eq!(config.data_shards, 12);
+        assert_eq!(config.parity_shards, 6);
+        assert_eq!(config.shard_size, 8192);
+    }
+
+    #[test]
+    fn test_total_shards() {
+        let config = ReedSolomonConfig::for_group_size(5);
+        assert_eq!(config.total_shards(), 5);
+    }
+
+    #[test]
+    fn test_can_lose_members() {
+        let config = ReedSolomonConfig::for_group_size(10);
+        assert_eq!(config.can_lose_members(), 4);
+    }
+
+    #[test]
+    fn test_redundancy_factor() {
+        let config = ReedSolomonConfig::for_group_size(10);
+        let expected = 12.0 / 8.0;
+        assert!((config.redundancy_factor() - expected).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_shard_structure() {
+        let shard = Shard {
+            index: 0,
+            shard_type: ShardType::Data,
+            data: vec![1, 2, 3],
+            group_id: "test-group".to_string(),
+            data_id: "test-data".to_string(),
+            integrity_hash: "abc123".to_string(),
+            created_at: chrono::Utc::now(),
+            size: 3,
+        };
+        assert_eq!(shard.index, 0);
+        assert_eq!(shard.size, 3);
+    }
+
+    #[tokio::test]
+    async fn test_manager_creation() {
+        let mock_dht = MockDht::new();
+        let _manager = EnhancedReedSolomonManager::new(mock_dht);
+        assert!(true);
+    }
+
+    #[test]
+    fn test_shard_distribution_plan_structure() {
+        let plan = ShardDistributionPlan {
+            group_id: "test-group".to_string(),
+            total_shards: 10,
+            member_assignments: HashMap::new(),
+            redundancy_level: 1.5,
+        };
+        assert_eq!(plan.group_id, "test-group");
+        assert_eq!(plan.total_shards, 10);
+    }
+
+    #[test]
+    fn test_reconstruction_status_structure() {
+        let status = ReconstructionStatus {
+            can_reconstruct: true,
+            available_shards: 10,
+            required_shards: 8,
+            data_shards_available: 6,
+            parity_shards_available: 4,
+            corruption_tolerance: 2,
+            redundancy_factor: 1.5,
+        };
+        assert!(status.can_reconstruct);
+        assert_eq!(status.available_shards, 10);
+    }
+
+    #[test]
+    fn test_integrity_status_structure() {
+        let status = IntegrityStatus {
+            total_shards: 10,
+            created_at: chrono::Utc::now(),
+            last_verified: chrono::Utc::now(),
+            verification_count: 5,
+            corruption_detected: false,
+        };
+        assert_eq!(status.total_shards, 10);
+        assert!(!status.corruption_detected);
+    }
+}

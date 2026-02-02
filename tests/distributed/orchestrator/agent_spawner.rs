@@ -172,12 +172,8 @@ impl AgentSpawner {
                 }
             };
 
-            // Verify expectations (with variable substitution)
-            let substituted_expect = {
-                let ctx = context.lock().await;
-                &step.expect
-            };
-            self.verify_expectations(&substituted_expect, &result)?;
+            // Verify expectations
+            self.verify_expectations(&step.expect, &result)?;
 
             // Store variables if specified
             if let Some(store) = &step.store {

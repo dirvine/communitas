@@ -166,6 +166,8 @@ impl CoreContext {
         device_type: DeviceType,
         storage_dir: PathBuf,
     ) -> Result<Self, String> {
+        info!("CoreContext::initialize: START for {}", four_words);
+
         // Validate four-word format
         let words: Vec<&str> = four_words.split('-').collect();
         if words.len() != 4 {
@@ -174,12 +176,15 @@ impl CoreContext {
                 words.len()
             ));
         }
+        info!("CoreContext::initialize: four-word format validated");
 
         // Initialize keystore for secure key management
+        info!("CoreContext::initialize: creating keystore");
         let keystore = Keystore::new();
 
         // Use four-word identity as hex identifier for keystore lookups
         let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
+        info!("CoreContext::initialize: id_hex = {}", id_hex);
 
         // Try to load existing ML-DSA keys from secure keystore
         let (public_key, signing_key) = match keystore.load_mldsa_keys(&id_hex) {
@@ -258,6 +263,7 @@ impl CoreContext {
             .map_err(|_| "Public key too short".to_string())?;
 
         // Create user profile
+        info!("CoreContext::initialize: creating UserProfile");
         let profile = UserProfile::new(
             four_words.clone(),
             display_name.clone(),
@@ -265,24 +271,31 @@ impl CoreContext {
             device_type,
             storage_dir.clone(),
         );
+        info!("CoreContext::initialize: UserProfile created");
 
         // Initialize CRDT manager for persistent storage
+        info!("CoreContext::initialize: creating CrdtManager");
         let crdt_manager = Arc::new(
             crate::CrdtManager::new(&storage_dir.join("crdt.db"))
                 .await
                 .map_err(|e| format!("Failed to initialize CrdtManager: {}", e))?,
         );
+        info!("CoreContext::initialize: CrdtManager created");
 
         // Initialize entity service for managing groups, channels, and members
+        info!("CoreContext::initialize: creating EntityService");
         let entity_service = Arc::new(crate::EntityService::new(crdt_manager.clone()));
 
         // Initialize unified message service
+        info!("CoreContext::initialize: creating MessageService");
         let message_service = Arc::new(crate::MessageService::new(four_words.clone()));
 
         // Initialize legacy message sync service (for backward compatibility)
+        info!("CoreContext::initialize: creating MessageSyncService");
         let message_sync = Arc::new(MessageSyncService::new(four_words.clone()));
 
         // Initialize document replicator with dual storage enabled (Sprint 3.2)
+        info!("CoreContext::initialize: creating DocReplicator");
         let doc_config = crate::doc_replicator::DocReplicatorConfig {
             files_storage_enabled: true,
             web_storage_enabled: true,
@@ -292,19 +305,24 @@ impl CoreContext {
                 .await
                 .map_err(|e| format!("Failed to initialize DocReplicator: {}", e))?,
         );
+        info!("CoreContext::initialize: DocReplicator created");
 
         // Initialize per-entity virtual disk service
+        info!("CoreContext::initialize: creating EntityDiskService");
         let disk_root = storage_dir.join("disks");
         let disk_service = Arc::new(
             EntityDiskService::new(&disk_root)
                 .await
                 .map_err(|e| format!("Failed to initialize EntityDiskService: {}", e))?,
         );
+        info!("CoreContext::initialize: EntityDiskService created");
 
         // Initialize Kanban service for project management boards
+        info!("CoreContext::initialize: creating KanbanService");
         let kanban_service = Arc::new(KanbanService::new(four_words.clone()));
 
         // Initialize Invite service for cross-organization collaboration
+        info!("CoreContext::initialize: creating InviteService");
         let invite_service = Arc::new(crate::invite_service::InviteService::new(
             crdt_manager.clone(),
             entity_service.clone(),

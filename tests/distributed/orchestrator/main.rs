@@ -50,6 +50,14 @@ struct Args {
     #[arg(long, default_value = "claude-3-haiku-20240307")]
     model: String,
 
+    /// Override the anthropic-compatible API base URL (e.g. <https://api.kimi.com/coding/v1>)
+    #[arg(long, env = "ANTHROPIC_BASE_URL")]
+    api_base: Option<String>,
+
+    /// Comma-separated scopes to request when auto-unlocking vaults
+    #[arg(long, env = "UNLOCK_SCOPES", default_value = "full_access")]
+    unlock_scopes: String,
+
     /// Verbose output
     #[arg(short, long)]
     verbose: bool,
@@ -92,6 +100,18 @@ async fn main() -> Result<()> {
         test_config.test_cases.len()
     );
 
+    let api_base = args
+        .api_base
+        .clone()
+        .or_else(|| std::env::var("KIMI_API_BASE_URL").ok())
+        .unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
+    let unlock_scopes: Vec<String> = args
+        .unlock_scopes
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
     if args.dry_run {
         info!("Dry run complete - scenario is valid");
         return Ok(());
@@ -101,15 +121,19 @@ async fn main() -> Result<()> {
     verify_nodes_healthy(&nodes).await?;
 
     // Create orchestrator components
-    let agent_spawner = AgentSpawner::new(&args.anthropic_key, &args.model);
+    let agent_spawner =
+        AgentSpawner::new(&args.anthropic_key, &args.model, &api_base, unlock_scopes);
     let sync_barrier = SyncBarrier::new(nodes.len());
     let report_generator = ReportGenerator::new(&args.output);
 
     // Run the test scenario
     let results = run_scenario(&test_config, &nodes, &agent_spawner, &sync_barrier).await?;
+    let unlock_events = agent_spawner.unlock_events().await;
 
     // Generate reports
-    report_generator.generate(&test_config, &results).await?;
+    report_generator
+        .generate(&test_config, &results, &unlock_events)
+        .await?;
 
     // Print summary
     print_summary(&results);

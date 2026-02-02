@@ -131,9 +131,7 @@ async fn main() -> Result<()> {
     let _unlock_events = agent_spawner.unlock_events().await;
 
     // Generate reports
-    report_generator
-        .generate(\&test_config, \&results)
-        .await?;
+    report_generator.generate(&test_config, &results).await?;
 
     // Print summary
     print_summary(&results);

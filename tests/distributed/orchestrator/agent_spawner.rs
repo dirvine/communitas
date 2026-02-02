@@ -191,7 +191,6 @@ impl AgentSpawner {
                 }
             }
 
-
             debug!("  Step {} completed successfully", i + 1);
 
             if Self::tool_resets_unlock(&step.tool) {

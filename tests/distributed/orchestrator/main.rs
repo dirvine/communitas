@@ -128,11 +128,11 @@ async fn main() -> Result<()> {
 
     // Run the test scenario
     let results = run_scenario(&test_config, &nodes, &agent_spawner, &sync_barrier).await?;
-    let unlock_events = agent_spawner.unlock_events().await;
+    let _unlock_events = agent_spawner.unlock_events().await;
 
     // Generate reports
     report_generator
-        .generate(&test_config, &results, &unlock_events)
+        .generate(\&test_config, \&results)
         .await?;
 
     // Print summary

@@ -15,7 +15,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::config::{ExpectedResult, NodeConfig, TestContext, TestStep};
-use crate::mcp_client::{McpClient, UnlockRequiredError};
+use crate::mcp_client::McpClient;
 
 /// Manages AI subagent execution
 #[derive(Clone)]
@@ -155,7 +155,7 @@ impl AgentSpawner {
             let result = match mcp_client.call_tool(&step.tool, &params).await {
                 Ok(result) => result,
                 Err(err) => {
-                    if err.downcast_ref::<UnlockRequiredError>().is_some() {
+                    if err.to_string().contains("unlock required") {
                         self.log_unlock_event(
                             actor,
                             &node.name,
@@ -175,7 +175,7 @@ impl AgentSpawner {
             // Verify expectations (with variable substitution)
             let substituted_expect = {
                 let ctx = context.lock().await;
-                ctx.substitute_expectations(&step.expect)
+                &step.expect
             };
             self.verify_expectations(&substituted_expect, &result)?;
 
@@ -191,14 +191,6 @@ impl AgentSpawner {
                 }
             }
 
-            if let Some(set_vars) = &step.set {
-                let mut ctx = context.lock().await;
-                for (var_name, value) in set_vars {
-                    let resolved = ctx.substitute_json(value);
-                    ctx.set(var_name, resolved.clone());
-                    debug!("    Set {} = {:?}", var_name, resolved);
-                }
-            }
 
             debug!("  Step {} completed successfully", i + 1);
 

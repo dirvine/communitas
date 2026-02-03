@@ -415,7 +415,7 @@ impl SitePublisher {
     /// Handle a site request and return response bytes
     pub async fn handle_request(&self, request_bytes: Bytes) -> Result<Bytes> {
         // Deserialize request
-        let request: SiteRequest = bincode::deserialize(&request_bytes)
+        let request: SiteRequest = postcard::from_bytes(&request_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to deserialize request: {}", e))?;
 
         // Process request
@@ -431,7 +431,7 @@ impl SitePublisher {
             SiteRequest::GetManifest { site_id } => {
                 // Verify site ID matches
                 if site_id != self.site_id {
-                    return Ok(Bytes::from(bincode::serialize(&SiteResponse::Error(
+                    return Ok(Bytes::from(postcard::to_stdvec(&SiteResponse::Error(
                         format!(
                             "Site ID mismatch: expected {:?}, got {:?}",
                             self.site_id, site_id
@@ -449,7 +449,7 @@ impl SitePublisher {
         };
 
         // Serialize response
-        let response_bytes = bincode::serialize(&response)
+        let response_bytes = postcard::to_stdvec(&response)
             .map_err(|e| anyhow::anyhow!("Failed to serialize response: {}", e))?;
 
         Ok(Bytes::from(response_bytes))
@@ -582,7 +582,7 @@ impl SiteFetcher {
         };
 
         // Serialize request (before registering channel to avoid leak on error)
-        let request_bytes = bincode::serialize(&wire_request)
+        let request_bytes = postcard::to_stdvec(&wire_request)
             .map_err(|e| anyhow::anyhow!("Failed to serialize request: {}", e))?;
 
         // If we have a dispatcher, register for response before sending
@@ -637,7 +637,7 @@ impl SiteFetcher {
                 }
 
                 // Try to deserialize as SitesWire
-                let wire_msg: SitesWire = match bincode::deserialize(&response_bytes) {
+                let wire_msg: SitesWire = match postcard::from_bytes(&response_bytes) {
                     Ok(msg) => msg,
                     Err(_) => continue, // Not a Sites message, skip
                 };
@@ -1150,14 +1150,14 @@ mod tests {
 
         // Create a request
         let request = SiteRequest::GetBlock { hash };
-        let request_bytes = bincode::serialize(&request).unwrap();
+        let request_bytes = postcard::to_stdvec(&request).unwrap();
 
         // Process request (this will fail until we implement it)
         let response_bytes = publisher
             .handle_request(Bytes::from(request_bytes))
             .await
             .unwrap();
-        let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
+        let response: SiteResponse = postcard::from_bytes(&response_bytes).unwrap();
 
         // Verify response
         match response {
@@ -1189,14 +1189,14 @@ mod tests {
         let request = SiteRequest::GetManifest {
             site_id: site_id.clone(),
         };
-        let request_bytes = bincode::serialize(&request).unwrap();
+        let request_bytes = postcard::to_stdvec(&request).unwrap();
 
         // Process request
         let response_bytes = publisher
             .handle_request(Bytes::from(request_bytes))
             .await
             .unwrap();
-        let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
+        let response: SiteResponse = postcard::from_bytes(&response_bytes).unwrap();
 
         // Verify response
         match response {
@@ -1264,7 +1264,7 @@ mod tests {
         let manifest_request = SiteRequest::GetManifest {
             site_id: site_id.clone(),
         };
-        let manifest_request_bytes = bincode::serialize(&manifest_request).unwrap();
+        let manifest_request_bytes = postcard::to_stdvec(&manifest_request).unwrap();
 
         let manifest_response_bytes = publisher
             .handle_request(Bytes::from(manifest_request_bytes))
@@ -1272,7 +1272,7 @@ mod tests {
             .unwrap();
 
         let manifest_response: SiteResponse =
-            bincode::deserialize(&manifest_response_bytes).unwrap();
+            postcard::from_bytes(&manifest_response_bytes).unwrap();
 
         // Step 4: Verify manifest response
         let fetched_manifest = match manifest_response {
@@ -1293,14 +1293,14 @@ mod tests {
         // Step 5: Fetch blocks
         for (path, hash) in &fetched_manifest.blocks {
             let block_request = SiteRequest::GetBlock { hash: *hash };
-            let block_request_bytes = bincode::serialize(&block_request).unwrap();
+            let block_request_bytes = postcard::to_stdvec(&block_request).unwrap();
 
             let block_response_bytes = publisher
                 .handle_request(Bytes::from(block_request_bytes))
                 .await
                 .unwrap();
 
-            let block_response: SiteResponse = bincode::deserialize(&block_response_bytes).unwrap();
+            let block_response: SiteResponse = postcard::from_bytes(&block_response_bytes).unwrap();
 
             let fetched_block = match block_response {
                 SiteResponse::Block(b) => b,

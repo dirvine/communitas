@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core business logic
-communitas-core = { version = "=0.8.2", path = "../communitas-core" }
+communitas-core = { version = "=0.8.3", path = "../communitas-core" }
 
 
 # Networking provided by saorsa-gossip

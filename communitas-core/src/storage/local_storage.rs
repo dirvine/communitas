@@ -333,7 +333,7 @@ impl LocalStorageManager {
     //     }
     //
     //     // Serialize shard for storage (includes metadata)
-    //     let shard_data = bincode::serialize(shard).context("Failed to serialize shard")?;
+    //     let shard_data = postcard::to_stdvec(shard).context("Failed to serialize shard")?;
     //
     //     // Write to file
     //     tokio::fs::write(&file_path, &shard_data)
@@ -408,7 +408,7 @@ impl LocalStorageManager {
     //
     //     // Deserialize shard
     //     let shard: Shard =
-    //         bincode::deserialize(&shard_data).context("Failed to deserialize shard")?;
+    //         postcard::from_bytes(&shard_data).context("Failed to deserialize shard")?;
     //
     //     // Update access time
     //     {

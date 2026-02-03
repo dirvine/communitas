@@ -119,7 +119,7 @@ impl SitesDispatcher {
         }
 
         // Try to deserialize as SitesWire
-        let wire_msg: SitesWire = match bincode::deserialize(&data) {
+        let wire_msg: SitesWire = match postcard::from_bytes(&data) {
             Ok(msg) => msg,
             Err(_) => {
                 // Not a Sites message - ignore

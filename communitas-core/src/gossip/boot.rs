@@ -17,6 +17,7 @@
 use super::context::GossipContext;
 use anyhow::{Context, Result};
 use bytes::Bytes;
+use saorsa_gossip_transport::TransportAdapter;
 use saorsa_gossip_transport::{GossipStreamType, GossipTransport};
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -192,6 +193,14 @@ impl GossipBootSequence {
 
     /// Find coordinators via FOAF if peer cache is cold (SPEC2.md §2 step 4)
     async fn find_coordinators_if_needed(&self) -> Result<()> {
+        if let Ok(value) = std::env::var("COMMUNITAS_SKIP_FOAF") {
+            let normalized = value.trim().to_ascii_lowercase();
+            if normalized == "1" || normalized == "true" || normalized == "yes" {
+                info!("COMMUNITAS_SKIP_FOAF set; skipping coordinator discovery");
+                return Ok(());
+            }
+        }
+
         // Check if peer cache is cold (no recent peers)
         let peers = self.context.peer_cache.get_top_peers(10).await;
         if !peers.is_empty() {
@@ -308,7 +317,7 @@ impl GossipBootSequence {
 
                 let mut last_error = None;
                 for addr in candidates {
-                    match transport.dial(peer_id, addr).await {
+                    match GossipTransport::dial(&transport, peer_id, addr).await {
                         Ok(_) => {
                             info!(
                                 "Connected to contact {} at {} (peer {:?})",
@@ -365,16 +374,32 @@ impl GossipBootSequence {
 
     /// Step 3: Start membership layer (HyParView + SWIM)
     async fn start_membership(&mut self) -> Result<()> {
-        let membership = self.context.membership.write().await;
-
-        // Join the overlay network
+        let membership = self.context.membership.clone();
         let seeds = self.get_seed_peers().await?;
-        membership
-            .join(seeds)
-            .await
-            .context("Failed to join membership overlay")?;
 
-        info!("Membership layer active, starting periodic shuffle and probes");
+        let join_handle = tokio::spawn(async move {
+            let membership = membership.write().await;
+            membership.join(seeds).await
+        });
+
+        match tokio::time::timeout(std::time::Duration::from_secs(3), join_handle).await {
+            Ok(Ok(Ok(()))) => {
+                info!("Membership layer active, starting periodic shuffle and probes");
+            }
+            Ok(Ok(Err(e))) => {
+                warn!("Membership join failed (continuing without peers): {}", e);
+            }
+            Ok(Err(e)) => {
+                warn!(
+                    "Membership join task failed (continuing without peers): {}",
+                    e
+                );
+            }
+            Err(_) => {
+                warn!("Membership join still in progress; continuing boot sequence");
+            }
+        }
+
         Ok(())
     }
 
@@ -447,8 +472,8 @@ impl GossipBootSequence {
                 .start(move |peer_id, delta| {
                     let transport = transport.clone();
                     Box::pin(async move {
-                        // Serialize delta using bincode for wire transmission
-                        let delta_bytes = bincode::serialize(&delta).map_err(|e| {
+                        // Serialize delta using postcard for wire transmission
+                        let delta_bytes = postcard::to_stdvec(&delta).map_err(|e| {
                             anyhow::anyhow!("Failed to serialize CRDT delta: {}", e)
                         })?;
 
@@ -473,47 +498,6 @@ impl GossipBootSequence {
             info!("CRDT anti-entropy active (60s interval, delta-based sync)");
         }
 
-        // Start membership-to-anti-entropy peer sync (30 second interval)
-        // This ensures ALL connected peers (incoming AND outgoing) are registered for CRDT sync
-        {
-            let membership = Arc::clone(&self.context.membership);
-            let anti_entropy = Arc::clone(&self.context.anti_entropy);
-
-            tokio::spawn(async move {
-                info!("Starting membership peer sync task (30s interval)");
-                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-
-                loop {
-                    interval.tick().await;
-
-                    // Get all active peers from membership layer (both incoming and outgoing)
-                    let membership_guard = membership.read().await;
-                    let active_peers = membership_guard.active_view();
-                    drop(membership_guard);
-
-                    if active_peers.is_empty() {
-                        debug!("No active peers in membership view");
-                        continue;
-                    }
-
-                    // Register all active peers for CRDT anti-entropy sync
-                    let mut registered = 0;
-                    for peer_id in active_peers {
-                        anti_entropy.add_peer(peer_id).await;
-                        registered += 1;
-                    }
-
-                    if registered > 0 {
-                        info!(
-                            "Synced {} membership peers to anti-entropy registry",
-                            registered
-                        );
-                    }
-                }
-            });
-            info!("Membership peer sync task active (30s interval)");
-        }
-
         // Start transport-to-anti-entropy peer sync (5 second interval)
         // This ensures ALL transport-level connections are registered for CRDT sync,
         // not just membership peers. Critical for bootstrap nodes that receive
@@ -523,6 +507,7 @@ impl GossipBootSequence {
             let anti_entropy = Arc::clone(&self.context.anti_entropy);
             let pubsub = Arc::clone(&self.context.pubsub);
             let topics = Arc::clone(&self.context.topics);
+            let self_peer_id = self.context.peer_id;
 
             tokio::spawn(async move {
                 info!("Starting transport peer sync task (5s interval)");
@@ -532,7 +517,14 @@ impl GossipBootSequence {
                     interval.tick().await;
 
                     // Get all connected peers from transport layer (includes direct connections)
-                    let connected = transport.connected_peers().await;
+                    let mut connected = transport.connected_peers().await;
+
+                    // Guard against the local peer showing up in the connected list
+                    let before_len = connected.len();
+                    connected.retain(|(peer_id, _)| *peer_id != self_peer_id);
+                    if connected.len() != before_len {
+                        debug!("Filtered out local peer id from connected peers");
+                    }
 
                     if connected.is_empty() {
                         debug!("No connected peers in transport layer");
@@ -586,6 +578,23 @@ impl GossipBootSequence {
         {
             let transport = Arc::clone(&self.context.transport);
             let pubsub = Arc::clone(&self.context.pubsub);
+            let entity_handler = self.context.entity_message_handler();
+            let direct_enabled = matches!(
+                std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "1" | "true" | "yes"
+            );
+            let log_transport = matches!(
+                std::env::var("COMMUNITAS_LOG_TRANSPORT_RECEIVE")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "1" | "true" | "yes"
+            );
 
             tokio::spawn(async move {
                 info!("Starting PubSub message processing loop");
@@ -593,8 +602,40 @@ impl GossipBootSequence {
                 loop {
                     match transport.receive_message().await {
                         Ok((peer_id, stream_type, data)) => {
+                            if log_transport {
+                                info!(
+                                    "Transport received {:?} ({} bytes) from {:?}",
+                                    stream_type,
+                                    data.len(),
+                                    peer_id
+                                );
+                            }
                             // Only process PubSub messages in this loop
                             if stream_type != GossipStreamType::PubSub {
+                                if direct_enabled && stream_type == GossipStreamType::Bulk {
+                                    if let Ok(envelope) = serde_json::from_slice::<
+                                        super::context::DirectEntityEnvelope,
+                                    >(&data)
+                                    {
+                                        if log_transport {
+                                            info!(
+                                                "Received direct entity envelope for {} ({} bytes) from {:?}",
+                                                envelope.entity_id,
+                                                envelope.payload.len(),
+                                                peer_id
+                                            );
+                                        }
+                                        if let Some(handler) =
+                                            entity_handler.read().await.as_ref()
+                                        {
+                                            handler(
+                                                envelope.entity_id,
+                                                peer_id,
+                                                Bytes::from(envelope.payload),
+                                            );
+                                        }
+                                    }
+                                }
                                 debug!("Ignoring non-PubSub message from {:?}", peer_id);
                                 continue;
                             }

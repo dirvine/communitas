@@ -62,12 +62,12 @@ async fn test_publisher_handles_requests_locally() {
     let request = SiteRequest::GetManifest {
         site_id: site_id.clone(),
     };
-    let request_bytes = bincode::serialize(&request).unwrap();
+    let request_bytes = postcard::to_stdvec(&request).unwrap();
     let response_bytes = publisher
         .handle_request(Bytes::from(request_bytes))
         .await
         .unwrap();
-    let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
+    let response: SiteResponse = postcard::from_bytes(&response_bytes).unwrap();
 
     match response {
         SiteResponse::Manifest(m) => {
@@ -79,12 +79,12 @@ async fn test_publisher_handles_requests_locally() {
 
     // Request block
     let request = SiteRequest::GetBlock { hash };
-    let request_bytes = bincode::serialize(&request).unwrap();
+    let request_bytes = postcard::to_stdvec(&request).unwrap();
     let response_bytes = publisher
         .handle_request(Bytes::from(request_bytes))
         .await
         .unwrap();
-    let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
+    let response: SiteResponse = postcard::from_bytes(&response_bytes).unwrap();
 
     match response {
         SiteResponse::Block(b) => {
@@ -283,12 +283,12 @@ async fn test_error_response_format() {
     // Request non-existent block
     let fake_hash = [255u8; 32];
     let request = SiteRequest::GetBlock { hash: fake_hash };
-    let request_bytes = bincode::serialize(&request).unwrap();
+    let request_bytes = postcard::to_stdvec(&request).unwrap();
     let response_bytes = publisher
         .handle_request(Bytes::from(request_bytes))
         .await
         .unwrap();
-    let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
+    let response: SiteResponse = postcard::from_bytes(&response_bytes).unwrap();
 
     match response {
         SiteResponse::Error(msg) => {
@@ -302,12 +302,12 @@ async fn test_error_response_format() {
 
     // Request manifest when none exists (publisher hasn't built one yet)
     let request = SiteRequest::GetManifest { site_id };
-    let request_bytes = bincode::serialize(&request).unwrap();
+    let request_bytes = postcard::to_stdvec(&request).unwrap();
     let response_bytes = publisher
         .handle_request(Bytes::from(request_bytes))
         .await
         .unwrap();
-    let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
+    let response: SiteResponse = postcard::from_bytes(&response_bytes).unwrap();
 
     match response {
         SiteResponse::Error(msg) => {

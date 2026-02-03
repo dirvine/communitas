@@ -100,7 +100,7 @@ impl BackupManager {
     /// Package format: [nonce (12 bytes) || ciphertext || key (32 bytes)]
     pub async fn encrypt_backup(&self, backup: &BackupData, _recipient: &str) -> Result<Vec<u8>> {
         // 1. Serialize backup data
-        let plaintext = bincode::serialize(backup).context("Failed to serialize backup data")?;
+        let plaintext = postcard::to_stdvec(backup).context("Failed to serialize backup data")?;
 
         // 2. Generate per-backup encryption key (ChaCha20Poly1305)
         let key = SymmetricKey::generate();
@@ -155,7 +155,7 @@ impl BackupManager {
 
         // 5. Deserialize backup data
         let backup: BackupData =
-            bincode::deserialize(&plaintext).context("Failed to deserialize backup data")?;
+            postcard::from_bytes(&plaintext).context("Failed to deserialize backup data")?;
 
         Ok(backup)
     }

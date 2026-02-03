@@ -474,7 +474,7 @@ impl DocReplicator {
         };
 
         let blob =
-            bincode::serialize(encrypted).map_err(|e| anyhow!("Serialization failed: {}", e))?;
+            postcard::to_stdvec(encrypted).map_err(|e| anyhow!("Serialization failed: {}", e))?;
 
         Ok(Some(blob))
     }

@@ -26,7 +26,8 @@ use saorsa_gossip_membership::Membership;
 use saorsa_gossip_presence::PresenceManager; // Actual exports
 use saorsa_gossip_pubsub::PubSub;
 use saorsa_gossip_transport::{
-    GossipStreamType, GossipTransport, UdpTransportAdapter, UdpTransportAdapterConfig,
+    GossipStreamType, GossipTransport, TransportAdapter, UdpTransportAdapter,
+    UdpTransportAdapterConfig,
 };
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
@@ -37,11 +38,30 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
+use super::self_filtering_transport::SelfFilteringTransport;
+
 // Phase 2 TDD: Import resilience modules
 use crate::{ConnectivityWatchdog, ResourceLimits, WatchdogConfig};
 
 // Contact storage for endpoint tracking
 use super::contact_storage::{ContactRecord, ContactStore};
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct DirectEntityEnvelope {
+    pub entity_id: String,
+    pub payload: Vec<u8>,
+}
+
+fn direct_entity_broadcast_enabled() -> bool {
+    matches!(
+        std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "yes"
+    )
+}
 
 /// Type alias for entity message handler callback
 /// Called with (entity_id, sender_peer_id, message_bytes)
@@ -78,8 +98,8 @@ pub struct GossipContext {
     /// Anti-entropy manager for CRDT synchronization
     pub anti_entropy: Arc<AntiEntropyManager<OrSet<Vec<u8>>>>,
 
-    /// Transport layer (QUIC via ant-quic)
-    pub transport: Arc<UdpTransportAdapter>,
+    /// Transport layer (QUIC via ant-quic), with self-send filtering
+    pub transport: Arc<SelfFilteringTransport<UdpTransportAdapter>>,
 
     /// Pub/sub layer (Plumtree broadcast)
     pub pubsub: Arc<RwLock<Box<dyn PubSub>>>,
@@ -215,6 +235,7 @@ impl GossipContext {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to create UdpTransportAdapter: {}", e))?;
         let transport = Arc::new(transport);
+        let transport = Arc::new(SelfFilteringTransport::new(transport));
 
         // No need to call listen() for UdpTransportAdapter as it binds on creation.
 
@@ -316,14 +337,21 @@ impl GossipContext {
                     .context("Failed to parse default sites bind address")?
             };
 
-            let sites_transport = Arc::new(
-                UdpTransportAdapter::with_config(
-                    UdpTransportAdapterConfig::new(sites_bind, vec![]),
-                    None,
-                )
-                .await
-                .context("Failed to create sites transport")?,
-            );
+            let sites_transport: Arc<UdpTransportAdapter> = match UdpTransportAdapter::with_config(
+                UdpTransportAdapterConfig::new(sites_bind, vec![]),
+                None,
+            )
+            .await
+            {
+                Ok(transport) => Arc::new(transport),
+                Err(err) => {
+                    warn!(
+                        "Failed to create dedicated sites transport ({}). Falling back to main transport.",
+                        err
+                    );
+                    transport.inner().clone()
+                }
+            };
 
             // Convert to SharedTransport for clean sharing
             let sites_shared: super::transport_types::SharedTransport = sites_transport.clone();
@@ -592,6 +620,12 @@ impl GossipContext {
         info!("Entity message handler registered");
     }
 
+    pub(super) fn entity_message_handler(
+        &self,
+    ) -> Arc<RwLock<Option<EntityMessageHandler>>> {
+        Arc::clone(&self.entity_message_handler)
+    }
+
     /// Map a channel/project/org entity to an MLS group + topic
     ///
     /// Per SPEC.md §1: Channel/Project/Org → MLS group + gossip topic
@@ -628,6 +662,14 @@ impl GossipContext {
     ///
     /// Per SPEC.md §2.4: For each channel/org: join MLS group, subscribe to topic
     pub async fn join_entity(&self, entity_id: &str, entity_type: &str) -> Result<()> {
+        let log_transport = matches!(
+            std::env::var("COMMUNITAS_LOG_TRANSPORT_RECEIVE")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        );
         // 1. Get or create topic ID
         let topic_id = self.map_entity_to_topic(entity_id, entity_type).await?;
 
@@ -656,7 +698,16 @@ impl GossipContext {
             .await
             .into_iter()
             .map(|(peer_id, _addr)| peer_id)
+            .filter(|peer_id| *peer_id != self.peer_id)
             .collect();
+
+        if log_transport {
+            info!(
+                "Join entity {}: initializing {} connected peers",
+                entity_id,
+                connected_peers.len()
+            );
+        }
 
         if !connected_peers.is_empty() {
             // Initialize topic peers (read lock released after this block)
@@ -786,6 +837,14 @@ impl GossipContext {
 
     /// Publish a message to an entity's topic
     pub async fn publish_to_entity(&self, entity_id: &str, message: Vec<u8>) -> Result<()> {
+        let log_transport = matches!(
+            std::env::var("COMMUNITAS_LOG_TRANSPORT_RECEIVE")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        );
         // 1. Get topic ID
         let topic_id = {
             let topics = self.topics.read().await;
@@ -795,6 +854,32 @@ impl GossipContext {
                 .context("Entity not found, must join first")?
         };
 
+        // 1.5. Refresh eager peers for this topic from current transport connections.
+        // This reduces "first message lost" scenarios when peers connect after initial join.
+        let connected_peers: Vec<_> = self
+            .transport
+            .connected_peers()
+            .await
+            .into_iter()
+            .map(|(peer_id, _addr)| peer_id)
+            .filter(|peer_id| *peer_id != self.peer_id)
+            .collect();
+
+        if log_transport {
+            info!(
+                "Publish entity {}: {} connected peers",
+                entity_id,
+                connected_peers.len()
+            );
+        }
+
+        if !connected_peers.is_empty() {
+            let pubsub = self.pubsub.read().await;
+            (**pubsub)
+                .initialize_topic_peers(topic_id, connected_peers)
+                .await;
+        }
+
         // 2. Get MLS group for encryption
         let groups = self.groups.read().await;
         let _group_ctx = groups
@@ -803,13 +888,50 @@ impl GossipContext {
 
         // Messages are protected by the QUIC transport. MLS group encryption
         // will wrap this payload once the MLS keying layer is integrated.
-        let payload = message;
+        let payload = message.clone();
 
         // 3. Publish via gossip
         let pubsub = self.pubsub.write().await;
         pubsub.publish(topic_id, payload.into()).await?;
 
+        if direct_entity_broadcast_enabled() {
+            if let Err(err) = self
+                .direct_publish_to_peers(entity_id, message)
+                .await
+            {
+                warn!("Direct entity broadcast failed for {}: {}", entity_id, err);
+            }
+        }
+
         debug!("Published message to entity {}", entity_id);
+        Ok(())
+    }
+
+    async fn direct_publish_to_peers(&self, entity_id: &str, payload: Vec<u8>) -> Result<()> {
+        let peers = self.transport.connected_peers().await;
+        if peers.is_empty() {
+            return Ok(());
+        }
+
+        info!(
+            "Direct entity broadcast for {} to {} peers",
+            entity_id,
+            peers.len()
+        );
+
+        let envelope = DirectEntityEnvelope {
+            entity_id: entity_id.to_string(),
+            payload,
+        };
+        let bytes =
+            serde_json::to_vec(&envelope).context("Failed to serialize direct entity envelope")?;
+
+        for (peer_id, _) in peers {
+            self.transport
+                .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(bytes.clone()))
+                .await?;
+        }
+
         Ok(())
     }
 
@@ -1004,7 +1126,7 @@ impl GossipContext {
         let messages = self.get_all_messages().await?;
 
         // Serialize state
-        let plaintext = bincode::serialize(&messages).context("Failed to serialize state")?;
+        let plaintext = postcard::to_stdvec(&messages).context("Failed to serialize state")?;
 
         // Send to each favourite contact
         for four_words in favourites.iter() {
@@ -1088,7 +1210,7 @@ impl GossipContext {
 
         // 4. Deserialize messages
         let messages: Vec<Vec<u8>> =
-            bincode::deserialize(&plaintext).context("Failed to deserialize recovered state")?;
+            postcard::from_bytes(&plaintext).context("Failed to deserialize recovered state")?;
 
         // 5. Merge into local CRDT
         let mut crdt_set = self.crdt_message_set.write().await;
@@ -1166,6 +1288,14 @@ impl GossipContext {
     /// the peer will receive them. Called when we receive a sync request
     /// from a peer, indicating they're interested in this entity's messages.
     pub async fn add_peer_to_entity_topic(&self, entity_id: &str, peer_id: PeerId) -> Result<()> {
+        if peer_id == self.peer_id {
+            debug!(
+                "Skipping local peer when adding to topic for entity {}",
+                entity_id
+            );
+            return Ok(());
+        }
+
         // Get topic ID for entity
         let topic_id = {
             let topics = self.topics.read().await;
@@ -1242,11 +1372,24 @@ impl GossipContext {
                 self.anti_entropy.add_peer(peer_id).await;
 
                 // Also notify membership layer about this peer
-                let seed = crate::conn_words(&addr)
-                    .map_err(|e| anyhow::anyhow!("Failed to encode addr: {}", e))?;
+                let seed = addr.to_string();
                 let membership = self.membership.read().await;
                 if let Err(e) = membership.join(vec![seed]).await {
                     warn!("Membership join after dial failed (non-fatal): {}", e);
+                }
+
+                // Ensure the new peer is added to all existing entity topics
+                let entity_ids: Vec<String> = {
+                    let topics = self.topics.read().await;
+                    topics.keys().cloned().collect()
+                };
+                for entity_id in entity_ids {
+                    if let Err(e) = self.add_peer_to_entity_topic(&entity_id, peer_id).await {
+                        warn!(
+                            "Failed to add peer {:?} to topic for {}: {}",
+                            peer_id, entity_id, e
+                        );
+                    }
                 }
 
                 Ok(())

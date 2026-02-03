@@ -168,7 +168,7 @@ impl SitesListener {
         }
 
         // Try to deserialize as SitesWire envelope
-        let wire_msg: SitesWire = match bincode::deserialize(&message_bytes) {
+        let wire_msg: SitesWire = match postcard::from_bytes(&message_bytes) {
             Ok(msg) => msg,
             Err(_) => return false, // Not a Sites message; let others handle
         };
@@ -201,7 +201,7 @@ impl SitesListener {
                     id: request_id,
                     body: error_response,
                 };
-                if let Ok(error_bytes) = bincode::serialize(&wire_response) {
+                if let Ok(error_bytes) = postcard::to_stdvec(&wire_response) {
                     let _ = self
                         .transport
                         .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(error_bytes))
@@ -224,7 +224,7 @@ impl SitesListener {
                     id: request_id,
                     body: response,
                 };
-                if let Ok(response_bytes) = bincode::serialize(&wire_response)
+                if let Ok(response_bytes) = postcard::to_stdvec(&wire_response)
                     && let Err(e) = transport
                         .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(response_bytes))
                         .await
@@ -235,7 +235,7 @@ impl SitesListener {
 
             if let Some(pub_arc) = publisher {
                 // Serialize the request for the publisher
-                let request_bytes = match bincode::serialize(&request) {
+                let request_bytes = match postcard::to_stdvec(&request) {
                     Ok(bytes) => Bytes::from(bytes),
                     Err(e) => {
                         warn!("Failed to serialize request: {}", e);
@@ -249,7 +249,7 @@ impl SitesListener {
                 match timeout(REQUEST_TIMEOUT, pub_arc.handle_request(request_bytes)).await {
                     Ok(Ok(response_bytes)) => {
                         // Deserialize the response from publisher
-                        match bincode::deserialize::<SiteResponse>(&response_bytes) {
+                        match postcard::from_bytes::<SiteResponse>(&response_bytes) {
                             Ok(response) => {
                                 // Success - send wrapped response
                                 debug!("Sending Sites response {} to {}", request_id, peer_id);

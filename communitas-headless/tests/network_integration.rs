@@ -69,6 +69,7 @@ impl LogMonitor {
 }
 
 #[test]
+#[ignore] // Network integration test: requires external bootstrap nodes (VPS infrastructure)
 fn test_two_nodes_connection() {
     // Kill any zombie processes from previous runs
     let _ = Command::new("pkill").arg("communitas-headless").status();

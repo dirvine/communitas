@@ -56,13 +56,12 @@ async fn create_identity_via_recovery(
     temp: &TempDir,
     mnemonic: &str,
     display_name: &str,
-    password: &str,
 ) -> (UiServices, String) {
     let services = make_services(temp).await;
     let auth = services.auth();
 
     let session = auth
-        .recover_identity(mnemonic, None, display_name, password)
+        .recover_identity(mnemonic, None, display_name, None, false)
         .await
         .expect("Recovery should succeed");
 
@@ -88,20 +87,15 @@ async fn test_login_with_valid_credentials_inner() {
 
     // Create identity via recovery
     let temp = TempDir::new().unwrap();
-    let password = "secure_password_123";
     let display_name = "TestUser";
-    let (services, four_words) =
-        create_identity_via_recovery(&temp, &mnemonic, display_name, password).await;
+    let (services, four_words) = create_identity_via_recovery(&temp, &mnemonic, display_name).await;
     let auth = services.auth();
 
     // Logout first
     auth.logout().await.expect("Logout should succeed");
 
-    // Test: Login with valid password
-    let session = auth
-        .login(&four_words, password)
-        .await
-        .expect("Login should succeed");
+    // Test: Login with valid four_words
+    let session = auth.login(&four_words).await.expect("Login should succeed");
 
     // Verify session is active
     assert_eq!(session.four_words, four_words);
@@ -115,39 +109,6 @@ async fn test_login_with_valid_credentials_inner() {
         }
         _ => panic!("Expected authenticated state after login"),
     }
-}
-
-// =============================================================================
-// Test 2: Login with invalid credentials
-// =============================================================================
-
-#[test]
-fn test_login_with_invalid_password() {
-    run_with_large_stack(|| {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(test_login_with_invalid_password_inner());
-    });
-}
-
-async fn test_login_with_invalid_password_inner() {
-    // Generate a fresh mnemonic
-    let config = RecoveryConfig::default();
-    let mnemonic = generate_recovery_mnemonic(&config).unwrap().to_string();
-
-    // Create identity
-    let temp = TempDir::new().unwrap();
-    let (services, four_words) =
-        create_identity_via_recovery(&temp, &mnemonic, "TestUser", "correct_password").await;
-    let auth = services.auth();
-
-    // Logout first
-    auth.logout().await.expect("Logout should succeed");
-
-    // Test: Login with wrong password
-    let result = auth.login(&four_words, "wrong_password").await;
-
-    // Verify: Should fail
-    assert!(result.is_err(), "Login with wrong password should fail");
 }
 
 #[test]
@@ -165,17 +126,14 @@ async fn test_login_with_invalid_four_words_inner() {
 
     // Create identity
     let temp = TempDir::new().unwrap();
-    let (services, _) =
-        create_identity_via_recovery(&temp, &mnemonic, "TestUser", "password123").await;
+    let (services, _) = create_identity_via_recovery(&temp, &mnemonic, "TestUser").await;
     let auth = services.auth();
 
     // Logout first
     auth.logout().await.expect("Logout should succeed");
 
     // Test: Login with non-existent four_words
-    let result = auth
-        .login("nonexistent-word-word-word", "password123")
-        .await;
+    let result = auth.login("nonexistent-word-word-word").await;
 
     // Verify: Should fail
     assert!(result.is_err(), "Login with invalid four_words should fail");
@@ -200,8 +158,7 @@ async fn test_logout_and_session_cleanup_inner() {
 
     // Create identity
     let temp = TempDir::new().unwrap();
-    let (services, _) =
-        create_identity_via_recovery(&temp, &mnemonic, "TestUser", "password123").await;
+    let (services, _) = create_identity_via_recovery(&temp, &mnemonic, "TestUser").await;
     let auth = services.auth();
 
     // Verify session exists (created by recovery)
@@ -256,17 +213,15 @@ async fn test_identity_switch_inner() {
     let auth = services.auth();
 
     // Create first identity
-    let password1 = "password1";
     let session1 = auth
-        .recover_identity(&mnemonic1, None, "User1", password1)
+        .recover_identity(&mnemonic1, None, "User1", None, false)
         .await
         .expect("Recovery 1 should succeed");
     assert_eq!(session1.four_words, preview1.four_words);
 
     // Create second identity
-    let password2 = "password2";
     let session2 = auth
-        .recover_identity(&mnemonic2, None, "User2", password2)
+        .recover_identity(&mnemonic2, None, "User2", None, false)
         .await
         .expect("Recovery 2 should succeed");
     assert_eq!(session2.four_words, preview2.four_words);
@@ -282,7 +237,7 @@ async fn test_identity_switch_inner() {
 
     // Test: Switch to first user
     let session1_again = auth
-        .login(&preview1.four_words, password1)
+        .login(&preview1.four_words)
         .await
         .expect("Login as user1 should succeed");
     assert_eq!(session1_again.four_words, preview1.four_words);
@@ -299,7 +254,7 @@ async fn test_identity_switch_inner() {
 
     // Test: Switch back to second user
     let session2_again = auth
-        .login(&preview2.four_words, password2)
+        .login(&preview2.four_words)
         .await
         .expect("Login as user2 should succeed");
     assert_eq!(session2_again.four_words, preview2.four_words);
@@ -339,20 +294,18 @@ async fn test_session_persistence_inner() {
 
     // Create first identity
     let temp = TempDir::new().unwrap();
-    let password1 = "password123";
     let services = make_services(&temp).await;
     let auth = services.auth();
 
     let session1 = auth
-        .recover_identity(&mnemonic1, None, "User1", password1)
+        .recover_identity(&mnemonic1, None, "User1", None, false)
         .await
         .expect("Recovery should succeed");
     assert_eq!(session1.four_words, preview1.four_words);
 
     // Create second identity (this should add first to recent list)
-    let password2 = "password456";
     let session2 = auth
-        .recover_identity(&mnemonic2, None, "User2", password2)
+        .recover_identity(&mnemonic2, None, "User2", None, false)
         .await
         .expect("Recovery should succeed");
     assert_eq!(session2.four_words, preview2.four_words);
@@ -369,7 +322,7 @@ async fn test_session_persistence_inner() {
 
     // Login as user1 using the four_words (switching back)
     let session1_again = auth
-        .login(&preview1.four_words, password1)
+        .login(&preview1.four_words)
         .await
         .expect("Login should succeed");
     assert_eq!(session1_again.four_words, preview1.four_words);
@@ -403,37 +356,34 @@ async fn test_recovery_flow_inner() {
     // Preview to get expected identity
     let preview = preview_identity_from_mnemonic(mnemonic.clone(), None).unwrap();
 
-    // First: Create identity with original password
+    // First: Create identity
     let temp1 = TempDir::new().unwrap();
-    let original_password = "original_password";
-    let (services1, four_words) =
-        create_identity_via_recovery(&temp1, &mnemonic, "TestUser", original_password).await;
+    let (services1, four_words) = create_identity_via_recovery(&temp1, &mnemonic, "TestUser").await;
     assert_eq!(four_words, preview.four_words);
 
-    // Verify can login with original password
+    // Verify can login with original four_words
     let auth1 = services1.auth();
     auth1.logout().await.expect("Logout should succeed");
     auth1
-        .login(&four_words, original_password)
+        .login(&four_words)
         .await
-        .expect("Login with original password should succeed");
+        .expect("Login with original four_words should succeed");
 
-    // Second: Recover to a fresh storage with new password
+    // Second: Recover to a fresh storage
     let temp2 = TempDir::new().unwrap();
-    let new_password = "new_password_after_recovery";
     let (services2, recovered_four_words) =
-        create_identity_via_recovery(&temp2, &mnemonic, "RecoveredUser", new_password).await;
+        create_identity_via_recovery(&temp2, &mnemonic, "RecoveredUser").await;
 
     // Verify: Recovery produces same four_words (identity)
     assert_eq!(recovered_four_words, preview.four_words);
 
-    // Verify: Can login with new password
+    // Verify: Can login with recovered four_words
     let auth2 = services2.auth();
     auth2.logout().await.expect("Logout should succeed");
     let session = auth2
-        .login(&recovered_four_words, new_password)
+        .login(&recovered_four_words)
         .await
-        .expect("Login with new password should succeed");
+        .expect("Login with recovered four_words should succeed");
     assert_eq!(session.four_words, preview.four_words);
 }
 
@@ -456,9 +406,7 @@ async fn test_concurrent_service_instances_inner() {
 
     // Create identity
     let temp = TempDir::new().unwrap();
-    let password = "password123";
-    let (services1, four_words) =
-        create_identity_via_recovery(&temp, &mnemonic, "TestUser", password).await;
+    let (services1, four_words) = create_identity_via_recovery(&temp, &mnemonic, "TestUser").await;
     let auth1 = services1.auth();
 
     // Verify first service is authenticated
@@ -477,7 +425,7 @@ async fn test_concurrent_service_instances_inner() {
 
     // Login with second service
     let session2 = auth2
-        .login(&four_words, password)
+        .login(&four_words)
         .await
         .expect("Login from second service should succeed");
     assert_eq!(session2.four_words, four_words);
@@ -513,8 +461,7 @@ async fn test_session_expiration_check_inner() {
 
     // Create identity
     let temp = TempDir::new().unwrap();
-    let (services, _) =
-        create_identity_via_recovery(&temp, &mnemonic, "TestUser", "password123").await;
+    let (services, _) = create_identity_via_recovery(&temp, &mnemonic, "TestUser").await;
     let auth = services.auth();
 
     // Get current session
@@ -573,8 +520,7 @@ async fn test_auth_state_subscription_inner() {
     );
 
     // Recover identity
-    let password = "password123";
-    auth.recover_identity(&mnemonic, None, "TestUser", password)
+    auth.recover_identity(&mnemonic, None, "TestUser", None, false)
         .await
         .expect("Recovery should succeed");
 
@@ -622,24 +568,21 @@ async fn test_multiple_identity_isolation_inner() {
         (
             generate_recovery_mnemonic(&config).unwrap().to_string(),
             "Alice",
-            "password_alice",
         ),
         (
             generate_recovery_mnemonic(&config).unwrap().to_string(),
             "Bob",
-            "password_bob",
         ),
         (
             generate_recovery_mnemonic(&config).unwrap().to_string(),
             "Charlie",
-            "password_charlie",
         ),
     ];
 
     // Get previews
     let previews: Vec<_> = identities
         .iter()
-        .map(|(m, _, _)| preview_identity_from_mnemonic(m.clone(), None).unwrap())
+        .map(|(m, _)| preview_identity_from_mnemonic(m.clone(), None).unwrap())
         .collect();
 
     // Setup shared temp directory
@@ -648,18 +591,18 @@ async fn test_multiple_identity_isolation_inner() {
     let auth = services.auth();
 
     // Create all identities
-    for ((mnemonic, name, password), preview) in identities.iter().zip(previews.iter()) {
+    for ((mnemonic, name), preview) in identities.iter().zip(previews.iter()) {
         let session = auth
-            .recover_identity(mnemonic, None, name, password)
+            .recover_identity(mnemonic, None, name, None, false)
             .await
             .expect("Recovery should succeed");
         assert_eq!(session.four_words, preview.four_words);
     }
 
-    // Test: Each identity can login independently with correct password
-    for ((_, name, password), preview) in identities.iter().zip(previews.iter()) {
+    // Test: Each identity can login independently with correct four_words
+    for ((_, name), preview) in identities.iter().zip(previews.iter()) {
         let session = auth
-            .login(&preview.four_words, password)
+            .login(&preview.four_words)
             .await
             .expect("Login should succeed");
 
@@ -699,9 +642,7 @@ async fn test_session_persistence_across_logins_inner() {
 
     // Create identity
     let temp = TempDir::new().unwrap();
-    let password = "password123";
-    let (services, four_words) =
-        create_identity_via_recovery(&temp, &mnemonic, "TestUser", password).await;
+    let (services, four_words) = create_identity_via_recovery(&temp, &mnemonic, "TestUser").await;
     let auth = services.auth();
 
     // Logout and login multiple times, tracking pubkey_hex as session identifier
@@ -709,10 +650,7 @@ async fn test_session_persistence_across_logins_inner() {
     for _ in 0..5 {
         auth.logout().await.expect("Logout should succeed");
 
-        let session = auth
-            .login(&four_words, password)
-            .await
-            .expect("Login should succeed");
+        let session = auth.login(&four_words).await.expect("Login should succeed");
 
         // The pubkey_hex should be consistent (same identity)
         session_ids.push(session.pubkey_hex.clone());

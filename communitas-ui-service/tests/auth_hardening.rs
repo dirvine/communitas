@@ -389,53 +389,6 @@ mod multi_identity {
         });
     }
 
-    /// Test switch_identity validates input before checking session.
-    #[test]
-    fn test_switch_identity_validates_input() {
-        run_with_large_stack(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let services = make_services(&temp).await;
-                let auth = services.auth();
-
-                // Empty four_words should fail with InvalidInput
-                let result = auth.switch_identity("").await;
-                assert!(result.is_err());
-                let err_msg = format!("{:?}", result.unwrap_err());
-                assert!(
-                    err_msg.contains("InvalidInput"),
-                    "Empty four_words should return InvalidInput error"
-                );
-
-                // Whitespace-only should also fail
-                let result = auth.switch_identity("   ").await;
-                assert!(result.is_err());
-            });
-        });
-    }
-
-    /// Test switch_identity requires session for valid input.
-    #[test]
-    fn test_switch_identity_requires_session() {
-        run_with_large_stack(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let services = make_services(&temp).await;
-                let auth = services.auth();
-
-                let result = auth.switch_identity("alpha-beta-gamma-delta").await;
-                assert!(result.is_err());
-                let err_msg = format!("{:?}", result.unwrap_err());
-                assert!(
-                    err_msg.contains("State"),
-                    "Should fail with State error when not authenticated"
-                );
-            });
-        });
-    }
-
     /// Test RecentIdentity struct conversion.
     #[test]
     fn test_recent_identity_conversion() {
@@ -445,14 +398,12 @@ mod multi_identity {
             four_words: "alpha-beta-gamma-delta".to_string(),
             display_name: "Alice".to_string(),
             last_used: 1700000000,
-            has_passkey: true,
         };
 
         let recent = RecentIdentity::from(ui_recent);
         assert_eq!(recent.four_words, "alpha-beta-gamma-delta");
         assert_eq!(recent.display_name, "Alice");
         assert_eq!(recent.last_used, 1700000000);
-        assert!(recent.has_passkey);
     }
 
     /// Test try_auto_login returns None when no identity available.
@@ -499,31 +450,6 @@ mod multi_identity {
             });
         });
     }
-
-    /// Test passkey operations validate input.
-    #[test]
-    fn test_passkey_operations_validate_input() {
-        run_with_large_stack(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let services = make_services(&temp).await;
-                let auth = services.auth();
-
-                // has_passkey with empty input
-                let result = auth.has_passkey("").await;
-                assert!(result.is_err());
-
-                // delete_passkey with empty input
-                let result = auth.delete_passkey("").await;
-                assert!(result.is_err());
-
-                // register_passkey requires session
-                let result = auth.register_passkey().await;
-                assert!(result.is_err());
-            });
-        });
-    }
 }
 
 // =============================================================================
@@ -558,24 +484,20 @@ mod audit_service {
             "identity_switch".to_string(),
             "device_change".to_string(),
             "recovery".to_string(),
-            "passkey_register".to_string(),
-            "passkey_auth".to_string(),
             "session_refresh".to_string(),
             "session_expired".to_string(),
         ];
 
         let parsed = parse_event_types(&types).unwrap();
-        assert_eq!(parsed.len(), 10);
+        assert_eq!(parsed.len(), 8);
         assert_eq!(parsed[0], AuditEventType::Login);
         assert_eq!(parsed[1], AuditEventType::Logout);
         assert_eq!(parsed[2], AuditEventType::FailedLogin);
         assert_eq!(parsed[3], AuditEventType::IdentitySwitch);
         assert_eq!(parsed[4], AuditEventType::DeviceChange);
         assert_eq!(parsed[5], AuditEventType::Recovery);
-        assert_eq!(parsed[6], AuditEventType::PasskeyRegister);
-        assert_eq!(parsed[7], AuditEventType::PasskeyAuth);
-        assert_eq!(parsed[8], AuditEventType::SessionRefresh);
-        assert_eq!(parsed[9], AuditEventType::SessionExpired);
+        assert_eq!(parsed[6], AuditEventType::SessionRefresh);
+        assert_eq!(parsed[7], AuditEventType::SessionExpired);
     }
 
     /// Test parse_event_types is case-insensitive.

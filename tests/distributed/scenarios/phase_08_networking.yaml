@@ -13,6 +13,15 @@ tools_covered:
   - network_external_address
 
 test_cases:
+  # Ensure networking is unlocked and started on all nodes
+  - id: NET-000
+    name: "Ensure unlock + start networking"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    steps:
+      - tool: unlock_actor
+      - tool: ensure_network_started
+
   # Check network status
   - id: NET-001
     name: "Check network status on all nodes"
@@ -60,7 +69,7 @@ test_cases:
         expect:
           status: success
           fields:
-            network_active: false
+            is_active: false
 
   # Alice sends message while Dave offline
   - id: NET-006
@@ -93,7 +102,7 @@ test_cases:
         expect:
           status: success
           fields:
-            network_active: true
+            is_active: true
 
   # Verify sync after reconnection
   - id: NET-009
@@ -129,4 +138,4 @@ test_cases:
         expect:
           status: success
           fields:
-            network_active: true
+            is_active: true

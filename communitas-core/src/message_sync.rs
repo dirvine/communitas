@@ -579,7 +579,7 @@ pub struct SyncResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crdt::{EntityType, MessageContent, CRDTMessage, MessageMetadata, VectorClock};
+    use crate::crdt::VectorClock;
 
     #[tokio::test]
     async fn test_message_sync_service_creation() {
@@ -616,28 +616,47 @@ mod tests {
     #[tokio::test]
     async fn test_delete_message_nonexistent() {
         let service = MessageSyncService::new("test-peer".to_string());
-        let deleted = service.delete_message("test-entity", "nonexistent").await.unwrap();
+        let deleted = service
+            .delete_message("test-entity", "nonexistent")
+            .await
+            .unwrap();
         assert!(!deleted);
     }
 
     #[tokio::test]
     async fn test_edit_message_nonexistent() {
         let service = MessageSyncService::new("test-peer".to_string());
-        let result = service.edit_message("test-entity", "nonexistent", "new text".to_string()).await;
+        let result = service
+            .edit_message("test-entity", "nonexistent", "new text".to_string())
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_add_reaction_nonexistent() {
         let service = MessageSyncService::new("test-peer".to_string());
-        let result = service.add_reaction("test-entity", "nonexistent", "thumbsup".to_string(), "peer".to_string()).await;
+        let result = service
+            .add_reaction(
+                "test-entity",
+                "nonexistent",
+                "thumbsup".to_string(),
+                "peer".to_string(),
+            )
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_remove_reaction_nonexistent() {
         let service = MessageSyncService::new("test-peer".to_string());
-        let result = service.remove_reaction("test-entity", "nonexistent", "thumbsup".to_string(), "peer".to_string()).await;
+        let result = service
+            .remove_reaction(
+                "test-entity",
+                "nonexistent",
+                "thumbsup".to_string(),
+                "peer".to_string(),
+            )
+            .await;
         assert!(result.is_err());
     }
 
@@ -651,7 +670,10 @@ mod tests {
     #[tokio::test]
     async fn test_request_sync() {
         let service = MessageSyncService::new("test-peer".to_string());
-        let request = service.request_sync("test-entity", "remote-peer").await.unwrap();
+        let request = service
+            .request_sync("test-entity", "remote-peer")
+            .await
+            .unwrap();
         assert_eq!(request.entity_id, "test-entity");
         assert_eq!(request.requester_peer_id, "test-peer");
     }

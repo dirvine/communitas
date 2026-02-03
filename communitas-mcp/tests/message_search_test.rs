@@ -114,7 +114,7 @@ async fn test_search_by_exact_text_match() {
             "send_message",
             json!({
                 "entity_id": "channel-search-exact",
-                "content": "The quick brown fox",
+                "text": "The quick brown fox",
                 "message_type": "text"
             }),
         )
@@ -125,7 +125,7 @@ async fn test_search_by_exact_text_match() {
             "send_message",
             json!({
                 "entity_id": "channel-search-exact",
-                "content": "Jumps over the lazy dog",
+                "text": "Jumps over the lazy dog",
                 "message_type": "text"
             }),
         )
@@ -164,7 +164,7 @@ async fn test_search_by_partial_text_match() {
             "send_message",
             json!({
                 "entity_id": "channel-search-partial",
-                "content": "The complete documentation",
+                "text": "The complete documentation",
                 "message_type": "text"
             }),
         )
@@ -198,7 +198,7 @@ async fn test_search_by_date_range() {
             "send_message",
             json!({
                 "entity_id": "channel-search-date",
-                "content": "Dated message",
+                "text": "Dated message",
                 "message_type": "text"
             }),
         )
@@ -242,7 +242,7 @@ async fn test_search_by_author() {
             "send_message",
             json!({
                 "entity_id": "channel-search-author",
-                "content": "Message from specific author",
+                "text": "Message from specific author",
                 "message_type": "text"
             }),
         )
@@ -277,7 +277,7 @@ async fn test_search_with_no_results() {
             "send_message",
             json!({
                 "entity_id": "channel-search-empty",
-                "content": "Needle in haystack",
+                "text": "Needle in haystack",
                 "message_type": "text"
             }),
         )
@@ -319,7 +319,7 @@ async fn test_search_with_special_characters() {
             "send_message",
             json!({
                 "entity_id": "channel-search-special",
-                "content": "Message with @special #chars &symbols (parentheses)",
+                "text": "Message with @special #chars &symbols (parentheses)",
                 "message_type": "text"
             }),
         )
@@ -354,7 +354,7 @@ async fn test_search_pagination() {
                 "send_message",
                 json!({
                     "entity_id": "channel-search-paginate",
-                    "content": format!("Test message number {}", i),
+                    "text": format!("Test message number {}", i),
                     "message_type": "text"
                 }),
             )
@@ -413,7 +413,7 @@ async fn test_search_case_insensitive() {
             "send_message",
             json!({
                 "entity_id": "channel-search-case",
-                "content": "CaseSensitiveTest Message",
+                "text": "CaseSensitiveTest Message",
                 "message_type": "text"
             }),
         )
@@ -448,7 +448,7 @@ async fn test_search_metadata() {
             "send_message",
             json!({
                 "entity_id": "channel-search-metadata",
-                "content": "Metadata tagged message",
+                "text": "Metadata tagged message",
                 "message_type": "text",
                 "metadata": {
                     "tags": ["important", "urgent"],

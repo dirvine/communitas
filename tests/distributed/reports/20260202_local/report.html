@@ -1,0 +1,2732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed MCP Test Report</title>
+  <style>
+    :root {
+      --success-color: #22c55e;
+      --failure-color: #ef4444;
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #e5e7eb;
+      --border-color: #374151;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #f1f5f9;
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      color: #9ca3af;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+    }
+    .card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card .value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+    .card.success .value { color: var(--success-color); }
+    .card.failure .value { color: var(--failure-color); }
+    .tools {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+    }
+    .tools h2 {
+      margin-top: 0;
+    }
+    .tools ul {
+      columns: 3;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tools li {
+      padding: 0.25rem 0;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      margin-bottom: 2rem;
+    }
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    th {
+      background: #0f172a;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr.pass { background: rgba(34, 197, 94, 0.1); }
+    tr.fail { background: rgba(239, 68, 68, 0.1); }
+    .error {
+      color: var(--failure-color);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Local Combined Scenario</h1>
+    <div class="timestamp">Generated: 2026-02-02 07:58:51 UTC</div>
+
+    <div class="summary">
+      <div class="card failure">
+        <h3>Status</h3>
+        <div class="value">FAIL</div>
+      </div>
+      <div class="card">
+        <h3>Total Tests</h3>
+        <div class="value">139</div>
+      </div>
+      <div class="card success">
+        <h3>Passed</h3>
+        <div class="value">61</div>
+      </div>
+      <div class="card failure">
+        <h3>Failed</h3>
+        <div class="value">78</div>
+      </div>
+      <div class="card">
+        <h3>Pass Rate</h3>
+        <div class="value">43.9%</div>
+      </div>
+    </div>
+
+    <div class="tools">
+      <h2>Tools Covered</h2>
+      <ul>
+        <li>health_check</li>
+          <li>create_vault</li>
+          <li>authenticate</li>
+          <li>authenticate_token</li>
+          <li>core_status</li>
+          <li>create_entity</li>
+          <li>get_entity</li>
+          <li>list_entities</li>
+          <li>join_entity</li>
+          <li>add_member</li>
+          <li>remove_member</li>
+          <li>list_members</li>
+          <li>send_message</li>
+          <li>get_messages</li>
+          <li>create_thread</li>
+          <li>get_thread_messages</li>
+          <li>write_file</li>
+          <li>read_file</li>
+          <li>list_files</li>
+          <li>delete_file</li>
+          <li>get_disk_stats</li>
+          <li>kanban_create_board</li>
+          <li>kanban_get_board</li>
+          <li>kanban_list_boards</li>
+          <li>kanban_update_board</li>
+          <li>kanban_delete_board</li>
+          <li>kanban_create_column</li>
+          <li>kanban_list_columns</li>
+          <li>kanban_update_column</li>
+          <li>kanban_delete_column</li>
+          <li>kanban_reorder_columns</li>
+          <li>kanban_create_card</li>
+          <li>kanban_get_card</li>
+          <li>kanban_list_cards</li>
+          <li>kanban_update_card</li>
+          <li>kanban_delete_card</li>
+          <li>kanban_move_card</li>
+          <li>kanban_assign_card</li>
+          <li>kanban_unassign_card</li>
+          <li>kanban_create_tag</li>
+          <li>kanban_list_tags</li>
+          <li>kanban_update_tag</li>
+          <li>kanban_delete_tag</li>
+          <li>kanban_add_tag_to_card</li>
+          <li>kanban_remove_tag_from_card</li>
+          <li>kanban_create_step</li>
+          <li>kanban_list_steps</li>
+          <li>kanban_update_step</li>
+          <li>kanban_delete_step</li>
+          <li>kanban_create_comment</li>
+          <li>kanban_list_comments</li>
+          <li>kanban_delete_comment</li>
+          <li>create_contact</li>
+          <li>get_contact</li>
+          <li>update_contact</li>
+          <li>delete_contact</li>
+          <li>list_contacts</li>
+          <li>link_contact</li>
+          <li>unlink_contact</li>
+          <li>add_to_favourites</li>
+          <li>remove_from_favourites</li>
+          <li>search_contacts</li>
+          <li>network_start</li>
+          <li>network_stop</li>
+          <li>network_connect</li>
+          <li>network_disconnect</li>
+          <li>network_status</li>
+          <li>network_peers</li>
+          <li>network_external_address</li>
+          <li>create_website</li>
+          <li>get_website</li>
+          <li>update_website</li>
+          <li>delete_website</li>
+          <li>create_invite</li>
+          <li>accept_invite</li>
+          <li>list_pending_invites</li>
+      </ul>
+    </div>
+
+    <h2>Test Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Test ID</th>
+          <th>Name</th>
+          <th>Error</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-001</td>
+          <td>All nodes health check</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-002</td>
+          <td>Check core status (unauthenticated)</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-003</td>
+          <td>Create vault for Alice</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-004</td>
+          <td>Create vault for Bob</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-005</td>
+          <td>Create vault for Charlie</td>
+          <td>-</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-006</td>
+          <td>Create vault for Dave</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-007</td>
+          <td>Verify authenticated status</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-008</td>
+          <td>Re-authenticate with password</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-008A</td>
+          <td>Logout before wrong password attempt</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-009</td>
+          <td>Reject wrong password</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-010</td>
+          <td>Re-authenticate after wrong password</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-001</td>
+          <td>Alice creates organisation</td>
+          <td>-</td>
+          <td>10ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-002</td>
+          <td>Alice creates group in organisation</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-003</td>
+          <td>Alice creates channel</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-004</td>
+          <td>Alice creates project</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-005</td>
+          <td>Get organisation by ID</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-006</td>
+          <td>List all entities</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-007</td>
+          <td>Bob creates personal entity</td>
+          <td>-</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-008</td>
+          <td>Verify entity isolation before join</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-001</td>
+          <td>Alice adds Bob as admin</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-002</td>
+          <td>Alice adds Charlie as member</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-003</td>
+          <td>Alice adds Dave as member</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-004</td>
+          <td>List organisation members</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-005</td>
+          <td>Admin Bob can modify membership</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-006</td>
+          <td>Member cannot remove admin</td>
+          <td class="error">Expected error containing &#39;permission&#39;, got &#39;Failed to remove member: Entity not found: 5893e4ab-caf8-48e7-b7c6-9083518d2612&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-007</td>
+          <td>Member cannot remove owner</td>
+          <td class="error">Expected error containing &#39;permission&#39;, got &#39;Failed to remove member: Entity not found: 5893e4ab-caf8-48e7-b7c6-9083518d2612&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-008</td>
+          <td>Admin can remove member</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-009</td>
+          <td>Re-add Charlie for further tests</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-010</td>
+          <td>Verify member list synced across nodes</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-001</td>
+          <td>Alice sends first message</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-002</td>
+          <td>Bob sends message</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-003</td>
+          <td>Charlie sends message</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-004</td>
+          <td>Dave sends message</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MSG-005</td>
+          <td>Verify messages synced to all nodes</td>
+          <td class="error">Expected result to contain Object {&quot;text&quot;: String(&quot;Hello team! This is our general channel.&quot;)}, got Object {&quot;messages&quot;: Array [Object {&quot;edited&quot;: Bool(false), &quot;id&quot;: String(&quot;ocean-forest-moon-star-1-1770019120429&quot;), &quot;reactions&quot;: Array [], &quot;reply_to_id&quot;: Null, &quot;sender_name&quot;: String(&quot;ocean-forest-moon-star&quot;), &quot;text&quot;: String(&quot;Hello team! This is our general channel.&quot;), &quot;timestamp&quot;: Number(1770019120429)}]}</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-006</td>
+          <td>Alice creates thread on Bob&#39;s message</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-007</td>
+          <td>Bob replies in thread</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-008</td>
+          <td>Charlie replies in thread</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MSG-009</td>
+          <td>Get thread messages</td>
+          <td class="error">Expected result to contain Object {&quot;text&quot;: String(&quot;Thanks Bob! Let&#39;s discuss the project here.&quot;)}, got Object {&quot;channel_id&quot;: String(&quot;0b01f53e-26c2-44ad-bcf9-e9d20ba8c460&quot;), &quot;messages&quot;: Array [], &quot;thread_id&quot;: String(&quot;${thread_id}&quot;)}</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-010</td>
+          <td>Verify message ordering</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-000</td>
+          <td>Ensure unlock lease for file operations</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-001</td>
+          <td>Alice writes file to org disk</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>FILE-002</td>
+          <td>Alice reads file from org disk</td>
+          <td class="error">Expected field &#39;content&#39; to be String(&quot;# Acme Corp\n\nWelcome to our organisation!&quot;), got Some(Array [Object {&quot;text&quot;: String(&quot;{\n  \&quot;content\&quot;: \&quot;# Acme Corp\\n\\nWelcome to our organisation!\&quot;\n}&quot;), &quot;type&quot;: String(&quot;text&quot;)}])</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-003</td>
+          <td>Bob writes file to org disk</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>FILE-004</td>
+          <td>List files on org disk</td>
+          <td class="error">Expected result to contain Object {&quot;files&quot;: Array [Object {&quot;name&quot;: String(&quot;guidelines.md&quot;)}]}, got Object {&quot;files&quot;: Array [Object {&quot;is_directory&quot;: Bool(false), &quot;mime_type&quot;: Null, &quot;modified_at&quot;: Number(1770019120), &quot;name&quot;: String(&quot;readme.md&quot;), &quot;path&quot;: String(&quot;/docs/readme.md&quot;), &quot;size_bytes&quot;: Number(41)}]}</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-005</td>
+          <td>Charlie writes meeting notes</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>FILE-006</td>
+          <td>Dave reads Charlie&#39;s file</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-007</td>
+          <td>Get org disk stats</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-008</td>
+          <td>Alice writes to project disk</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-009</td>
+          <td>Alice deletes file</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-010</td>
+          <td>Verify file deleted</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-011</td>
+          <td>Member write respects ACL</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-000</td>
+          <td>Ensure unlock lease for kanban tools</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-001</td>
+          <td>Alice creates kanban board</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-002</td>
+          <td>Get board details</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-003</td>
+          <td>Create To Do column</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-004</td>
+          <td>Create In Progress column</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-005</td>
+          <td>Create Done column</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-006</td>
+          <td>Create bug tag</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-007</td>
+          <td>Create feature tag</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-008</td>
+          <td>Alice creates card</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-009</td>
+          <td>Bob creates card</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-010</td>
+          <td>Charlie creates card</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-011</td>
+          <td>Assign card to Bob</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-012</td>
+          <td>Add feature tag to card</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-013</td>
+          <td>Move card to In Progress</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-014</td>
+          <td>Add steps to card</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-015</td>
+          <td>Add second step</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-016</td>
+          <td>Complete step</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-017</td>
+          <td>Add comment to card</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-018</td>
+          <td>List all cards</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-019</td>
+          <td>Verify board synced to Dave</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-020</td>
+          <td>Move card to Done</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-021</td>
+          <td>List columns</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-022</td>
+          <td>List tags</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-023</td>
+          <td>List comments</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-024</td>
+          <td>Update card title</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-025</td>
+          <td>Remove tag from card</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>KAN-026</td>
+          <td>List all boards</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-000</td>
+          <td>Ensure unlock lease for contacts</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-001</td>
+          <td>Alice creates contact for external partner</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-002</td>
+          <td>Bob creates contact</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-003</td>
+          <td>Get contact details</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-004</td>
+          <td>Update contact phone</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-005</td>
+          <td>List all contacts</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-006</td>
+          <td>Add contact to favourites</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-007</td>
+          <td>Search contacts by name</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-008</td>
+          <td>Search contacts by email</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-009</td>
+          <td>Link contact to organisation</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-010</td>
+          <td>Remove from favourites</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-011</td>
+          <td>Unlink contact from entity</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-012</td>
+          <td>Verify contacts visible to team</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-013</td>
+          <td>Delete contact</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>CON-014</td>
+          <td>Verify contact deleted</td>
+          <td class="error">Expected error containing &#39;not found&#39;, got &#39;Failed to get contact: Networking not started&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-001</td>
+          <td>Check network status on all nodes</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-002</td>
+          <td>Get external address</td>
+          <td class="error">Expected error containing &#39;Networking not started&#39;, got &#39;Unknown tool: network_external_address&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-003</td>
+          <td>List connected peers</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-004</td>
+          <td>Dave stops network</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-005</td>
+          <td>Verify Dave&#39;s network stopped</td>
+          <td>-</td>
+          <td>2001ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-006</td>
+          <td>Alice sends message while Dave offline</td>
+          <td>-</td>
+          <td>3ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-007</td>
+          <td>Dave restarts network</td>
+          <td>-</td>
+          <td>353ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-008</td>
+          <td>Wait for Dave to reconnect</td>
+          <td>-</td>
+          <td>5002ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-009</td>
+          <td>Verify Dave received offline message</td>
+          <td class="error">Expected result to contain Object {&quot;text&quot;: String(&quot;Message sent while Dave is offline&quot;)}, got Object {&quot;messages&quot;: Array [Object {&quot;edited&quot;: Bool(false), &quot;id&quot;: String(&quot;field-hill-fire-snow-1-1770019120430&quot;), &quot;reactions&quot;: Array [], &quot;reply_to_id&quot;: Null, &quot;sender_name&quot;: String(&quot;field-hill-fire-snow&quot;), &quot;text&quot;: String(&quot;Hello from the local node!&quot;), &quot;timestamp&quot;: Number(1770019120430)}]}</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-010</td>
+          <td>Alice checks peer count</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-011</td>
+          <td>All nodes check connectivity</td>
+          <td>-</td>
+          <td>3003ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>WEB-000</td>
+          <td>Ensure unlock lease for website tools</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-001</td>
+          <td>Alice creates organisation website</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>3ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-002</td>
+          <td>Get website details</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-003</td>
+          <td>Update website content</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-004</td>
+          <td>Verify website updated</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-005</td>
+          <td>Charlie creates personal website</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-006</td>
+          <td>Dave accesses Charlie&#39;s website</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-007</td>
+          <td>Charlie deletes website</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>WEB-008</td>
+          <td>Verify website deleted</td>
+          <td class="error">Expected error containing &#39;not found&#39;, got &#39;entity_id is required&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>INV-000</td>
+          <td>Ensure unlock lease for invite management</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>INV-001</td>
+          <td>Alice creates new project for invite testing</td>
+          <td>-</td>
+          <td>6ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-002</td>
+          <td>Alice invites Bob to project</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-003</td>
+          <td>Alice invites Charlie to project</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-004</td>
+          <td>Alice invites Dave to project</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-005</td>
+          <td>Bob lists pending invites</td>
+          <td class="error">Expected result to contain Object {&quot;entity_name&quot;: String(&quot;Secret Project&quot;)}, got Object {&quot;invites&quot;: Array []}</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-006</td>
+          <td>Bob accepts invite</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-007</td>
+          <td>Charlie accepts invite</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-008</td>
+          <td>Dave accepts invite</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-009</td>
+          <td>Verify all members joined</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-010</td>
+          <td>Verify Bob&#39;s admin role</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-011</td>
+          <td>Cannot accept already accepted invite</td>
+          <td class="error">Expected error containing &#39;already&#39;, got &#39;Failed to accept invite: invite not found: ${bob_invite_id}&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>INV-012</td>
+          <td>All members can access project</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>SYNC-000</td>
+          <td>Ensure unlock lease for sync flows</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>SYNC-001</td>
+          <td>Concurrent card edits merge correctly</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>SYNC-002</td>
+          <td>Verify concurrent edits merged</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>SYNC-003</td>
+          <td>Charlie goes offline</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>SYNC-004</td>
+          <td>Messages while Charlie offline</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>SYNC-005</td>
+          <td>Charlie reconnects</td>
+          <td>-</td>
+          <td>337ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>SYNC-006</td>
+          <td>Charlie syncs missed messages</td>
+          <td class="error">Expected result to contain Object {&quot;text&quot;: String(&quot;Alice message while Charlie offline&quot;)}, got Object {&quot;messages&quot;: Array [Object {&quot;edited&quot;: Bool(false), &quot;id&quot;: String(&quot;lake-valley-wind-rain-2-1770019120433&quot;), &quot;reactions&quot;: Array [], &quot;reply_to_id&quot;: String(&quot;${thread_id}&quot;), &quot;sender_name&quot;: String(&quot;lake-valley-wind-rain&quot;), &quot;text&quot;: String(&quot;I can help with the research.&quot;), &quot;timestamp&quot;: Number(1770019120433)}, Object {&quot;edited&quot;: Bool(false), &quot;id&quot;: String(&quot;lake-valley-wind-rain-1-1770019120430&quot;), &quot;reactions&quot;: Array [], &quot;reply_to_id&quot;: Null, &quot;sender_name&quot;: String(&quot;lake-valley-wind-rain&quot;), &quot;text&quot;: String(&quot;Hey everyone! Looking forward to collaborating.&quot;), &quot;timestamp&quot;: Number(1770019120430)}]}</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>SYNC-007</td>
+          <td>Dave goes offline</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>SYNC-008</td>
+          <td>Alice updates file while Dave offline</td>
+          <td>-</td>
+          <td>4ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>SYNC-009</td>
+          <td>Dave reconnects</td>
+          <td>-</td>
+          <td>270ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>SYNC-010</td>
+          <td>Dave syncs file update</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>SYNC-011</td>
+          <td>All nodes see same entities</td>
+          <td class="error">Expected result to contain Object {&quot;name&quot;: String(&quot;Acme Corp&quot;)}, got Object {&quot;entities&quot;: Array [Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;5893e4ab-caf8-48e7-b7c6-9083518d2612&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;0b01f53e-26c2-44ad-bcf9-e9d20ba8c460&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;66fd13f2-d956-4d5f-a2ff-888f0c0019b7&quot;), &quot;name&quot;: String(&quot;Secret Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;84f5a089-857a-48e6-8cdb-d43edd18eb2a&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;cefba421-39d3-4285-86a4-b2791d05ac11&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}]}</td>
+          <td>7ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>SYNC-012</td>
+          <td>Final connectivity check</td>
+          <td class="error">Expected field &#39;network_active&#39; to be Bool(true), got None</td>
+          <td>1ms</td>
+        </tr>
+
+      </tbody>
+    </table>
+
+    <h2>Unlock Telemetry</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Actor</th>
+          <th>Node</th>
+          <th>Event</th>
+          <th>Detail</th>
+          <th>TTL (s)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-02-02T07:58:40.396905+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.397261+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.397385+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.397388+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.397509+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_invalidated</td>
+          <td>lease reset</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.400905+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.401225+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.401340+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.401342+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.411311+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.412756+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.414734+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.416613+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.417177+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.417971+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.418262+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.418376+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.418378+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.420175+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.420804+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.421752+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.422695+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.423872+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.424394+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.424827+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.425161+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.425306+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.425311+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.425773+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.426135+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.426298+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.426303+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.426745+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.427240+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.427858+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.427900+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.427938+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.428053+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.428564+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.429439+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.430022+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.430544+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.431227+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.431281+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.431309+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.431358+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.431810+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.432309+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.432857+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.433323+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.433771+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.434248+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.434286+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.434324+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.434344+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.434465+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.436187+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.436733+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.438281+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.439018+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.440493+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.440910+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.441464+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.442498+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.443303+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.443778+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.445224+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.445262+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.445295+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.445317+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.445525+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.446024+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.446348+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.446657+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.446982+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.447399+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.447855+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.448236+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.448623+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.449008+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.449354+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.449680+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.450019+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.450345+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.450802+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.451193+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.451524+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.451879+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.452200+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.452605+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.452961+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.453326+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.453656+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.453995+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.454337+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.454674+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.455020+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.455049+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.455064+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.455164+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.455488+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.455835+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.456183+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.456499+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.456839+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.457117+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.457405+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.457701+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.458078+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.458441+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.458869+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.458895+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.459284+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.459670+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.460063+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.460098+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.460122+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.460249+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.460669+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.461017+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.461358+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:40.461771+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:42.464229+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 597s</td>
+          <td>597</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:42.468938+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 597s</td>
+          <td>597</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:42.820786+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 597s</td>
+          <td>597</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:47.823753+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:47.825411+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:47.827017+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:47.827197+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:47.827398+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:47.827620+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.831+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.831117+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.831199+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.831434+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.832001+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.835918+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.838507+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.840310+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.841473+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.842617+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.843919+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.844795+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.845693+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.845748+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.845806+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.845953+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.846274+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.852631+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.853850+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.854548+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.855208+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.855929+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.856900+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.857730+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.858399+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.858896+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.859387+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.860252+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.860325+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.860397+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.860648+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.861755+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.861873+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.861889+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.862042+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.862419+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.862450+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.863105+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.863720+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.864296+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.864323+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.864859+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.865092+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:50.866041+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.204187+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.206199+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.207806+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.212037+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.483071+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.488127+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.488245+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.489146+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.489187+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.492212+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.492221+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.492340+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T07:58:51.492479+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

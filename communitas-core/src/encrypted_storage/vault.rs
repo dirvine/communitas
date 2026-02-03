@@ -1,27 +1,27 @@
-//! Encrypted Vault Implementation
+//! Local Vault Implementation
 //!
-//! Each vault represents a single four-word identity's encrypted storage.
+//! Each vault represents a single four-word identity's local storage.
 //! Vaults support multiple data types: identity data, local files, cached content,
 //! and collaborative data with Forward Error Correction.
 
-use crate::encrypted_storage::{KeyManager, StorageConfig, fec_storage::FecStorage};
+use crate::encrypted_storage::{StorageConfig, fec_storage::FecStorage};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::sync::RwLock;
-use zeroize::Zeroizing;
 
-/// Represents an encrypted vault for a four-word identity
+const INDEX_FILE: &str = "index.json";
+const IDENTITY_FILE: &str = "identity.json";
+
+/// Represents a local vault for a four-word identity
 pub struct EncryptedVault {
     pub four_words: String,
     pub display_name: String,
     metadata: VaultMetadata,
-    encryption_key: Zeroizing<Vec<u8>>,
-    data_store: RwLock<HashMap<String, EncryptedEntry>>,
+    data_store: RwLock<HashMap<String, VaultEntry>>,
     vault_path: PathBuf,
-    key_manager: KeyManager,
     fec_storage: Option<FecStorage>,
 }
 
@@ -31,7 +31,9 @@ pub struct VaultMetadata {
     pub version: u32,
     pub created_at: u64,
     pub last_accessed: u64,
+    #[serde(default)]
     pub salt: Vec<u8>,
+    #[serde(default)]
     pub pbkdf2_iterations: u32,
     pub total_size: u64,
     pub entry_count: usize,
@@ -39,17 +41,24 @@ pub struct VaultMetadata {
     /// Display name stored unencrypted for vault listing without needing to decrypt
     #[serde(default)]
     pub display_name: String,
+    /// Whether the vault contents are encrypted (legacy). Defaults to true for backward compatibility.
+    #[serde(default = "default_metadata_encrypted")]
+    pub encrypted: bool,
 }
 
-/// Individual encrypted entry in the vault
+fn default_metadata_encrypted() -> bool {
+    true
+}
+
+/// Individual entry in the vault
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct EncryptedEntry {
+struct VaultEntry {
     key: String,
-    encrypted_data: Vec<u8>,
+    data: Vec<u8>,
     metadata: EntryMetadata,
 }
 
-/// Metadata for each encrypted entry
+/// Metadata for each entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EntryMetadata {
     created_at: u64,
@@ -82,8 +91,6 @@ impl EncryptedVault {
     pub async fn create(
         four_words: String,
         display_name: String,
-        encryption_key: Zeroizing<Vec<u8>>,
-        salt: Vec<u8>,
         config: &StorageConfig,
     ) -> Result<Self> {
         let vault_path = config.vault_dir.join(&four_words);
@@ -94,15 +101,16 @@ impl EncryptedVault {
             .context("Failed to create vault directory")?;
 
         let metadata = VaultMetadata {
-            version: 1,
+            version: 2,
             created_at: current_timestamp(),
             last_accessed: current_timestamp(),
-            salt,
-            pbkdf2_iterations: config.pbkdf2_iterations,
+            salt: Vec::new(),
+            pbkdf2_iterations: 0,
             total_size: 0,
             entry_count: 0,
             checksum: vec![],
             display_name: display_name.clone(),
+            encrypted: false,
         };
 
         // Save metadata
@@ -110,24 +118,14 @@ impl EncryptedVault {
         let metadata_json = serde_json::to_vec(&metadata)?;
         fs::write(&metadata_path, metadata_json).await?;
 
-        let key_manager = KeyManager::new(config.pbkdf2_iterations, config.use_keyring).await?;
-
-        // 🔒 SECURITY: Create password verifier for empty vaults
-        // This allows password validation even before any data is stored
-        let verifier_data = b"communitas:password:verifier:v1";
-        let encrypted_verifier = key_manager.encrypt(&encryption_key, verifier_data)?;
-        let verifier_path = vault_path.join("password.verifier");
-        fs::write(&verifier_path, encrypted_verifier).await?;
-
         // Store identity data (display name) for loading
         let identity_data = IdentityData {
             display_name: display_name.clone(),
             created_at: current_timestamp(),
         };
         let identity_json = serde_json::to_vec(&identity_data)?;
-        let encrypted_identity = key_manager.encrypt(&encryption_key, &identity_json)?;
-        let identity_path = vault_path.join("identity.enc");
-        fs::write(&identity_path, encrypted_identity).await?;
+        let identity_path = vault_path.join(IDENTITY_FILE);
+        fs::write(&identity_path, identity_json).await?;
 
         let fec_storage = if config.enable_fec {
             Some(FecStorage::new(&vault_path, config.fec_redundancy).await?)
@@ -139,16 +137,14 @@ impl EncryptedVault {
             four_words,
             display_name,
             metadata,
-            encryption_key,
             data_store: RwLock::new(HashMap::new()),
             vault_path,
-            key_manager,
             fec_storage,
         })
     }
 
     /// Load an existing vault
-    pub async fn load(four_words: &str, password: &str, config: &StorageConfig) -> Result<Self> {
+    pub async fn load(four_words: &str, config: &StorageConfig) -> Result<Self> {
         let vault_path = config.vault_dir.join(four_words);
 
         // Load metadata
@@ -158,42 +154,35 @@ impl EncryptedVault {
             .context("Failed to read vault metadata")?;
         let metadata: VaultMetadata = serde_json::from_slice(&metadata_json)?;
 
-        // Derive encryption key
-        let key_manager = KeyManager::new(metadata.pbkdf2_iterations, config.use_keyring).await?;
-        let encryption_key = key_manager.derive_key(password, &metadata.salt).await?;
+        if metadata.encrypted {
+            return Err(anyhow::anyhow!(
+                "Encrypted vault detected; migrate or recreate vault to continue"
+            ));
+        }
 
-        // 🔒 SECURITY FIX: Always validate password by decrypting something
-        // Load encrypted entries index
-        let index_path = vault_path.join("index.enc");
+        let index_path = vault_path.join(INDEX_FILE);
         let data_store = if index_path.exists() {
-            let encrypted_index = fs::read(&index_path).await?;
-            // This decrypt() call will FAIL with wrong password due to AEAD authentication tag
-            let decrypted_index = key_manager
-                .decrypt(&encryption_key, &encrypted_index)
-                .context("Invalid password or corrupted vault")?;
-            let entries: HashMap<String, EncryptedEntry> = serde_json::from_slice(&decrypted_index)
-                .context("Invalid password or corrupted vault index")?;
+            let index_bytes = fs::read(&index_path).await?;
+            let entries: HashMap<String, VaultEntry> =
+                serde_json::from_slice(&index_bytes).context("Invalid vault index")?;
             RwLock::new(entries)
+        } else if vault_path.join("index.enc").exists() {
+            return Err(anyhow::anyhow!(
+                "Encrypted vault index detected; migrate or recreate vault to continue"
+            ));
         } else {
-            // 🔒 SECURITY: For new vaults without index, validate password via password verifier
-            // Store a password verifier on vault creation to enable validation even for empty vaults
-            let verifier_path = vault_path.join("password.verifier");
-            if verifier_path.exists() {
-                let encrypted_verifier = fs::read(&verifier_path).await?;
-                let _verification = key_manager
-                    .decrypt(&encryption_key, &encrypted_verifier)
-                    .context("Invalid password")?;
-                // Password is valid
-            }
-            // If no verifier exists (legacy vault), we can't validate password for empty vaults
-            // This is acceptable as index.enc will be created on first data store
             RwLock::new(HashMap::new())
         };
 
-        // Load display name from encrypted identity data
-        let display_name = Self::load_display_name(&vault_path, &encryption_key, &key_manager)
+        let display_name = Self::load_display_name(&vault_path)
             .await
-            .unwrap_or_else(|_| "Unknown".to_string());
+            .unwrap_or_else(|_| {
+                if !metadata.display_name.is_empty() {
+                    metadata.display_name.clone()
+                } else {
+                    "Unknown".to_string()
+                }
+            });
 
         let fec_storage = if config.enable_fec {
             Some(FecStorage::new(&vault_path, config.fec_redundancy).await?)
@@ -205,15 +194,13 @@ impl EncryptedVault {
             four_words: four_words.to_string(),
             display_name,
             metadata,
-            encryption_key,
             data_store,
             vault_path,
-            key_manager,
             fec_storage,
         })
     }
 
-    /// Store encrypted data
+    /// Store data
     pub async fn store(&self, key: &str, data: &[u8]) -> Result<()> {
         self.store_internal(key, data, ContentType::LocalFile, None)
             .await
@@ -221,17 +208,14 @@ impl EncryptedVault {
 
     /// Store with Forward Error Correction
     pub async fn store_with_fec(&self, key: &str, data: &[u8], redundancy: f32) -> Result<()> {
-        // Encrypt data first
-        let encrypted = self.key_manager.encrypt(&self.encryption_key, data)?;
-
         // Store with FEC if available
         if let Some(fec) = &self.fec_storage {
-            let shard_paths = fec.store_with_fec(key, &encrypted, redundancy).await?;
+            let shard_paths = fec.store_with_fec(key, data, redundancy).await?;
 
             // Update entry metadata
-            let entry = EncryptedEntry {
+            let entry = VaultEntry {
                 key: key.to_string(),
-                encrypted_data: vec![], // Data is in FEC shards
+                data: vec![], // Data is in FEC shards
                 metadata: EntryMetadata {
                     created_at: current_timestamp(),
                     modified_at: current_timestamp(),
@@ -242,8 +226,10 @@ impl EncryptedVault {
                 },
             };
 
-            let mut store = self.data_store.write().await;
-            store.insert(key.to_string(), entry);
+            {
+                let mut store = self.data_store.write().await;
+                store.insert(key.to_string(), entry);
+            }
 
             self.save_index().await?;
         } else {
@@ -254,7 +240,7 @@ impl EncryptedVault {
         Ok(())
     }
 
-    /// Retrieve encrypted data
+    /// Retrieve data
     pub async fn retrieve(&self, key: &str) -> Result<Vec<u8>> {
         let store = self.data_store.read().await;
         let entry = store
@@ -265,20 +251,13 @@ impl EncryptedVault {
         if let Some(shard_paths) = &entry.metadata.fec_shards
             && let Some(fec) = &self.fec_storage
         {
-            let encrypted = fec.retrieve_from_fec(shard_paths).await?;
-            let decrypted = self.key_manager.decrypt(&self.encryption_key, &encrypted)?;
-            return Ok(decrypted.to_vec());
+            let data = fec.retrieve_from_fec(shard_paths).await?;
+            return Ok(data);
         }
 
-        // Regular encrypted data
-        let decrypted = self
-            .key_manager
-            .decrypt(&self.encryption_key, &entry.encrypted_data)?;
-
-        // Decompress if needed
+        // Regular data
         let data = match entry.metadata.compression {
-            Some(CompressionType::None) => decrypted.to_vec(),
-            _ => decrypted.to_vec(),
+            Some(CompressionType::None) | None => entry.data.clone(),
         };
 
         Ok(data)
@@ -286,9 +265,12 @@ impl EncryptedVault {
 
     /// Delete an entry
     pub async fn delete(&self, key: &str) -> Result<()> {
-        let mut store = self.data_store.write().await;
+        let entry = {
+            let mut store = self.data_store.write().await;
+            store.remove(key)
+        };
 
-        if let Some(entry) = store.remove(key) {
+        if let Some(entry) = entry {
             // Delete FEC shards if present
             if let Some(shard_paths) = entry.metadata.fec_shards {
                 for path in shard_paths {
@@ -297,7 +279,7 @@ impl EncryptedVault {
             }
 
             // Delete regular file
-            let file_path = self.vault_path.join(format!("{}.enc", key));
+            let file_path = self.vault_path.join(format!("{}.bin", key));
             let _ = fs::remove_file(file_path).await;
 
             self.save_index().await?;
@@ -360,19 +342,12 @@ impl EncryptedVault {
     }
 
     /// Import vault from backup
-    pub async fn import(
-        backup_data: &[u8],
-        password: &str,
-        config: &StorageConfig,
-    ) -> Result<Self> {
-        let export: VaultExport = serde_json::from_slice(backup_data)?;
+    pub async fn import(backup_data: &[u8], config: &StorageConfig) -> Result<Self> {
+        let mut export: VaultExport = serde_json::from_slice(backup_data)?;
 
-        // Create vault with imported metadata
-        let key_manager =
-            KeyManager::new(export.metadata.pbkdf2_iterations, config.use_keyring).await?;
-        let encryption_key = key_manager
-            .derive_key(password, &export.metadata.salt)
-            .await?;
+        export.metadata.encrypted = false;
+        export.metadata.pbkdf2_iterations = 0;
+        export.metadata.salt = Vec::new();
 
         let vault_path = config.vault_dir.join(&export.four_words);
         fs::create_dir_all(&vault_path).await?;
@@ -381,6 +356,15 @@ impl EncryptedVault {
         let metadata_path = vault_path.join("vault.meta");
         let metadata_json = serde_json::to_vec(&export.metadata)?;
         fs::write(&metadata_path, metadata_json).await?;
+
+        // Save identity data (display name)
+        let identity_data = IdentityData {
+            display_name: export.display_name.clone(),
+            created_at: current_timestamp(),
+        };
+        let identity_json = serde_json::to_vec(&identity_data)?;
+        let identity_path = vault_path.join(IDENTITY_FILE);
+        fs::write(&identity_path, identity_json).await?;
 
         let fec_storage = if config.enable_fec {
             Some(FecStorage::new(&vault_path, config.fec_redundancy).await?)
@@ -392,14 +376,13 @@ impl EncryptedVault {
             four_words: export.four_words,
             display_name: export.display_name,
             metadata: export.metadata,
-            encryption_key,
             data_store: RwLock::new(export.entries.unwrap_or_default().into_iter().collect()),
-            vault_path,
-            key_manager,
+            vault_path: vault_path.clone(),
             fec_storage,
         };
 
         vault.save_index().await?;
+        vault.persist_entries().await?;
 
         Ok(vault)
     }
@@ -416,15 +399,10 @@ impl EncryptedVault {
         // Compress if requested (currently no compression)
         let compressed_data = data.to_vec();
 
-        // Encrypt
-        let encrypted = self
-            .key_manager
-            .encrypt(&self.encryption_key, &compressed_data)?;
-
         // Create entry
-        let entry = EncryptedEntry {
+        let entry = VaultEntry {
             key: key.to_string(),
-            encrypted_data: encrypted.clone(),
+            data: compressed_data.clone(),
             metadata: EntryMetadata {
                 created_at: current_timestamp(),
                 modified_at: current_timestamp(),
@@ -436,12 +414,17 @@ impl EncryptedVault {
         };
 
         // Store in memory
-        let mut store = self.data_store.write().await;
-        store.insert(key.to_string(), entry);
+        {
+            let mut store = self.data_store.write().await;
+            store.insert(key.to_string(), entry);
+        }
 
         // Store on disk
-        let file_path = self.vault_path.join(format!("{}.enc", key));
-        fs::write(file_path, encrypted).await?;
+        let file_path = self.vault_path.join(format!("{}.bin", key));
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).await.ok();
+        }
+        fs::write(file_path, compressed_data).await?;
 
         // Update index
         self.save_index().await?;
@@ -452,12 +435,9 @@ impl EncryptedVault {
     async fn save_index(&self) -> Result<()> {
         let store = self.data_store.read().await;
         let index_json = serde_json::to_vec(&*store)?;
-        let encrypted_index = self
-            .key_manager
-            .encrypt(&self.encryption_key, &index_json)?;
 
-        let index_path = self.vault_path.join("index.enc");
-        fs::write(index_path, encrypted_index).await?;
+        let index_path = self.vault_path.join(INDEX_FILE);
+        fs::write(index_path, index_json).await?;
 
         Ok(())
     }
@@ -468,26 +448,40 @@ impl EncryptedVault {
 
         for (key, entry) in store.iter() {
             hasher.update(key.as_bytes());
-            hasher.update(&entry.encrypted_data);
+            hasher.update(&entry.data);
         }
 
         Ok(hasher.finalize().as_bytes().to_vec())
     }
 
-    async fn load_display_name(
-        vault_path: &Path,
-        encryption_key: &[u8],
-        key_manager: &KeyManager,
-    ) -> Result<String> {
-        let identity_path = vault_path.join("identity.enc");
+    async fn load_display_name(vault_path: &Path) -> Result<String> {
+        let identity_path = vault_path.join(IDENTITY_FILE);
         if identity_path.exists() {
-            let encrypted = fs::read(identity_path).await?;
-            let decrypted = key_manager.decrypt(encryption_key, &encrypted)?;
-            let identity: IdentityData = serde_json::from_slice(&decrypted)?;
+            let raw = fs::read(identity_path).await?;
+            let identity: IdentityData = serde_json::from_slice(&raw)?;
             Ok(identity.display_name)
+        } else if vault_path.join("identity.enc").exists() {
+            Err(anyhow::anyhow!(
+                "Encrypted identity data detected; migrate or recreate vault to continue"
+            ))
         } else {
             Err(anyhow::anyhow!("Identity data not found"))
         }
+    }
+
+    async fn persist_entries(&self) -> Result<()> {
+        let store = self.data_store.read().await;
+        for entry in store.values() {
+            if entry.metadata.fec_shards.is_some() || entry.data.is_empty() {
+                continue;
+            }
+            let file_path = self.vault_path.join(format!("{}.bin", entry.key));
+            if let Some(parent) = file_path.parent() {
+                fs::create_dir_all(parent).await.ok();
+            }
+            fs::write(file_path, &entry.data).await?;
+        }
+        Ok(())
     }
 }
 
@@ -496,7 +490,7 @@ struct VaultExport {
     four_words: String,
     display_name: String,
     metadata: VaultMetadata,
-    entries: Option<Vec<(String, EncryptedEntry)>>,
+    entries: Option<Vec<(String, VaultEntry)>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -519,51 +513,6 @@ fn current_timestamp() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0) // Fallback to epoch if system time is before UNIX_EPOCH (should never happen)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_vault_operations() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = StorageConfig {
-            vault_dir: temp_dir.path().to_path_buf(),
-            use_keyring: false,
-            ..Default::default()
-        };
-
-        let key = Zeroizing::new(vec![0u8; 32]);
-        let salt = vec![1u8; 32];
-
-        let vault = EncryptedVault::create(
-            "test-vault".to_string(),
-            "Test User".to_string(),
-            key,
-            salt,
-            &config,
-        )
-        .await
-        .unwrap();
-
-        // Store and retrieve data
-        let test_data = b"Test data for vault";
-        vault.store("test_key", test_data).await.unwrap();
-
-        let retrieved = vault.retrieve("test_key").await.unwrap();
-        assert_eq!(retrieved, test_data);
-
-        // List keys
-        let keys = vault.list_keys().await;
-        assert_eq!(keys.len(), 1);
-        assert!(keys.contains(&"test_key".to_string()));
-
-        // Delete entry
-        vault.delete("test_key").await.unwrap();
-        assert!(vault.retrieve("test_key").await.is_err());
-    }
+        .unwrap_or_default()
+        .as_secs()
 }

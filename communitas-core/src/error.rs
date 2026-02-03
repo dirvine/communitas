@@ -55,13 +55,19 @@ mod tests {
         assert!(format!("{}", io_error).contains("I/O error"));
 
         let validation_error = AppError::Validation("invalid input".to_string());
-        assert_eq!(format!("{}", validation_error), "Validation error: invalid input");
+        assert_eq!(
+            format!("{}", validation_error),
+            "Validation error: invalid input"
+        );
 
         let not_found_error = AppError::NotFound("file.txt".to_string());
         assert_eq!(format!("{}", not_found_error), "Not found: file.txt");
 
         let network_error = AppError::Network("connection refused".to_string());
-        assert_eq!(format!("{}", network_error), "Network error: connection refused");
+        assert_eq!(
+            format!("{}", network_error),
+            "Network error: connection refused"
+        );
     }
 
     #[test]
@@ -72,7 +78,7 @@ mod tests {
 
     #[test]
     fn test_error_from_toml() {
-        let toml_err: AppError = "parse error at line 1".to_string().into();
+        let toml_err: AppError = toml::from_str::<toml::Value>("=").unwrap_err().into();
         assert!(format!("{}", toml_err).contains("TOML error"));
     }
 

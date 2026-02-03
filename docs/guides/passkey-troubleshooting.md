@@ -1,5 +1,7 @@
 # Passkey Troubleshooting Guide
 
+> Status (2026-02-02): Passkey support is deferred and currently unavailable. This guide is retained for future reintroduction.
+
 **Troubleshooting common passkey and biometric authentication issues**
 
 ## Quick Diagnosis

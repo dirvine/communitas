@@ -1,0 +1,553 @@
+{
+  "timestamp": "2026-02-02T20:40:25.630737Z",
+  "scenario_name": "Combined Scenario",
+  "tools_covered": [
+    "health_check",
+    "create_vault",
+    "authenticate",
+    "authenticate_token",
+    "core_status",
+    "network_status",
+    "network_start",
+    "create_entity",
+    "get_entity",
+    "list_entities",
+    "join_entity",
+    "write_file",
+    "read_file",
+    "list_files",
+    "delete_file",
+    "get_disk_stats"
+  ],
+  "total_tests": 32,
+  "passed": 29,
+  "failed": 3,
+  "results": [
+    {
+      "test_id": "AUTH-001",
+      "test_name": "All nodes health check",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "AUTH-002",
+      "test_name": "Check core status (unauthenticated)",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 0
+    },
+    {
+      "test_id": "AUTH-003",
+      "test_name": "Create vault for Alice",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 2
+    },
+    {
+      "test_id": "AUTH-004",
+      "test_name": "Create vault for Bob",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "AUTH-005",
+      "test_name": "Create vault for Charlie",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "AUTH-006",
+      "test_name": "Create vault for Dave",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "AUTH-007",
+      "test_name": "Verify authenticated status",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 0
+    },
+    {
+      "test_id": "AUTH-008",
+      "test_name": "Re-authenticate with password",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "AUTH-009",
+      "test_name": "Reject wrong password",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "AUTH-010",
+      "test_name": "Ensure networking active",
+      "passed": false,
+      "error_message": "Failed to start networking for actor alice on alice",
+      "duration_ms": 30006
+    },
+    {
+      "test_id": "ENT-001",
+      "test_name": "Alice creates organisation",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 2
+    },
+    {
+      "test_id": "ENT-002",
+      "test_name": "Alice creates group in organisation",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "ENT-003",
+      "test_name": "Alice creates channel",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "ENT-004",
+      "test_name": "Alice creates project",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "ENT-005",
+      "test_name": "Get organisation by ID",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 0
+    },
+    {
+      "test_id": "ENT-006",
+      "test_name": "List all entities",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 10
+    },
+    {
+      "test_id": "ENT-007",
+      "test_name": "Bob creates personal entity",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "ENT-008",
+      "test_name": "Verify entity isolation before join",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 12
+    },
+    {
+      "test_id": "ENT-009",
+      "test_name": "Bob joins organisation",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "ENT-010",
+      "test_name": "Charlie joins organisation",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "ENT-011",
+      "test_name": "Dave joins organisation",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 2
+    },
+    {
+      "test_id": "FILE-001",
+      "test_name": "Alice writes file to org disk",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "FILE-002",
+      "test_name": "Alice reads file from org disk",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 0
+    },
+    {
+      "test_id": "FILE-003",
+      "test_name": "Bob writes file to org disk",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "FILE-004",
+      "test_name": "List files on org disk",
+      "passed": false,
+      "error_message": "Expected result to contain Object {\"files\": Array [Object {\"name\": String(\"guidelines.md\")}]}, got Object {\"files\": Array [Object {\"is_directory\": Bool(false), \"mime_type\": Null, \"modified_at\": Number(1770064825), \"name\": String(\"readme.md\"), \"path\": String(\"/docs/readme.md\"), \"size_bytes\": Number(41)}]}",
+      "duration_ms": 0
+    },
+    {
+      "test_id": "FILE-005",
+      "test_name": "Charlie writes meeting notes",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "FILE-006",
+      "test_name": "Dave reads Charlie's file",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 0
+    },
+    {
+      "test_id": "FILE-007",
+      "test_name": "Get org disk stats",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 0
+    },
+    {
+      "test_id": "FILE-008",
+      "test_name": "Alice writes to project disk",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "FILE-009",
+      "test_name": "Alice deletes file",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    },
+    {
+      "test_id": "FILE-010",
+      "test_name": "Verify file deleted",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 0
+    },
+    {
+      "test_id": "FILE-011",
+      "test_name": "Member write respects ACL",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 1
+    }
+  ],
+  "unlock_events": [
+    {
+      "timestamp": "2026-02-02T20:39:55.575808Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.575858Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.575889Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576002Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576733Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576758Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576760Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576776Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576875Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576881Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576912Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576918Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576926Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576927Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576932Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T20:39:55.576934Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.582682Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.585220Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.586895Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.588721Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.590096Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.590690Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.600902Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.602760Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.615677Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.617126Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.618525Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.620678Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.622261Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.622799Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.624068Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.624763Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.625939Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.626379Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.626932Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.627981Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.628988Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    },
+    {
+      "timestamp": "2026-02-02T20:40:25.629558Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 569s",
+      "ttl_seconds": 569
+    }
+  ]
+}

@@ -1,18 +1,15 @@
-//! Encrypted Local Storage System for Communitas
+//! Local Storage System for Communitas
 //!
-//! This module implements a sophisticated multi-layered encrypted storage system that:
+//! This module implements a multi-identity local storage system that:
 //! - Supports multiple accounts per device with secure switching
-//! - Uses PBKDF2 for key derivation (100,000 iterations as per DESIGN.md)
-//! - Implements ChaCha20-Poly1305 for encryption (superior to AES-GCM on most CPUs)
 //! - Provides Forward Error Correction via Reed-Solomon for resilience
-//! - Integrates with platform-specific secure storage (keyring)
-//! - Enables password-only login on familiar devices
+//! - Integrates with platform-specific storage paths
 //!
 //! Architecture:
 //! ```text
 //! ┌─────────────────────────────────────────────────────────┐
 //! │                  User Authentication                    │
-//! │         (Password / Passkey / Four-Word Address)       │
+//! │         (Password / Four-Word Address)                │
 //! └──────────────────────┬──────────────────────────────────┘
 //!                        ▼
 //! ┌─────────────────────────────────────────────────────────┐
@@ -38,28 +35,26 @@
 
 pub mod app_config;
 pub mod fec_storage;
+pub mod identity_store;
 pub mod key_management;
-pub mod passkey;
 pub mod platform_storage;
 pub mod session;
 pub mod vault;
-pub mod webauthn;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub use app_config::*;
 pub use fec_storage::*;
+pub use identity_store::*;
 pub use key_management::*;
-pub use passkey::*;
 pub use platform_storage::*;
 pub use session::*;
 pub use vault::*;
-pub use webauthn::*;
 
 /// Configuration for the encrypted storage system
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,10 +100,8 @@ pub struct EncryptedStorageManager {
     config: StorageConfig,
     vaults: Arc<RwLock<HashMap<String, Arc<EncryptedVault>>>>,
     active_sessions: Arc<RwLock<HashMap<String, Session>>>,
-    key_manager: Arc<KeyManager>,
     platform_storage: Arc<PlatformStorage>,
     app_config: Arc<RwLock<AppConfigManager>>,
-    passkey_manager: Arc<PasskeyManager>,
 }
 
 impl EncryptedStorageManager {
@@ -118,13 +111,6 @@ impl EncryptedStorageManager {
         let platform_storage = Arc::new(
             PlatformStorage::new(&config.vault_dir)
                 .context("Failed to initialize platform storage")?,
-        );
-
-        // Initialize key manager with PBKDF2
-        let key_manager = Arc::new(
-            KeyManager::new(config.pbkdf2_iterations, config.use_keyring)
-                .await
-                .context("Failed to initialize key manager")?,
         );
 
         // Initialize app config manager (config stored in parent of vault_dir)
@@ -139,31 +125,22 @@ impl EncryptedStorageManager {
                 .context("Failed to initialize app config")?,
         ));
 
-        // Initialize passkey manager (passkeys stored in config dir)
-        let passkey_storage_dir = config_dir.join("passkeys");
-        let passkey_manager = Arc::new(
-            PasskeyManager::new(&passkey_storage_dir)
-                .context("Failed to initialize passkey manager")?,
-        );
-
         Ok(Self {
             config,
             vaults: Arc::new(RwLock::new(HashMap::new())),
             active_sessions: Arc::new(RwLock::new(HashMap::new())),
-            key_manager,
             platform_storage,
             app_config,
-            passkey_manager,
         })
     }
 
+    /// Get the vault directory path
+    pub fn vault_dir(&self) -> &Path {
+        &self.config.vault_dir
+    }
+
     /// Create a new vault for a four-word identity
-    pub async fn create_vault(
-        &self,
-        four_words: &str,
-        password: &str,
-        display_name: &str,
-    ) -> Result<String> {
+    pub async fn create_vault(&self, four_words: &str, display_name: &str) -> Result<String> {
         // Validate four-word address
         let normalized = self.normalize_four_words(four_words);
 
@@ -172,70 +149,25 @@ impl EncryptedStorageManager {
             return Err(anyhow::anyhow!("Vault already exists for {}", four_words));
         }
 
-        // Derive encryption key from password
-        let salt = generate_salt();
-        let key = self
-            .key_manager
-            .derive_key(password, &salt)
-            .await
-            .context("Failed to derive encryption key")?;
-
         // Create vault
-        let vault = EncryptedVault::create(
-            normalized.clone(),
-            display_name.to_string(),
-            key.clone(),
-            salt,
-            &self.config,
-        )
-        .await
-        .context("Failed to create vault")?;
+        let vault =
+            EncryptedVault::create(normalized.clone(), display_name.to_string(), &self.config)
+                .await
+                .context("Failed to create vault")?;
 
         // Store vault
         let mut vaults = self.vaults.write().await;
         vaults.insert(normalized.clone(), Arc::new(vault));
 
-        // Store password hash for password-only login
-        self.store_password_locator(&normalized, password).await?;
-
-        // If keyring is enabled, store master key
-        if self.config.use_keyring {
-            self.key_manager
-                .store_in_keyring(&normalized, &key)
-                .await
-                .ok(); // Non-fatal if keyring fails
-        }
-
         Ok(normalized)
     }
 
-    /// Login with password only (searches all vaults)
-    pub async fn login_password_only(&self, password: &str) -> Result<Session> {
-        // Generate password hash for lookup
-        let password_hash = self.key_manager.hash_password(password).await?;
-
-        // Find matching vault
-        let four_words = self
-            .platform_storage
-            .find_vault_by_password_hash(&password_hash)
-            .await
-            .context("No vault found for this password")?;
-
-        // Login with found four-words
-        self.login(&four_words, password, None).await
-    }
-
-    /// Login with four-word address and password
-    pub async fn login(
-        &self,
-        four_words: &str,
-        password: &str,
-        _passkey: Option<Vec<u8>>,
-    ) -> Result<Session> {
+    /// Login with four-word address
+    pub async fn login(&self, four_words: &str) -> Result<Session> {
         let normalized = self.normalize_four_words(four_words);
 
         // Load or open vault
-        let vault = self.load_vault(&normalized, password).await?;
+        let vault = self.load_vault(&normalized).await?;
 
         // Create session
         let session = Session::new(
@@ -254,42 +186,6 @@ impl EncryptedStorageManager {
             .set_last_identity(normalized.clone(), vault.display_name.clone())
             .await
             .ok(); // Non-fatal if config update fails
-
-        // Store password in keyring if enabled
-        if self.config.use_keyring && app_config.get_config().keyring_enabled {
-            tracing::info!(
-                "🔑 LOGIN: Attempting to store password in keyring for '{}'",
-                normalized
-            );
-            match self
-                .key_manager
-                .store_in_keyring(&normalized, password.as_bytes())
-                .await
-            {
-                Ok(()) => {
-                    tracing::info!(
-                        "✅ LOGIN: Password stored in keyring successfully for '{}'",
-                        normalized
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "❌ LOGIN: Failed to store password in keyring for '{}': {}",
-                        normalized,
-                        e
-                    );
-                    tracing::error!(
-                        "⚠️ LOGIN: This means passkey/Touch ID authentication will fail later!"
-                    );
-                }
-            }
-        } else {
-            tracing::warn!(
-                "⚠️ LOGIN: Keyring storage skipped - use_keyring={}, keyring_enabled={}",
-                self.config.use_keyring,
-                app_config.get_config().keyring_enabled
-            );
-        }
 
         Ok(session)
     }
@@ -348,7 +244,7 @@ impl EncryptedStorageManager {
         // End current session
         self.logout(session_id).await?;
 
-        // Try password-less switch if vault is cached
+        // Try switch if vault is cached
         if let Some(vault) = self.vaults.read().await.get(four_words) {
             // Create new session for cached vault
             let session = Session::new(
@@ -363,7 +259,8 @@ impl EncryptedStorageManager {
             return Ok(session);
         }
 
-        Err(anyhow::anyhow!("Vault not cached, password required"))
+        // Load vault from disk
+        self.login(four_words).await
     }
 
     /// Logout and clear session
@@ -386,8 +283,8 @@ impl EncryptedStorageManager {
     }
 
     /// Import vault from backup
-    pub async fn import_vault(&self, backup_data: &[u8], password: &str) -> Result<String> {
-        let vault = EncryptedVault::import(backup_data, password, &self.config).await?;
+    pub async fn import_vault(&self, backup_data: &[u8]) -> Result<String> {
+        let vault = EncryptedVault::import(backup_data, &self.config).await?;
         let four_words = vault.four_words.clone();
 
         let mut vaults = self.vaults.write().await;
@@ -405,37 +302,22 @@ impl EncryptedStorageManager {
     pub async fn try_auto_login(&self) -> Result<Option<Session>> {
         let app_config = self.app_config.read().await;
         let config = app_config.get_config();
-
-        // Check if auto-login is enabled
-        if !config.auto_login_enabled {
-            return Ok(None);
-        }
-
-        // Get last identity
-        let four_words = match &config.last_identity {
-            Some(fw) => fw.clone(),
-            None => return Ok(None),
-        };
+        let mut candidate = config.last_identity.clone();
 
         drop(app_config); // Release lock
 
-        // Try to get password from keyring
-        if self.config.use_keyring
-            && let Ok(password_bytes) = self.key_manager.get_from_keyring(&four_words).await
-            && let Ok(password) = String::from_utf8(password_bytes.to_vec())
-        {
-            // Attempt login
-            match self.login(&four_words, &password, None).await {
-                Ok(session) => return Ok(Some(session)),
-                Err(_) => {
-                    // Login failed - possibly password changed
-                    // Remove from keyring
-                    self.key_manager.delete_from_keyring(&four_words).await.ok();
-                }
+        if candidate.is_none() {
+            let vaults = self.list_vaults().await?;
+            if let Some(most_recent) = vaults.iter().max_by_key(|vault| vault.last_accessed) {
+                candidate = Some(most_recent.four_words.clone());
             }
         }
 
-        Ok(None)
+        let Some(four_words) = candidate else {
+            return Ok(None);
+        };
+
+        self.login(&four_words).await.map(Some)
     }
 
     /// Update app configuration setting
@@ -469,168 +351,6 @@ impl EncryptedStorageManager {
             .await
     }
 
-    // Passkey (biometric) methods
-
-    /// Register passkey/biometric for an identity
-    pub async fn passkey_register(
-        &self,
-        four_words: &str,
-        device_name: &str,
-    ) -> Result<PasskeyInfo> {
-        let normalized = self.normalize_four_words(four_words);
-
-        // Register passkey
-        let info = self
-            .passkey_manager
-            .register_passkey(&normalized, device_name)
-            .await?;
-
-        // Update app config to mark passkey as available
-        let mut app_config = self.app_config.write().await;
-        app_config
-            .set_identity_has_passkey(&normalized, true)
-            .await?;
-
-        Ok(info)
-    }
-
-    /// Register passkey with WebAuthn credential
-    ///
-    /// This stores the WebAuthn credential for true biometric authentication.
-    pub async fn passkey_register_webauthn(
-        &self,
-        four_words: &str,
-        device_name: &str,
-        credential: WebAuthnCredential,
-    ) -> Result<PasskeyInfo> {
-        let normalized = self.normalize_four_words(four_words);
-
-        // Register passkey with WebAuthn credential
-        let info = self
-            .passkey_manager
-            .register_passkey_webauthn(&normalized, device_name, credential)
-            .await?;
-
-        // Update app config to mark passkey as available
-        let mut app_config = self.app_config.write().await;
-        app_config
-            .set_identity_has_passkey(&normalized, true)
-            .await?;
-
-        Ok(info)
-    }
-
-    /// Authenticate with passkey/biometric and create session
-    ///
-    /// This uses the password stored in keyring after biometric verification
-    pub async fn passkey_authenticate(&self, four_words: &str) -> Result<Session> {
-        let normalized = self.normalize_four_words(four_words);
-
-        tracing::info!(
-            "🔍 RETRIEVAL: Attempting passkey auth for four_words='{}' -> normalized='{}'",
-            four_words,
-            normalized
-        );
-
-        // Check passkey is registered
-        if !self.passkey_manager.has_passkey(&normalized).await {
-            tracing::error!("❌ RETRIEVAL: No passkey registered for '{}'", normalized);
-            anyhow::bail!("No passkey registered for this identity");
-        }
-
-        tracing::info!("✅ RETRIEVAL: Passkey IS registered for '{}'", normalized);
-
-        // Mark passkey as used
-        self.passkey_manager
-            .mark_passkey_used(&normalized)
-            .await
-            .ok();
-
-        // Load vault using password from keyring
-        tracing::info!(
-            "🔍 RETRIEVAL: Checking keyring config - use_keyring={}",
-            self.config.use_keyring
-        );
-
-        if self.config.use_keyring {
-            tracing::info!(
-                "🔍 RETRIEVAL: Attempting to get password from keyring for '{}'",
-                normalized
-            );
-
-            match self.key_manager.get_from_keyring(&normalized).await {
-                Ok(password_bytes) => {
-                    tracing::info!(
-                        "✅ RETRIEVAL: Password bytes retrieved from keyring for '{}'",
-                        normalized
-                    );
-
-                    match String::from_utf8(password_bytes.to_vec()) {
-                        Ok(password) => {
-                            tracing::info!(
-                                "✅ RETRIEVAL: Password successfully decoded, attempting login for '{}'",
-                                normalized
-                            );
-                            // Login with stored password
-                            return self.login(&normalized, &password, None).await;
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "❌ RETRIEVAL: Failed to decode password bytes for '{}': {}",
-                                normalized,
-                                e
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "❌ RETRIEVAL: Failed to get password from keyring for '{}': {}",
-                        normalized,
-                        e
-                    );
-                }
-            }
-        } else {
-            tracing::warn!("⚠️ RETRIEVAL: Keyring is disabled in config");
-        }
-
-        // If no password in keyring, cannot proceed
-        tracing::error!(
-            "❌ RETRIEVAL: No password found in keyring for '{}'",
-            normalized
-        );
-        anyhow::bail!(
-            "Passkey registered but vault password not found in keyring. Please login with password first."
-        )
-    }
-
-    /// Check if passkey is registered for identity
-    pub async fn passkey_has_passkey(&self, four_words: &str) -> bool {
-        let normalized = self.normalize_four_words(four_words);
-        self.passkey_manager.has_passkey(&normalized).await
-    }
-
-    /// Get passkey information
-    pub async fn passkey_get_info(&self, four_words: &str) -> Result<PasskeyInfo> {
-        let normalized = self.normalize_four_words(four_words);
-        self.passkey_manager.get_passkey_info(&normalized).await
-    }
-
-    /// Delete passkey for identity
-    pub async fn passkey_delete(&self, four_words: &str) -> Result<()> {
-        let normalized = self.normalize_four_words(four_words);
-        self.passkey_manager.delete_passkey(&normalized).await?;
-
-        // Update app config
-        let mut app_config = self.app_config.write().await;
-        app_config
-            .set_identity_has_passkey(&normalized, false)
-            .await?;
-
-        Ok(())
-    }
-
     /// Delete a vault permanently
     ///
     /// WARNING: This permanently deletes all encrypted data for this identity.
@@ -650,52 +370,11 @@ impl EncryptedStorageManager {
                 .map_err(|e| anyhow::anyhow!("Failed to delete vault directory: {}", e))?;
         }
 
-        // Remove password from keyring if exists
-        self.key_manager.delete_from_keyring(&normalized).await.ok();
-
-        // Remove passkey if exists
-        self.passkey_manager.delete_passkey(&normalized).await.ok();
-
         // Remove from app config recent identities
         let mut app_config = self.app_config.write().await;
         app_config.remove_recent_identity(&normalized).await?;
 
         Ok(())
-    }
-
-    /// Store password in platform keyring (for auto-login)
-    pub async fn store_password_in_keyring(&self, four_words: &str, password: &str) -> Result<()> {
-        let normalized = self.normalize_four_words(four_words);
-        tracing::info!(
-            "🔑 STORAGE: Storing password in keyring for four_words='{}' -> normalized='{}'",
-            four_words,
-            normalized
-        );
-        let result = self
-            .key_manager
-            .store_in_keyring(&normalized, password.as_bytes())
-            .await;
-
-        if result.is_ok() {
-            tracing::info!(
-                "✅ STORAGE: Password successfully stored in keyring for '{}'",
-                normalized
-            );
-        } else {
-            tracing::error!(
-                "❌ STORAGE: Failed to store password in keyring for '{}': {:?}",
-                normalized,
-                result
-            );
-        }
-
-        result
-    }
-
-    /// Remove password from platform keyring
-    pub async fn remove_password_from_keyring(&self, four_words: &str) -> Result<()> {
-        let normalized = self.normalize_four_words(four_words);
-        self.key_manager.delete_from_keyring(&normalized).await
     }
 
     // Helper methods
@@ -708,27 +387,16 @@ impl EncryptedStorageManager {
         self.platform_storage.vault_exists(four_words).await
     }
 
-    async fn load_vault(&self, four_words: &str, password: &str) -> Result<Arc<EncryptedVault>> {
-        // 🔒 SECURITY FIX: Always validate password by loading vault from disk
-        // Never trust cached vaults during authentication - they bypass password validation
-        // ChaCha20-Poly1305 AEAD will automatically fail decryption with wrong password
+    async fn load_vault(&self, four_words: &str) -> Result<Arc<EncryptedVault>> {
+        // Load from disk
+        let vault = EncryptedVault::load(four_words, &self.config).await?;
 
-        // Load from disk (this validates password via AEAD decryption)
-        let vault = EncryptedVault::load(four_words, password, &self.config).await?;
-
-        // Cache only AFTER successful password validation
+        // Cache only AFTER successful load
         let mut vaults = self.vaults.write().await;
         let vault_arc = Arc::new(vault);
         vaults.insert(four_words.to_string(), vault_arc.clone());
 
         Ok(vault_arc)
-    }
-
-    async fn store_password_locator(&self, four_words: &str, password: &str) -> Result<()> {
-        let password_hash = self.key_manager.hash_password(password).await?;
-        self.platform_storage
-            .store_password_locator(&password_hash, four_words)
-            .await
     }
 
     async fn validate_session(&self, session_id: &str) -> Result<Session> {
@@ -794,14 +462,6 @@ fn get_vault_directory() -> PathBuf {
     }
 }
 
-/// Generate a cryptographically secure salt
-fn generate_salt() -> Vec<u8> {
-    use rand::{Rng, SeedableRng};
-    let mut salt = vec![0u8; 32];
-    rand::rngs::StdRng::from_entropy().fill(&mut salt[..]);
-    salt
-}
-
 /// Vault metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultInfo {
@@ -830,17 +490,14 @@ mod tests {
 
         // Create vault
         let four_words = manager
-            .create_vault("ocean-forest-moon-star", "test_password", "Alice")
+            .create_vault("ocean-forest-moon-star", "Alice")
             .await
             .unwrap();
 
         assert_eq!(four_words, "ocean-forest-moon-star");
 
         // Login with four-words
-        let session = manager
-            .login("ocean-forest-moon-star", "test_password", None)
-            .await
-            .unwrap();
+        let session = manager.login("ocean-forest-moon-star").await.unwrap();
 
         assert_eq!(session.four_words, "ocean-forest-moon-star");
 
@@ -853,35 +510,6 @@ mod tests {
 
         let retrieved = manager.retrieve(&session.id, "test_key").await.unwrap();
         assert_eq!(retrieved, test_data);
-    }
-
-    #[tokio::test]
-    async fn test_password_only_login() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = StorageConfig {
-            vault_dir: temp_dir.path().to_path_buf(),
-            use_keyring: false,
-            ..Default::default()
-        };
-
-        let manager = EncryptedStorageManager::new(config).await.unwrap();
-
-        // Create vault
-        manager
-            .create_vault("river-mountain-sun-cloud", "unique_password", "Bob")
-            .await
-            .unwrap();
-
-        // Logout (simulate app restart)
-        // ...
-
-        // Login with password only
-        let session = manager
-            .login_password_only("unique_password")
-            .await
-            .unwrap();
-
-        assert_eq!(session.four_words, "river-mountain-sun-cloud");
     }
 
     #[tokio::test]
@@ -899,17 +527,14 @@ mod tests {
 
         // Create vault and login
         manager
-            .create_vault("test-fec-vault-storage", "password", "FEC Test")
+            .create_vault("test-fec-vault-storage", "FEC Test")
             .await
             .unwrap();
 
-        let session = manager
-            .login("test-fec-vault-storage", "password", None)
-            .await
-            .unwrap();
+        let session = manager.login("test-fec-vault-storage").await.unwrap();
 
         // Store large data with FEC
-        let large_data = vec![42u8; 1024 * 1024]; // 1MB
+        let large_data = vec![42u8; 128 * 1024]; // 128KB
         manager
             .store(&session.id, "large_file", &large_data, true)
             .await

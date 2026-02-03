@@ -402,10 +402,7 @@ impl McpServer {
             .as_str()
             .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
             .to_string();
-        let password = args["password"]
-            .as_str()
-            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
-            .to_string();
+        let _password = args["password"].as_str().map(|value| value.to_string());
         let device_name = args["device_name"]
             .as_str()
             .unwrap_or("mcp-client")
@@ -442,15 +439,12 @@ impl McpServer {
 
         let mut auth_service = AuthService::new(storage_manager);
 
-        let session_info = auth_service
-            .login(&four_words_dashed, &password, Some(&device_name))
-            .await
-            .map_err(|e| {
-                error!("Authentication failed: {}", e);
-                JsonRpcError::invalid_request(&format!(
-                    "Authentication failed: {e}. Make sure vault exists and password is correct."
-                ))
-            })?;
+        let session_info = auth_service.login(&four_words_dashed).await.map_err(|e| {
+            error!("Authentication failed: {}", e);
+            JsonRpcError::invalid_request(&format!(
+                "Authentication failed: {e}. Make sure the vault exists and is accessible."
+            ))
+        })?;
         let app = CommunitasApp::new(
             four_words_dashed.clone(),
             session_info.display_name.clone(),
@@ -484,10 +478,7 @@ impl McpServer {
             .as_str()
             .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
             .to_string();
-        let password = args["password"]
-            .as_str()
-            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
-            .to_string();
+        let _password = args["password"].as_str().map(|value| value.to_string());
         let display_name = args["display_name"]
             .as_str()
             .ok_or_else(|| JsonRpcError::invalid_params("Missing display_name"))?
@@ -525,20 +516,17 @@ impl McpServer {
         let mut auth_service = AuthService::new(storage_manager);
 
         auth_service
-            .create_vault(&four_words_dashed, &password, &display_name)
+            .create_vault(&four_words_dashed, &display_name)
             .await
             .map_err(|e| {
                 error!("Failed to create vault: {}", e);
                 JsonRpcError::internal_error(&format!("Failed to create vault: {e}"))
             })?;
 
-        let session_info = auth_service
-            .login(&four_words_dashed, &password, Some(&device_name))
-            .await
-            .map_err(|e| {
-                error!("Failed to login after vault creation: {}", e);
-                JsonRpcError::internal_error(&format!("Vault created but login failed: {e}"))
-            })?;
+        let session_info = auth_service.login(&four_words_dashed).await.map_err(|e| {
+            error!("Failed to login after vault creation: {}", e);
+            JsonRpcError::internal_error(&format!("Vault created but login failed: {e}"))
+        })?;
 
         let app = CommunitasApp::new(
             four_words_dashed.clone(),
@@ -717,10 +705,7 @@ impl McpServer {
             .as_str()
             .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
             .to_string();
-        let password = args["password"]
-            .as_str()
-            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
-            .to_string();
+        let _password = args["password"].as_str().map(|value| value.to_string());
 
         let words: Vec<&str> = if four_words.contains('.') {
             four_words.split('.').collect()
@@ -750,7 +735,7 @@ impl McpServer {
         let mut auth_service = AuthService::new(storage_manager);
 
         auth_service
-            .delete_vault(&four_words_dashed, &password)
+            .delete_vault(&four_words_dashed)
             .await
             .map_err(|e| JsonRpcError::invalid_request(&format!("Failed to delete vault: {e}")))?;
 
@@ -764,10 +749,7 @@ impl McpServer {
         let backup_data_base64 = args["backup_data"]
             .as_str()
             .ok_or_else(|| JsonRpcError::invalid_params("Missing backup_data"))?;
-        let password = args["password"]
-            .as_str()
-            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
-            .to_string();
+        let _password = args["password"].as_str().map(|value| value.to_string());
 
         use base64::Engine;
         let backup_data = base64::engine::general_purpose::STANDARD
@@ -787,7 +769,7 @@ impl McpServer {
             })?;
 
         let four_words = storage_manager
-            .import_vault(&backup_data, &password)
+            .import_vault(&backup_data)
             .await
             .map_err(|e| JsonRpcError::invalid_request(&format!("Failed to import vault: {e}")))?;
 

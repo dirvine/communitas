@@ -34,6 +34,7 @@ pub struct Session {
 /// Authentication method used for the session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuthMethod {
+    Local,
     Password,
     PasswordOnly, // Familiar device login
     Passkey,
@@ -52,7 +53,7 @@ impl Session {
             created_at: now,
             last_activity: now,
             expires_at: now + timeout_seconds,
-            auth_method: AuthMethod::Password,
+            auth_method: AuthMethod::Local,
         }
     }
 
@@ -72,7 +73,7 @@ impl Session {
             created_at: now,
             last_activity: now,
             expires_at: now + timeout_seconds,
-            auth_method: AuthMethod::Password,
+            auth_method: AuthMethod::Local,
         }
     }
 

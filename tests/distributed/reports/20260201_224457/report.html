@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed MCP Test Report</title>
+  <style>
+    :root {
+      --success-color: #22c55e;
+      --failure-color: #ef4444;
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #e5e7eb;
+      --border-color: #374151;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #f1f5f9;
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      color: #9ca3af;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+    }
+    .card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card .value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+    .card.success .value { color: var(--success-color); }
+    .card.failure .value { color: var(--failure-color); }
+    .tools {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+    }
+    .tools h2 {
+      margin-top: 0;
+    }
+    .tools ul {
+      columns: 3;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tools li {
+      padding: 0.25rem 0;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    th {
+      background: #0f172a;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr.pass { background: rgba(34, 197, 94, 0.1); }
+    tr.fail { background: rgba(239, 68, 68, 0.1); }
+    .error {
+      color: var(--failure-color);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Phase 1: Identity &amp; Authentication</h1>
+    <div class="timestamp">Generated: 2026-02-01 22:45:02 UTC</div>
+
+    <div class="summary">
+      <div class="card success">
+        <h3>Status</h3>
+        <div class="value">PASS</div>
+      </div>
+      <div class="card">
+        <h3>Total Tests</h3>
+        <div class="value">11</div>
+      </div>
+      <div class="card success">
+        <h3>Passed</h3>
+        <div class="value">11</div>
+      </div>
+      <div class="card failure">
+        <h3>Failed</h3>
+        <div class="value">0</div>
+      </div>
+      <div class="card">
+        <h3>Pass Rate</h3>
+        <div class="value">100.0%</div>
+      </div>
+    </div>
+
+    <div class="tools">
+      <h2>Tools Covered</h2>
+      <ul>
+        <li>health_check</li>
+          <li>create_vault</li>
+          <li>authenticate</li>
+          <li>authenticate_token</li>
+          <li>core_status</li>
+      </ul>
+    </div>
+
+    <h2>Test Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Test ID</th>
+          <th>Name</th>
+          <th>Error</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-001</td>
+          <td>All nodes health check</td>
+          <td>-</td>
+          <td>366ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-002</td>
+          <td>Check core status (unauthenticated)</td>
+          <td>-</td>
+          <td>240ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-003</td>
+          <td>Create vault for Alice</td>
+          <td>-</td>
+          <td>239ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-004</td>
+          <td>Create vault for Bob</td>
+          <td>-</td>
+          <td>357ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-005</td>
+          <td>Create vault for Charlie</td>
+          <td>-</td>
+          <td>166ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-006</td>
+          <td>Create vault for Dave</td>
+          <td>-</td>
+          <td>8ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-007</td>
+          <td>Verify authenticated status</td>
+          <td>-</td>
+          <td>350ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-008</td>
+          <td>Re-authenticate with password</td>
+          <td>-</td>
+          <td>247ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-008A</td>
+          <td>Logout before wrong password attempt</td>
+          <td>-</td>
+          <td>503ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-009</td>
+          <td>Reject wrong password</td>
+          <td>-</td>
+          <td>255ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-010</td>
+          <td>Re-authenticate after wrong password</td>
+          <td>-</td>
+          <td>260ms</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

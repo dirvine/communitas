@@ -81,7 +81,10 @@ test_cases:
           status: success
           fields:
             name: "Acme Corp"
-            entity_type: "organisation"
+            entity_type: "Organisation"
+        store:
+          org_name: name
+          org_creator: created_by
 
   # List all entities
   - id: ENT-006
@@ -92,10 +95,14 @@ test_cases:
         expect:
           status: success
           contains:
-            - name: "Acme Corp"
-            - name: "Engineering Team"
-            - name: "general"
-            - name: "Q1 Sprint"
+            - entities:
+                - name: "Acme Corp"
+            - entities:
+                - name: "Engineering Team"
+            - entities:
+                - name: "general"
+            - entities:
+                - name: "Q1 Sprint"
 
   # Bob creates his own entity
   - id: ENT-007
@@ -120,3 +127,43 @@ test_cases:
         expect:
           status: success
           # Bob should only see his own entities
+
+  # Members join the organisation created by Alice
+  - id: ENT-009
+    name: "Bob joins organisation"
+    actors: [bob]
+    steps:
+      - tool: join_entity
+        params:
+          id: "${org_id}"
+          name: "${org_name}"
+          entity_type: "organisation"
+          created_by: "${org_creator}"
+        expect:
+          status: success
+
+  - id: ENT-010
+    name: "Charlie joins organisation"
+    actors: [charlie]
+    steps:
+      - tool: join_entity
+        params:
+          id: "${org_id}"
+          name: "${org_name}"
+          entity_type: "organisation"
+          created_by: "${org_creator}"
+        expect:
+          status: success
+
+  - id: ENT-011
+    name: "Dave joins organisation"
+    actors: [dave]
+    steps:
+      - tool: join_entity
+        params:
+          id: "${org_id}"
+          name: "${org_name}"
+          entity_type: "organisation"
+          created_by: "${org_creator}"
+        expect:
+          status: success

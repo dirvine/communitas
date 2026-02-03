@@ -266,7 +266,7 @@ fn workflow_kanban_board_lifecycle() {
             "create_kanban_board",
             Some(json!({
                 "entity_id": entity_id,
-                "name": "E2E Test Board",
+                "board_name": "E2E Test Board",
                 "description": "Board for E2E workflow testing"
             })),
         )
@@ -300,7 +300,7 @@ fn workflow_kanban_board_lifecycle() {
             Some(json!({
                 "entity_id": entity_id,
                 "board_id": board_id,
-                "name": "To Do",
+                "column_name": "To Do",
                 "position": 0
             })),
         )
@@ -322,7 +322,7 @@ fn workflow_kanban_board_lifecycle() {
             Some(json!({
                 "entity_id": entity_id,
                 "board_id": board_id,
-                "name": "Done",
+                "column_name": "Done",
                 "position": 1
             })),
         )

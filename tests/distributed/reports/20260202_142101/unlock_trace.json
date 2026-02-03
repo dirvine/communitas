@@ -1,0 +1,400 @@
+{
+  "timestamp": "2026-02-02T14:21:19.687582Z",
+  "scenario_name": "Combined Scenario",
+  "events": [
+    {
+      "timestamp": "2026-02-02T14:21:05.649807Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T14:21:05.916838Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:06.022021Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:06.022035Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:06.180361Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_invalidated",
+      "detail": "lease reset"
+    },
+    {
+      "timestamp": "2026-02-02T14:21:06.695035Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T14:21:06.954194Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:07.071327Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:07.071349Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:07.235907Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:07.494429Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:07.763365Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:08.014548Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 598s",
+      "ttl_seconds": 598
+    },
+    {
+      "timestamp": "2026-02-02T14:21:08.284542Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 598s",
+      "ttl_seconds": 598
+    },
+    {
+      "timestamp": "2026-02-02T14:21:08.788989Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T14:21:09.141854Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:09.318209Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:09.318224Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:09.507878Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:09.683391Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:09.875441Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.048959Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.216880Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.367164Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.367177Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.493146Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.597931Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.710187Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:10.887052Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "unlock_refresh",
+      "detail": "requesting new unlock lease"
+    },
+    {
+      "timestamp": "2026-02-02T14:21:11.411843Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "create_unlock_grant",
+      "detail": "lease ttl 600s",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:11.683823Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "get_unlock_status",
+      "detail": "status=unlocked",
+      "ttl_seconds": 600
+    },
+    {
+      "timestamp": "2026-02-02T14:21:11.683835Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "unlock_granted",
+      "detail": "lease expires in 599 seconds",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:11.966958Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:12.258574Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 599s",
+      "ttl_seconds": 599
+    },
+    {
+      "timestamp": "2026-02-02T14:21:12.502804Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 598s",
+      "ttl_seconds": 598
+    },
+    {
+      "timestamp": "2026-02-02T14:21:12.722619Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 596s",
+      "ttl_seconds": 596
+    },
+    {
+      "timestamp": "2026-02-02T14:21:13.173293Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 595s",
+      "ttl_seconds": 595
+    },
+    {
+      "timestamp": "2026-02-02T14:21:13.544625Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 593s",
+      "ttl_seconds": 593
+    },
+    {
+      "timestamp": "2026-02-02T14:21:13.783678Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 593s",
+      "ttl_seconds": 593
+    },
+    {
+      "timestamp": "2026-02-02T14:21:14.046790Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 592s",
+      "ttl_seconds": 592
+    },
+    {
+      "timestamp": "2026-02-02T14:21:14.321955Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 592s",
+      "ttl_seconds": 592
+    },
+    {
+      "timestamp": "2026-02-02T14:21:14.581041Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 594s",
+      "ttl_seconds": 594
+    },
+    {
+      "timestamp": "2026-02-02T14:21:14.941327Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 596s",
+      "ttl_seconds": 596
+    },
+    {
+      "timestamp": "2026-02-02T14:21:15.353279Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 594s",
+      "ttl_seconds": 594
+    },
+    {
+      "timestamp": "2026-02-02T14:21:15.621664Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 593s",
+      "ttl_seconds": 593
+    },
+    {
+      "timestamp": "2026-02-02T14:21:15.989989Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 590s",
+      "ttl_seconds": 590
+    },
+    {
+      "timestamp": "2026-02-02T14:21:16.269855Z",
+      "actor": "alice",
+      "node": "alice",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 590s",
+      "ttl_seconds": 590
+    },
+    {
+      "timestamp": "2026-02-02T14:21:16.270263Z",
+      "actor": "bob",
+      "node": "bob",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 592s",
+      "ttl_seconds": 592
+    },
+    {
+      "timestamp": "2026-02-02T14:21:16.270579Z",
+      "actor": "charlie",
+      "node": "charlie",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 593s",
+      "ttl_seconds": 593
+    },
+    {
+      "timestamp": "2026-02-02T14:21:16.270870Z",
+      "actor": "dave",
+      "node": "dave",
+      "event": "cache_hit",
+      "detail": "existing lease valid for 595s",
+      "ttl_seconds": 595
+    }
+  ]
+}

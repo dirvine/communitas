@@ -1,5 +1,7 @@
 # Passkey Security Best Practices
 
+> Status (2026-02-02): Passkey support is deferred and currently unavailable. This guide is retained for future reintroduction.
+
 **Securing your Communitas identity with passkeys**
 
 This guide covers security considerations for passkey-based authentication in Communitas.

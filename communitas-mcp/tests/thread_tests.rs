@@ -115,7 +115,7 @@ async fn test_create_thread_from_message() {
             "send_message",
             json!({
                 "entity_id": "channel-thread",
-                "content": "Parent message",
+                "text": "Parent message",
                 "message_type": "text"
             }),
         )
@@ -151,7 +151,7 @@ async fn test_create_thread_with_initial_reply() {
             "send_message",
             json!({
                 "entity_id": "channel-thread-reply",
-                "content": "Start a thread",
+                "text": "Start a thread",
                 "message_type": "text"
             }),
         )
@@ -188,7 +188,7 @@ async fn test_list_threads() {
             "send_message",
             json!({
                 "entity_id": "channel-list-threads",
-                "content": "Message for thread",
+                "text": "Message for thread",
                 "message_type": "text"
             }),
         )
@@ -234,7 +234,7 @@ async fn test_get_thread_details() {
             "send_message",
             json!({
                 "entity_id": "channel-thread-details",
-                "content": "Message with thread",
+                "text": "Message with thread",
                 "message_type": "text"
             }),
         )
@@ -285,7 +285,7 @@ async fn test_get_thread_messages() {
             "send_message",
             json!({
                 "entity_id": "channel-nav",
-                "content": "Thread parent",
+                "text": "Thread parent",
                 "message_type": "text"
             }),
         )
@@ -333,7 +333,7 @@ async fn test_paginate_thread_messages() {
             "send_message",
             json!({
                 "entity_id": "channel-paginate",
-                "content": "Thread start",
+                "text": "Thread start",
                 "message_type": "text"
             }),
         )
@@ -385,7 +385,7 @@ async fn test_pin_thread() {
             "send_message",
             json!({
                 "entity_id": "channel-pin",
-                "content": "Thread to pin",
+                "text": "Thread to pin",
                 "message_type": "text"
             }),
         )
@@ -433,7 +433,7 @@ async fn test_unpin_thread() {
             "send_message",
             json!({
                 "entity_id": "channel-unpin",
-                "content": "Thread to unpin",
+                "text": "Thread to unpin",
                 "message_type": "text"
             }),
         )

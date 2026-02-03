@@ -287,7 +287,7 @@ fn test_create_kanban_board_golden() {
             &services,
             "create_kanban_board",
             Some(json!({
-                "name": "Test Board",
+                "board_name": "Test Board",
                 "description": "A test kanban board"
             })),
         )

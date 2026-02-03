@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed MCP Test Report</title>
+  <style>
+    :root {
+      --success-color: #22c55e;
+      --failure-color: #ef4444;
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #e5e7eb;
+      --border-color: #374151;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #f1f5f9;
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      color: #9ca3af;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+    }
+    .card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card .value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+    .card.success .value { color: var(--success-color); }
+    .card.failure .value { color: var(--failure-color); }
+    .tools {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+    }
+    .tools h2 {
+      margin-top: 0;
+    }
+    .tools ul {
+      columns: 3;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tools li {
+      padding: 0.25rem 0;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      margin-bottom: 2rem;
+    }
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    th {
+      background: #0f172a;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr.pass { background: rgba(34, 197, 94, 0.1); }
+    tr.fail { background: rgba(239, 68, 68, 0.1); }
+    .error {
+      color: var(--failure-color);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Combined Scenario</h1>
+    <div class="timestamp">Generated: 2026-02-02 20:11:02 UTC</div>
+
+    <div class="summary">
+      <div class="card failure">
+        <h3>Status</h3>
+        <div class="value">FAIL</div>
+      </div>
+      <div class="card">
+        <h3>Total Tests</h3>
+        <div class="value">28</div>
+      </div>
+      <div class="card success">
+        <h3>Passed</h3>
+        <div class="value">15</div>
+      </div>
+      <div class="card failure">
+        <h3>Failed</h3>
+        <div class="value">13</div>
+      </div>
+      <div class="card">
+        <h3>Pass Rate</h3>
+        <div class="value">53.6%</div>
+      </div>
+    </div>
+
+    <div class="tools">
+      <h2>Tools Covered</h2>
+      <ul>
+        <li>health_check</li>
+          <li>create_vault</li>
+          <li>authenticate</li>
+          <li>authenticate_token</li>
+          <li>core_status</li>
+          <li>create_entity</li>
+          <li>get_entity</li>
+          <li>list_entities</li>
+          <li>join_entity</li>
+          <li>network_start</li>
+          <li>network_stop</li>
+          <li>network_connect</li>
+          <li>network_disconnect</li>
+          <li>network_status</li>
+          <li>network_peers</li>
+          <li>network_external_address</li>
+      </ul>
+    </div>
+
+    <h2>Test Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Test ID</th>
+          <th>Name</th>
+          <th>Error</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-001</td>
+          <td>All nodes health check</td>
+          <td>-</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>AUTH-002</td>
+          <td>Check core status (unauthenticated)</td>
+          <td class="error">Expected field &#39;authenticated&#39; to be Bool(false), got None</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-003</td>
+          <td>Create vault for Alice</td>
+          <td>-</td>
+          <td>4ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-004</td>
+          <td>Create vault for Bob</td>
+          <td>-</td>
+          <td>3ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-005</td>
+          <td>Create vault for Charlie</td>
+          <td>-</td>
+          <td>3ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-006</td>
+          <td>Create vault for Dave</td>
+          <td>-</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>AUTH-007</td>
+          <td>Verify authenticated status</td>
+          <td class="error">Expected field &#39;authenticated&#39; to be Bool(true), got None</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-008</td>
+          <td>Re-authenticate with password</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>AUTH-009</td>
+          <td>Reject wrong password</td>
+          <td class="error">Expected status &#39;error&#39;, got &#39;success&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-001</td>
+          <td>Alice creates organisation</td>
+          <td>-</td>
+          <td>7ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-002</td>
+          <td>Alice creates group in organisation</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-003</td>
+          <td>Alice creates channel</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-004</td>
+          <td>Alice creates project</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>ENT-005</td>
+          <td>Get organisation by ID</td>
+          <td class="error">Expected field &#39;entity_type&#39; to be String(&quot;organisation&quot;), got Some(String(&quot;Organisation&quot;))</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>ENT-006</td>
+          <td>List all entities</td>
+          <td class="error">Expected result to contain Object {&quot;name&quot;: String(&quot;Acme Corp&quot;)}, got Object {&quot;entities&quot;: Array [Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;96db6663-ad10-418c-bdfb-45a769c51568&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;76289177-1fda-4057-9c88-8510de1f121b&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;39678090-081c-4801-bbf3-02ad84ff9124&quot;), &quot;name&quot;: String(&quot;Bob&#39;s Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;5893e4ab-caf8-48e7-b7c6-9083518d2612&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;451fa579-5295-4db4-bec1-5bc70308ffd9&quot;), &quot;name&quot;: String(&quot;Bob&#39;s Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;1febfd83-64e6-48b2-9d64-1d3cc87e0c91&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;ffc8b1fe-82b8-4309-8915-5c8e6265019c&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;eaa38d08-1906-4d91-86a7-dc1725e03059&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;8e113e81-1708-4bd1-9f7c-8d647d71bdd4&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;42f90c42-f0e4-4553-a429-2d3b81beb138&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;1bf8bf72-9246-49ee-ba57-11f71a49f707&quot;), &quot;name&quot;: String(&quot;Secret Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;51c5714b-07f6-4326-886d-a158067eca3c&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;4a7dc0fd-a581-4eee-b211-1137a79b7089&quot;), &quot;name&quot;: String(&quot;Bob&#39;s Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;e38ac40a-d672-4864-99f7-3dc50fbedfc3&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;9071478c-b889-435b-89a4-e402bbb7cf26&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;2f1fdb86-7fc2-4551-9a59-abac1b231728&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;baf5d2bf-6abd-4c0d-ad5a-ea6cf553fc3d&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;b53300e6-5740-4e2d-8fa9-f6e040729d27&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;13d835f0-1a6d-4a2b-9831-44765f9d96ae&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;ab2439e3-9a46-453a-aa65-52457ad3078e&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;6d95892d-d83b-432f-8bef-4fb40292579f&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;3f268122-aae6-4286-a3d9-c4d0ebe42207&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;32b3e92a-5e35-44b2-8825-7e95231f8c6c&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;cba4f9ca-a1d1-4994-9e35-cc18a4411cc1&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;e57b1da7-a49e-4aa4-93bb-aedce4c3a0c9&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;67f4429e-642b-4d71-a502-e7be2928bc50&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;214a2e41-42b2-442e-a043-112fc532559a&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;9d5abba1-3f1c-4742-b8c6-0e6b955f2e88&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;85d62ec6-a8b6-403f-a5a3-577ac30847a2&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;0b01f53e-26c2-44ad-bcf9-e9d20ba8c460&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;a562e44b-3e2e-477e-9679-efef2e3c5110&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;6f59a7bb-e32c-4bbf-a44f-b1db586c21ec&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;628abcc4-7490-49ac-8fe3-06535a92b91a&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;ec71d7c2-7c88-462b-9d01-b1694209f059&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;d23da470-2aa7-4c9e-9603-768e63ced9a0&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;839d0b32-3625-492c-b584-7379ed708ccb&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;bb7c1cd4-a7ee-4113-944f-8be4b5c0efd3&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;5c89cfdf-897f-4947-bdb3-3e956e5ee5ff&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;a598cc79-21d9-4a05-b62d-99980e04f3dd&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;a6ed76a7-3bfb-4692-b496-213b9d1b79be&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;9aa3013a-b5db-4ced-b2ea-fa197880586d&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;798250e9-956b-4590-942a-6c8850b2f959&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;66fd13f2-d956-4d5f-a2ff-888f0c0019b7&quot;), &quot;name&quot;: String(&quot;Secret Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;f8ecd7fc-e6a8-4e1e-93f0-0c69f0601a3e&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;b1fe4861-4322-42d3-89dc-fcca593583a9&quot;), &quot;name&quot;: String(&quot;Bob&#39;s Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;2b5c92e9-9da3-4b90-9abb-ae5ab0517b33&quot;), &quot;name&quot;: String(&quot;Bob&#39;s Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;3d302cf5-1192-4090-991c-51379be3a8ad&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;bab36c35-b195-484b-b258-3119b3a26f37&quot;), &quot;name&quot;: String(&quot;Bob&#39;s Project&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;a4a34f30-d996-4d4f-a230-041fd29c2679&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;269d7a8b-45e1-4dda-b259-eabde2b739cf&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;84f5a089-857a-48e6-8cdb-d43edd18eb2a&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;9b89a496-d38b-403e-907b-cf4a3ea9fe3a&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;03927465-573b-491c-8c4e-21cabb6a7e44&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;142382cc-8127-446d-8fa0-a11b1cab4f5c&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;2e9af5d6-ca2b-4f41-a8d7-07545c85d1d1&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;fa5a52a0-97d0-4971-86a0-265376b4c32b&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Organisation&quot;), &quot;id&quot;: String(&quot;031cdd7b-7dd6-40c3-8d81-1f767ce0fdcb&quot;), &quot;name&quot;: String(&quot;Acme Corp&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Channel&quot;), &quot;id&quot;: String(&quot;6f4bfacc-7aa3-4a5f-87e8-23ac911d108b&quot;), &quot;name&quot;: String(&quot;general&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Project&quot;), &quot;id&quot;: String(&quot;cefba421-39d3-4285-86a4-b2791d05ac11&quot;), &quot;name&quot;: String(&quot;Q1 Sprint&quot;)}, Object {&quot;description&quot;: Null, &quot;entity_type&quot;: String(&quot;Group&quot;), &quot;id&quot;: String(&quot;438b46d9-4404-4845-b721-3d18121ea3c7&quot;), &quot;name&quot;: String(&quot;Engineering Team&quot;)}]}</td>
+          <td>25ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-007</td>
+          <td>Bob creates personal entity</td>
+          <td>-</td>
+          <td>2ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-008</td>
+          <td>Verify entity isolation before join</td>
+          <td>-</td>
+          <td>11ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-001</td>
+          <td>Check network status on all nodes</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-002</td>
+          <td>Get external address</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-003</td>
+          <td>List connected peers</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-004</td>
+          <td>Dave stops network</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-005</td>
+          <td>Verify Dave&#39;s network stopped</td>
+          <td class="error">Expected field &#39;network_active&#39; to be Bool(false), got None</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-006</td>
+          <td>Alice sends message while Dave offline</td>
+          <td>-</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-007</td>
+          <td>Dave restarts network</td>
+          <td class="error">Failed to call tool &#39;network_start&#39;</td>
+          <td>30002ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-008</td>
+          <td>Wait for Dave to reconnect</td>
+          <td class="error">Expected field &#39;network_active&#39; to be Bool(true), got None</td>
+          <td>3ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-009</td>
+          <td>Verify Dave received offline message</td>
+          <td class="error">Expected result to contain Object {&quot;text&quot;: String(&quot;Message sent while Dave is offline&quot;)}, got Object {&quot;messages&quot;: Array []}</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-010</td>
+          <td>Alice checks peer count</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>1ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>NET-011</td>
+          <td>All nodes check connectivity</td>
+          <td class="error">Expected field &#39;network_active&#39; to be Bool(true), got None</td>
+          <td>1ms</td>
+        </tr>
+
+      </tbody>
+    </table>
+
+    <h2>Unlock Telemetry</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Actor</th>
+          <th>Node</th>
+          <th>Event</th>
+          <th>Detail</th>
+          <th>TTL (s)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-02-02T20:10:32.905074+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.906027+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.906174+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.906178+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.913103+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.914542+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.916163+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.917894+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.918586+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.944244+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.944645+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.944777+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.944782+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.946774+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.957939+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.957967+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958002+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958032+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958415+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958433+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958530+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958538+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958561+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.958564+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.959699+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.960232+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.960576+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.960913+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.961195+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:10:32.962726+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 599s</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:11:02.966840+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 569s</td>
+          <td>569</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:11:02.969281+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 569s</td>
+          <td>569</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:11:02.970649+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 569s</td>
+          <td>569</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:11:02.971971+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 569s</td>
+          <td>569</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:11:02.972177+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 569s</td>
+          <td>569</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:11:02.972203+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 569s</td>
+          <td>569</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T20:11:02.972294+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 569s</td>
+          <td>569</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

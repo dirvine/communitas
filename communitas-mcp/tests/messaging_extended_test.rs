@@ -114,7 +114,7 @@ async fn test_mark_thread_as_read() {
             "send_message",
             json!({
                 "entity_id": "channel-read",
-                "content": "Message for read test",
+                "text": "Message for read test",
                 "message_type": "text"
             }),
         )
@@ -217,7 +217,7 @@ async fn test_add_reaction() {
             "send_message",
             json!({
                 "entity_id": "channel-reactions",
-                "content": "Message for reactions",
+                "text": "Message for reactions",
                 "message_type": "text"
             }),
         )
@@ -254,7 +254,7 @@ async fn test_remove_reaction() {
             "send_message",
             json!({
                 "entity_id": "channel-remove-reaction",
-                "content": "Message for removal",
+                "text": "Message for removal",
                 "message_type": "text"
             }),
         )
@@ -302,7 +302,7 @@ async fn test_get_reactions() {
             "send_message",
             json!({
                 "entity_id": "channel-get-reactions",
-                "content": "Reactive message",
+                "text": "Reactive message",
                 "message_type": "text"
             }),
         )

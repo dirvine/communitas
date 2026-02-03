@@ -49,7 +49,7 @@ impl DeviceType {
     }
 }
 
-/// User profile with local identity and passkey support
+/// User profile with local identity support
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UserProfile {
     /// Four-word user ID (derived from public key)
@@ -67,15 +67,6 @@ pub struct UserProfile {
 
     /// Connection identities (four-word encoded SocketAddr)
     pub connection_ids: Vec<String>,
-
-    /// Passkey RP ID (e.g., "communitas.id")
-    pub passkey_rpid: String,
-
-    /// Passkey credential ID (if passkey is registered)
-    pub passkey_cred_id: Option<Vec<u8>>,
-
-    /// Passkey public key (if passkey is registered)
-    pub passkey_pubkey: Option<Vec<u8>>,
 
     /// Local storage directory for this profile
     pub storage_dir: PathBuf,
@@ -96,16 +87,8 @@ impl UserProfile {
             pubkey,
             device_type,
             connection_ids: Vec::new(),
-            passkey_rpid: "communitas.id".to_string(),
-            passkey_cred_id: None,
-            passkey_pubkey: None,
             storage_dir,
         }
-    }
-
-    /// Check if passkey is registered
-    pub fn has_passkey(&self) -> bool {
-        self.passkey_cred_id.is_some() && self.passkey_pubkey.is_some()
     }
 
     /// Add a connection identity
@@ -157,7 +140,6 @@ mod tests {
         assert_eq!(profile.id_fw, "ocean-forest-moon-star");
         assert_eq!(profile.display_name, "Alice");
         assert_eq!(profile.device_type, DeviceType::Desktop);
-        assert!(!profile.has_passkey());
         assert_eq!(profile.connection_ids.len(), 0);
     }
 

@@ -1,5 +1,7 @@
 # Passkey Registration Guide
 
+> Status (2026-02-02): Passkey support is deferred and currently unavailable. This guide is retained for future reintroduction.
+
 **What is a Passkey?**
 
 A passkey is a biometric way to secure your Communitas identity. Instead of remembering a password, you use:

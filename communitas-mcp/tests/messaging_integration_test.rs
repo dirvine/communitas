@@ -116,7 +116,7 @@ async fn test_complete_messaging_workflow() {
             "send_message",
             json!({
                 "entity_id": channel,
-                "content": "Hello everyone! Check out this feature",
+                "text": "Hello everyone! Check out this feature",
                 "message_type": "text"
             }),
         )
@@ -289,7 +289,7 @@ async fn test_messaging_with_search() {
                 "send_message",
                 json!({
                     "entity_id": channel,
-                    "content": format!("Message {} with unique identifier", i),
+                    "text": format!("Message {} with unique identifier", i),
                     "message_type": "text"
                 }),
             )

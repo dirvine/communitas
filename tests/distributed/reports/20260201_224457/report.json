@@ -1,0 +1,93 @@
+{
+  "timestamp": "2026-02-01T22:45:02.549421Z",
+  "scenario_name": "Phase 1: Identity & Authentication",
+  "tools_covered": [
+    "health_check",
+    "create_vault",
+    "authenticate",
+    "authenticate_token",
+    "core_status"
+  ],
+  "total_tests": 11,
+  "passed": 11,
+  "failed": 0,
+  "results": [
+    {
+      "test_id": "AUTH-001",
+      "test_name": "All nodes health check",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 366
+    },
+    {
+      "test_id": "AUTH-002",
+      "test_name": "Check core status (unauthenticated)",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 240
+    },
+    {
+      "test_id": "AUTH-003",
+      "test_name": "Create vault for Alice",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 239
+    },
+    {
+      "test_id": "AUTH-004",
+      "test_name": "Create vault for Bob",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 357
+    },
+    {
+      "test_id": "AUTH-005",
+      "test_name": "Create vault for Charlie",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 166
+    },
+    {
+      "test_id": "AUTH-006",
+      "test_name": "Create vault for Dave",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 8
+    },
+    {
+      "test_id": "AUTH-007",
+      "test_name": "Verify authenticated status",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 350
+    },
+    {
+      "test_id": "AUTH-008",
+      "test_name": "Re-authenticate with password",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 247
+    },
+    {
+      "test_id": "AUTH-008A",
+      "test_name": "Logout before wrong password attempt",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 503
+    },
+    {
+      "test_id": "AUTH-009",
+      "test_name": "Reject wrong password",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 255
+    },
+    {
+      "test_id": "AUTH-010",
+      "test_name": "Re-authenticate after wrong password",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 260
+    }
+  ]
+}

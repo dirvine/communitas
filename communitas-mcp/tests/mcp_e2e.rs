@@ -595,7 +595,7 @@ async fn test_kanban_create_board() {
             "create_kanban_board",
             json!({
                 "entity_id": entity_id,
-                "name": "Sprint Board",
+                "board_name": "Sprint Board",
                 "description": "Main development board"
             }),
         )
@@ -623,7 +623,7 @@ async fn test_kanban_full_workflow() {
             "create_kanban_board",
             json!({
                 "entity_id": entity_id,
-                "name": "Development Board"
+                "board_name": "Development Board"
             }),
         )
         .await;
@@ -641,7 +641,7 @@ async fn test_kanban_full_workflow() {
             json!({
                 "entity_id": entity_id,
                 "board_id": board_id,
-                "name": "To Do",
+                "column_name": "To Do",
                 "position": 0
             }),
         )
@@ -659,7 +659,7 @@ async fn test_kanban_full_workflow() {
             json!({
                 "entity_id": entity_id,
                 "board_id": board_id,
-                "name": "In Progress",
+                "column_name": "In Progress",
                 "position": 1
             }),
         )
@@ -677,7 +677,7 @@ async fn test_kanban_full_workflow() {
             json!({
                 "entity_id": entity_id,
                 "board_id": board_id,
-                "name": "Done",
+                "column_name": "Done",
                 "position": 2
             }),
         )
@@ -780,7 +780,7 @@ async fn test_kanban_create_and_tag_card() {
             "create_kanban_board",
             json!({
                 "entity_id": entity_id,
-                "name": "Tag Test Board"
+                "board_name": "Tag Test Board"
             }),
         )
         .await;
@@ -794,7 +794,7 @@ async fn test_kanban_create_and_tag_card() {
             json!({
                 "entity_id": entity_id,
                 "board_id": board_id,
-                "name": "Backlog",
+                "column_name": "Backlog",
                 "position": 0
             }),
         )

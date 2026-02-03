@@ -25,7 +25,11 @@
 //! ```
 
 mod client;
+mod p2p_client;
 mod results;
+mod sync_verifier;
+mod test_config;
+mod token_helper;
 
 #[allow(unused_imports)]
 pub use client::{McpTestClient, ToolAssert, ToolResult};
@@ -35,3 +39,17 @@ pub use client::{McpTestClient, ToolAssert, ToolResult};
 pub use client::{McpTestNode, Transport};
 #[allow(unused_imports)]
 pub use results::{ResultAggregator, TestSummary};
+
+// Re-export P2P helpers and sync verification utilities
+#[allow(unused_imports)]
+pub use p2p_client::BOOTSTRAP_NODES;
+#[allow(unused_imports)]
+pub use p2p_client::{P2pTestNode, P2pTestScenario};
+#[allow(unused_imports)]
+pub use sync_verifier::{CrdtStateComparator, CrdtSyncVerifier, SyncResult};
+#[allow(unused_imports)]
+pub use test_config::network_tests_enabled;
+#[allow(unused_imports)]
+pub use test_config::sync_timeout;
+#[allow(unused_imports)]
+pub use token_helper::{ScopeAssert, TokenPresets, TokenTestHelper};

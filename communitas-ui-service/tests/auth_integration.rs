@@ -83,7 +83,7 @@ async fn test_create_recover_cycle_same_identity_inner() {
     let auth = services.auth();
 
     let session = auth
-        .recover_identity(&mnemonic_str, None, "TestUser", "test-password-123")
+        .recover_identity(&mnemonic_str, None, "TestUser", None, false)
         .await
         .expect("Recovery should succeed");
 
@@ -149,7 +149,7 @@ async fn test_recovery_deterministic_four_words_inner() {
     let auth = services.auth();
 
     let session = auth
-        .recover_identity(test_mnemonic, None, "TestUser", "test-password-123")
+        .recover_identity(test_mnemonic, None, "TestUser", None, false)
         .await
         .expect("Recovery should succeed");
 
@@ -213,12 +213,7 @@ async fn test_recovery_with_passphrase_inner() {
     let auth = services.auth();
 
     let session = auth
-        .recover_identity(
-            test_mnemonic,
-            Some("secret"),
-            "TestUser",
-            "test-password-123",
-        )
+        .recover_identity(test_mnemonic, Some("secret"), "TestUser", None, false)
         .await
         .expect("Recovery with passphrase should succeed");
 
@@ -312,7 +307,7 @@ async fn test_auth_recover_invalid_mnemonic_fails_inner() {
     let invalid_mnemonic = "invalid words that are not in bip39 dictionary at all here test";
 
     let result = auth
-        .recover_identity(invalid_mnemonic, None, "TestUser", "test-password-123")
+        .recover_identity(invalid_mnemonic, None, "TestUser", None, false)
         .await;
 
     assert!(
@@ -344,11 +339,11 @@ async fn test_recovery_existing_vault_login_inner() {
     let services = make_services(&temp).await;
     let auth = services.auth();
 
-    let password = "test-password-123";
+    let _password = "test-password-123";
 
     // First recovery - creates new vault
     let session1 = auth
-        .recover_identity(&mnemonic_str, None, "OriginalUser", password)
+        .recover_identity(&mnemonic_str, None, "OriginalUser", None, false)
         .await
         .expect("First recovery should succeed");
 
@@ -357,7 +352,7 @@ async fn test_recovery_existing_vault_login_inner() {
 
     // Second recovery with same mnemonic - should use existing vault
     let session2 = auth
-        .recover_identity(&mnemonic_str, None, "RecoveredUser", password)
+        .recover_identity(&mnemonic_str, None, "RecoveredUser", None, false)
         .await
         .expect("Second recovery should succeed (login to existing vault)");
 
@@ -450,7 +445,7 @@ async fn test_full_create_recover_roundtrip_inner() {
     let auth = services.auth();
 
     let session = auth
-        .recover_identity(&mnemonic_str, None, "TestUser", "secure-password-456")
+        .recover_identity(&mnemonic_str, None, "TestUser", None, false)
         .await
         .expect("Recovery should succeed");
 
@@ -464,7 +459,7 @@ async fn test_full_create_recover_roundtrip_inner() {
     auth.logout().await.expect("Logout should succeed");
 
     let session2 = auth
-        .recover_identity(&mnemonic_str, None, "RecoveredUser", "secure-password-456")
+        .recover_identity(&mnemonic_str, None, "RecoveredUser", None, false)
         .await
         .expect("Re-recovery should succeed");
 

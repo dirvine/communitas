@@ -214,6 +214,7 @@ impl AgentSpawner {
                 | "create_unlock_grant"
                 | "get_unlock_status"
                 | "core_status"
+                | "network_status"
         )
     }
 
@@ -331,27 +332,28 @@ impl AgentSpawner {
         node: &NodeConfig,
         client: &McpClient,
     ) -> Result<()> {
+        // Ensure we have an unlock lease before inspecting networking state
+        self.ensure_unlocked(actor, node, client).await?;
+
         let status = client.call_tool("network_status", &HashMap::new()).await;
         if let Ok(result) = status {
-            if let Some(active) =
-                extract_from_mcp_response(&result, "active").and_then(|v| v.as_bool())
-            {
-                if active {
-                    self.log_unlock_event(
-                        actor,
-                        &node.name,
-                        "network_already_active",
-                        "network already running",
-                        None,
-                    )
-                    .await;
-                    return Ok(());
-                }
+            let active = extract_from_mcp_response(&result, "is_active")
+                .or_else(|| extract_from_mcp_response(&result, "active"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            if active {
+                self.log_unlock_event(
+                    actor,
+                    &node.name,
+                    "network_already_active",
+                    "network already running",
+                    None,
+                )
+                .await;
+                return Ok(());
             }
         }
-
-        // network_start requires an unlock lease, so ensure we have one
-        self.ensure_unlocked(actor, node, client).await?;
 
         let mut params = HashMap::new();
         params.insert("preferred_port".to_string(), serde_json::json!(0));

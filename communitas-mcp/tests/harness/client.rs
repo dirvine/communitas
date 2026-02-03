@@ -81,6 +81,16 @@ impl ToolResult {
         self.get(key).and_then(|v| v.as_str())
     }
 
+    /// Get an integer field from the parsed JSON
+    pub fn get_i64(&self, key: &str) -> Option<i64> {
+        self.get(key).and_then(|v| v.as_i64())
+    }
+
+    /// Get a boolean field from the parsed JSON
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get(key).and_then(|v| v.as_bool())
+    }
+
     /// Get an array field from the parsed JSON
     pub fn get_array(&self, key: &str) -> Option<&Vec<Value>> {
         self.get(key).and_then(|v| v.as_array())
@@ -89,6 +99,48 @@ impl ToolResult {
     /// Get the array length for a field
     pub fn array_len(&self, key: &str) -> usize {
         self.get_array(key).map(|a| a.len()).unwrap_or(0)
+    }
+
+    /// Check if the error message contains a substring
+    ///
+    /// Returns true if:
+    /// - The result is an error AND
+    /// - The error message or content contains the given substring (case-insensitive)
+    pub fn error_contains(&self, substring: &str) -> bool {
+        if self.success {
+            return false;
+        }
+
+        let search_str = substring.to_lowercase();
+
+        // Check error field
+        if let Some(ref err) = self.error {
+            if err.to_lowercase().contains(&search_str) {
+                return true;
+            }
+        }
+
+        // Check content field (error messages are often in content)
+        if self.content.to_lowercase().contains(&search_str) {
+            return true;
+        }
+
+        // Check parsed JSON error field if present
+        if let Some(ref parsed) = self.parsed {
+            if let Some(error_obj) = parsed.get("error") {
+                let error_str = error_obj.to_string().to_lowercase();
+                if error_str.contains(&search_str) {
+                    return true;
+                }
+            }
+            if let Some(message) = parsed.get("message").and_then(|v| v.as_str()) {
+                if message.to_lowercase().contains(&search_str) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Create a failed result

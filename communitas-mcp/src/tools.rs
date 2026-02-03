@@ -30,15 +30,14 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         // Pre-auth tools (always available)
         Tool {
             name: "authenticate".to_string(),
-            description: "Authenticate with connection address (four words) and password".to_string(),
+            description: "Authenticate with connection address (four words)".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "four_words": {"type": "string", "description": "Your four-word connection address (word1.word2.word3.word4)"},
-                    "password": {"type": "string", "description": "Your password"},
                     "device_name": {"type": "string", "description": "Name for this device/session"}
                 },
-                "required": ["four_words", "password"]
+                "required": ["four_words"]
             }),
         },
         Tool {
@@ -48,10 +47,9 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "type": "object",
                 "properties": {
                     "four_words": {"type": "string", "description": "Choose your four-word connection address (word1.word2.word3.word4)"},
-                    "password": {"type": "string", "description": "Password to protect your vault"},
                     "display_name": {"type": "string", "description": "Your display name"}
                 },
-                "required": ["four_words", "password", "display_name"]
+                "required": ["four_words", "display_name"]
             }),
         },
         Tool {
@@ -93,14 +91,13 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         },
         Tool {
             name: "delete_vault".to_string(),
-            description: "Delete an identity vault (requires password confirmation)".to_string(),
+            description: "Delete an identity vault".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "four_words": {"type": "string", "description": "Four-word connection address of the vault to delete"},
-                    "password": {"type": "string", "description": "Password to confirm deletion"}
+                    "four_words": {"type": "string", "description": "Four-word connection address of the vault to delete"}
                 },
-                "required": ["four_words", "password"]
+                "required": ["four_words"]
             }),
         },
         Tool {
@@ -109,10 +106,9 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "backup_data": {"type": "string", "description": "Base64-encoded backup data"},
-                    "password": {"type": "string", "description": "Password to decrypt the backup"}
+                    "backup_data": {"type": "string", "description": "Base64-encoded backup data"}
                 },
-                "required": ["backup_data", "password"]
+                "required": ["backup_data"]
             }),
         },
         // Recovery tools (ADR-016) - pre-auth for identity creation/recovery
@@ -203,7 +199,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["login", "logout", "failed_login", "identity_switch", "device_change", "recovery", "passkey_register", "passkey_auth", "session_refresh", "session_expired"]
+                            "enum": ["login", "logout", "failed_login", "identity_switch", "device_change", "recovery", "session_refresh", "session_expired"]
                         },
                         "description": "Filter by specific event types (optional, returns all types if not specified)"
                     }
@@ -228,7 +224,7 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["login", "logout", "failed_login", "identity_switch", "device_change", "recovery", "passkey_register", "passkey_auth", "session_refresh", "session_expired"]
+                            "enum": ["login", "logout", "failed_login", "identity_switch", "device_change", "recovery", "session_refresh", "session_expired"]
                         },
                         "description": "Filter by specific event types (optional, returns all types if not specified)"
                     }
@@ -7654,7 +7650,7 @@ mod tests {
         let auth_tool = tools.iter().find(|t| t.name == "authenticate").unwrap();
         let props = &auth_tool.input_schema["properties"];
         assert!(props.get("four_words").is_some());
-        assert!(props.get("password").is_some());
+        assert!(props.get("password").is_none());
     }
 
     #[test]

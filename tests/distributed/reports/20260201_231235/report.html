@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed MCP Test Report</title>
+  <style>
+    :root {
+      --success-color: #22c55e;
+      --failure-color: #ef4444;
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #e5e7eb;
+      --border-color: #374151;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #f1f5f9;
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      color: #9ca3af;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+    }
+    .card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card .value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+    .card.success .value { color: var(--success-color); }
+    .card.failure .value { color: var(--failure-color); }
+    .tools {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+    }
+    .tools h2 {
+      margin-top: 0;
+    }
+    .tools ul {
+      columns: 3;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tools li {
+      padding: 0.25rem 0;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    th {
+      background: #0f172a;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr.pass { background: rgba(34, 197, 94, 0.1); }
+    tr.fail { background: rgba(239, 68, 68, 0.1); }
+    .error {
+      color: var(--failure-color);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Full MCP Test Suite</h1>
+    <div class="timestamp">Generated: 2026-02-01 23:12:37 UTC</div>
+
+    <div class="summary">
+      <div class="card success">
+        <h3>Status</h3>
+        <div class="value">PASS</div>
+      </div>
+      <div class="card">
+        <h3>Total Tests</h3>
+        <div class="value">1</div>
+      </div>
+      <div class="card success">
+        <h3>Passed</h3>
+        <div class="value">1</div>
+      </div>
+      <div class="card failure">
+        <h3>Failed</h3>
+        <div class="value">0</div>
+      </div>
+      <div class="card">
+        <h3>Pass Rate</h3>
+        <div class="value">100.0%</div>
+      </div>
+    </div>
+
+    <div class="tools">
+      <h2>Tools Covered</h2>
+      <ul>
+        <li>health_check</li>
+          <li>create_vault</li>
+          <li>authenticate</li>
+          <li>authenticate_token</li>
+          <li>core_status</li>
+          <li>create_entity</li>
+          <li>get_entity</li>
+          <li>list_entities</li>
+          <li>join_entity</li>
+          <li>add_member</li>
+          <li>remove_member</li>
+          <li>list_members</li>
+          <li>send_message</li>
+          <li>get_messages</li>
+          <li>create_thread</li>
+          <li>get_thread_messages</li>
+          <li>write_file</li>
+          <li>read_file</li>
+          <li>list_files</li>
+          <li>delete_file</li>
+          <li>get_disk_stats</li>
+          <li>kanban_create_board</li>
+          <li>kanban_get_board</li>
+          <li>kanban_list_boards</li>
+          <li>kanban_update_board</li>
+          <li>kanban_delete_board</li>
+          <li>kanban_create_column</li>
+          <li>kanban_list_columns</li>
+          <li>kanban_update_column</li>
+          <li>kanban_delete_column</li>
+          <li>kanban_reorder_columns</li>
+          <li>kanban_create_card</li>
+          <li>kanban_get_card</li>
+          <li>kanban_list_cards</li>
+          <li>kanban_update_card</li>
+          <li>kanban_delete_card</li>
+          <li>kanban_move_card</li>
+          <li>kanban_assign_card</li>
+          <li>kanban_unassign_card</li>
+          <li>kanban_create_tag</li>
+          <li>kanban_list_tags</li>
+          <li>kanban_update_tag</li>
+          <li>kanban_delete_tag</li>
+          <li>kanban_add_tag_to_card</li>
+          <li>kanban_remove_tag_from_card</li>
+          <li>kanban_create_step</li>
+          <li>kanban_list_steps</li>
+          <li>kanban_update_step</li>
+          <li>kanban_delete_step</li>
+          <li>kanban_create_comment</li>
+          <li>kanban_list_comments</li>
+          <li>kanban_delete_comment</li>
+          <li>create_contact</li>
+          <li>get_contact</li>
+          <li>update_contact</li>
+          <li>delete_contact</li>
+          <li>list_contacts</li>
+          <li>link_contact</li>
+          <li>unlink_contact</li>
+          <li>add_to_favourites</li>
+          <li>remove_from_favourites</li>
+          <li>search_contacts</li>
+          <li>network_start</li>
+          <li>network_stop</li>
+          <li>network_connect</li>
+          <li>network_disconnect</li>
+          <li>network_status</li>
+          <li>network_peers</li>
+          <li>network_external_address</li>
+          <li>create_website</li>
+          <li>get_website</li>
+          <li>update_website</li>
+          <li>delete_website</li>
+          <li>create_invite</li>
+          <li>accept_invite</li>
+          <li>list_pending_invites</li>
+          <li>get_profile</li>
+      </ul>
+    </div>
+
+    <h2>Test Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Test ID</th>
+          <th>Name</th>
+          <th>Error</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MASTER-001</td>
+          <td>Initial health check</td>
+          <td>-</td>
+          <td>342ms</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

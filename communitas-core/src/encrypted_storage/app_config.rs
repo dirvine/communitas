@@ -25,9 +25,6 @@ pub struct AppConfig {
     /// Enable platform keyring for password storage
     pub keyring_enabled: bool,
 
-    /// Enable biometric authentication (Touch ID, Face ID, Windows Hello)
-    pub biometric_enabled: bool,
-
     /// List of recently used identities (for quick access)
     pub recent_identities: Vec<RecentIdentity>,
 
@@ -69,7 +66,6 @@ pub struct RecentIdentity {
     pub four_words: String,
     pub display_name: String,
     pub last_used: u64,
-    pub has_passkey: bool,
 }
 
 /// UI preferences
@@ -93,7 +89,6 @@ impl Default for AppConfig {
             last_identity: None,
             auto_login_enabled: true,
             keyring_enabled: true,
-            biometric_enabled: true,
             recent_identities: Vec::new(),
             pinned_threads: Vec::new(),
             ui_preferences: UiPreferences::default(),
@@ -237,7 +232,6 @@ impl AppConfigManager {
                 four_words,
                 display_name,
                 last_used: now,
-                has_passkey: false,
             });
         }
 
@@ -250,24 +244,6 @@ impl AppConfigManager {
         self.save().await
     }
 
-    /// Mark identity as having passkey
-    pub async fn set_identity_has_passkey(
-        &mut self,
-        four_words: &str,
-        has_passkey: bool,
-    ) -> Result<()> {
-        if let Some(identity) = self
-            .config
-            .recent_identities
-            .iter_mut()
-            .find(|r| r.four_words == four_words)
-        {
-            identity.has_passkey = has_passkey;
-            self.save().await?;
-        }
-        Ok(())
-    }
-
     /// Enable/disable auto-login
     pub async fn set_auto_login(&mut self, enabled: bool) -> Result<()> {
         self.config.auto_login_enabled = enabled;
@@ -277,12 +253,6 @@ impl AppConfigManager {
     /// Enable/disable keyring
     pub async fn set_keyring_enabled(&mut self, enabled: bool) -> Result<()> {
         self.config.keyring_enabled = enabled;
-        self.save().await
-    }
-
-    /// Enable/disable biometric authentication
-    pub async fn set_biometric_enabled(&mut self, enabled: bool) -> Result<()> {
-        self.config.biometric_enabled = enabled;
         self.save().await
     }
 
@@ -468,31 +438,6 @@ mod tests {
             Some("test-identity".to_string())
         );
         assert!(!manager.get_config().auto_login_enabled);
-    }
-
-    #[tokio::test]
-    async fn test_passkey_tracking() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut manager = AppConfigManager::new(temp_dir.path().to_path_buf())
-            .await
-            .unwrap();
-
-        // Add identity
-        manager
-            .set_last_identity("test-identity".to_string(), "Test User".to_string())
-            .await
-            .unwrap();
-
-        // Initially no passkey
-        assert!(!manager.get_config().recent_identities[0].has_passkey);
-
-        // Set passkey
-        manager
-            .set_identity_has_passkey("test-identity", true)
-            .await
-            .unwrap();
-
-        assert!(manager.get_config().recent_identities[0].has_passkey);
     }
 
     #[tokio::test]
@@ -694,7 +639,6 @@ mod tests {
             "last_identity": "test-words",
             "auto_login_enabled": true,
             "keyring_enabled": true,
-            "biometric_enabled": false,
             "recent_identities": [],
             "pinned_threads": [],
             "ui_preferences": {

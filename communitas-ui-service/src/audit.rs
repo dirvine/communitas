@@ -175,8 +175,6 @@ pub fn parse_event_types(types: &[String]) -> Result<Vec<AuditEventType>, AuditE
             "identity_switch" => Ok(AuditEventType::IdentitySwitch),
             "device_change" => Ok(AuditEventType::DeviceChange),
             "recovery" => Ok(AuditEventType::Recovery),
-            "passkey_register" => Ok(AuditEventType::PasskeyRegister),
-            "passkey_auth" => Ok(AuditEventType::PasskeyAuth),
             "session_refresh" => Ok(AuditEventType::SessionRefresh),
             "session_expired" => Ok(AuditEventType::SessionExpired),
             other => Err(AuditError::Log(format!("unknown event type: {other}"))),

@@ -228,33 +228,6 @@ replicator.subscribe_doc("doc-123", |update| {
 
 ## Encrypted Storage
 
-### Passkey Storage
-
-```rust
-use communitas_core::encrypted_storage::PasskeyStorage;
-
-let storage = PasskeyStorage::new()?;
-
-// Store passkey
-storage.store_passkey(
-    "user@example.com",
-    "service-name",
-    &passkey_bytes
-).await?;
-
-// Retrieve passkey
-let passkey = storage.get_passkey(
-    "user@example.com",
-    "service-name"
-).await?;
-
-// Delete passkey
-storage.delete_passkey(
-    "user@example.com",
-    "service-name"
-).await?;
-```
-
 ### Platform Integration
 
 The encrypted storage system uses platform-specific credential managers:

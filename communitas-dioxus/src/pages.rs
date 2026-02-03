@@ -958,6 +958,7 @@ pub fn MainAppV2(children: Element) -> Element {
     let services = use_context::<Arc<UiServices>>();
     let _nav_snapshot = services.navigation().current_snapshot();
     let dir_snapshot = services.directory().current_snapshot();
+    let is_temporary_session = services.auth().is_temporary_session();
 
     // Navigation hooks
     let navigator = use_navigator();
@@ -994,6 +995,7 @@ pub fn MainAppV2(children: Element) -> Element {
                     Route::LoginRoute {} => "Login".to_string(),
                     Route::CreateIdentityRoute {} => "Create Identity".to_string(),
                     Route::RecoverIdentityRoute {} => "Recover Identity".to_string(),
+                    Route::LoginOtherRoute {} => "Login Other User".to_string(),
                     Route::DashboardRoute {} => "Dashboard".to_string(),
                     Route::MessagesRoute {} => "Messages".to_string(),
                     Route::ProjectsRoute {} => "Projects".to_string(),
@@ -1271,7 +1273,34 @@ pub fn MainAppV2(children: Element) -> Element {
             },
 
             // Main content
-            {children}
+            div {
+                style: "display: flex; flex-direction: column; height: 100%; min-height: 0;",
+                if is_temporary_session {
+                    div {
+                        style: format!(
+                            "display: flex; \
+                             align-items: center; \
+                             gap: {}; \
+                             padding: {} {}; \
+                             background: rgba(234, 179, 8, 0.12); \
+                             border-bottom: 1px solid rgba(234, 179, 8, 0.35); \
+                             color: {}; \
+                             font-size: {};",
+                            spacing::SM,
+                            spacing::SM,
+                            spacing::BASE,
+                            semantic::TEXT_PRIMARY,
+                            typography::SIZE_SM
+                        ),
+                        span { style: format!("color: {};", palette::AMBER_400), "Temporary session" }
+                        span { "Data stored on this device will be wiped when you log out." }
+                    }
+                }
+                div {
+                    style: "flex: 1; min-height: 0; overflow: hidden;",
+                    {children}
+                }
+            }
         }
 
         // Create Entity Modal

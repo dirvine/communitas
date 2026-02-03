@@ -195,7 +195,7 @@ async fn test_connect_by_words_valid_format() {
         .call_tool(
             "connect_by_words",
             json!({
-                "four_words": "ocean-forest-moon-star"
+                "words": "ocean-forest-moon-star"
             }),
         )
         .await;
@@ -218,7 +218,7 @@ async fn test_connect_by_words_invalid_format() {
         .call_tool(
             "connect_by_words",
             json!({
-                "four_words": "not-enough-words"
+                "words": "not-enough-words"
             }),
         )
         .await;

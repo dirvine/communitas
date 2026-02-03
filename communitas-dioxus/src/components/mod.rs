@@ -2,7 +2,6 @@
 
 pub mod announcer;
 pub mod app_shell;
-pub mod auth;
 pub mod auth_v2;
 pub mod call;
 pub mod canvas;
@@ -10,7 +9,6 @@ mod composer;
 pub mod drive;
 pub mod entity_view;
 pub mod error_boundary;
-mod identity_switcher;
 pub mod kanban;
 pub mod layout;
 mod message_list;
@@ -40,9 +38,6 @@ pub use canvas::{
 };
 pub use composer::MessageComposer;
 pub use drive::DriveBrowser;
-// Re-export identity switcher (will be integrated into ProfileHeader)
-#[allow(unused_imports)]
-pub use identity_switcher::IdentitySwitcher;
 // Re-export main kanban components for external use
 // Note: BoardListPage and BoardView are used in main.rs routes
 pub use message_list::MessageList;
@@ -101,13 +96,6 @@ pub use settings::UpdateCard;
 pub use settings::UpdateProgressBar;
 #[allow(unused_imports)]
 pub use settings::UpdateStatusBadge;
-// Re-export auth components for biometric/passkey authentication
-#[allow(unused_imports)]
-pub use auth::{
-    BiometricState, PasskeyButton, PasskeyPrompt, RecoverySetupModal, RecoveryWarningBadge,
-    RecoveryWarningBanner,
-};
-
 // Re-export enhanced auth components (v2 - Digital Forest Sanctuary theme)
 #[allow(unused_imports)]
 pub use auth_v2::{

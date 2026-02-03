@@ -76,9 +76,6 @@ opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 
-# WebAuthn for passkey/biometric authentication
-webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
-
 # Cryptography and security
 blake3 = "1.0"
 bip39 = { version = "2", default-features = false, features = ["std", "zeroize"] }

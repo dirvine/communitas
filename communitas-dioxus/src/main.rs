@@ -36,13 +36,10 @@ use tokens::colors;
 use tracing::{error, info, warn};
 
 // V2 auth components with Digital Forest Sanctuary theme
-use components::auth_v2::{
-    AuthBackground, AuthLayoutV2, ErrorBanner, FormField, FormTextarea, PasswordStrength,
-    PrimaryButton,
-};
+use components::auth_v2::{AuthLayoutV2, ErrorBanner, FormField, FormTextarea, PrimaryButton};
 // Accessibility: Screen reader announcer
 use components::Announcer;
-use design_tokens::{gradients, motion, palette, radius, semantic, spacing, typography};
+use design_tokens::{palette, radius, semantic, spacing, typography};
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
 static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
@@ -101,6 +98,8 @@ enum Route {
     CreateIdentityRoute {},
     #[route("/recover")]
     RecoverIdentityRoute {},
+    #[route("/login-other")]
+    LoginOtherRoute {},
     #[route("/")]
     DashboardRoute {},
     #[route("/messages")]
@@ -140,6 +139,7 @@ enum Route {
 enum AuthPhase {
     LoggedOut,
     Authenticating,
+    PendingMnemonic,
     Authenticated,
 }
 
@@ -148,6 +148,7 @@ struct AuthState {
     phase: AuthPhase,
     session: Option<AuthSession>,
     error: Option<String>,
+    pending_mnemonic: Option<String>,
 }
 
 impl AuthState {
@@ -162,13 +163,16 @@ impl Default for AuthState {
             phase: AuthPhase::LoggedOut,
             session: None,
             error: None,
+            pending_mnemonic: None,
         }
     }
 }
 
 impl PartialEq for AuthState {
     fn eq(&self, other: &Self) -> bool {
-        self.phase == other.phase && self.error == other.error
+        self.phase == other.phase
+            && self.error == other.error
+            && self.pending_mnemonic == other.pending_mnemonic
     }
 }
 
@@ -561,356 +565,131 @@ fn RouteObserver() -> Element {
 
 #[component]
 fn LoginRoute() -> Element {
-    let auth = use_auth();
     let navigator = use_navigator();
-    let services = use_context::<Arc<UiServices>>();
-    let auth_service = services.auth();
-
-    // Already authenticated - go to dashboard
-    if auth.read().is_authenticated() {
-        navigator.replace(Route::DashboardRoute {});
-    }
-
-    // Fetch available vaults for selection
-    let vaults = use_resource({
-        let auth_service = auth_service.clone();
-        move || {
-            let auth_service = auth_service.clone();
-            async move { auth_service.list_vaults().await.ok() }
-        }
-    });
-
-    let mut selected_vault = use_signal(|| None::<(String, String)>); // (four_words, display_name)
-    let mut password = use_signal(String::new);
-
-    let login_action = {
-        let mut auth_signal = auth;
-        let auth_service = auth_service.clone();
-        use_coroutine(move |mut rx: UnboundedReceiver<LoginRequest>| {
-            let auth_service = auth_service.clone();
-            async move {
-                while let Some(payload) = rx.next().await {
-                    if let Err(err) =
-                        process_login(auth_signal, auth_service.clone(), payload).await
-                    {
-                        auth_signal.with_mut(|state| {
-                            state.error = Some(err);
-                            state.phase = AuthPhase::LoggedOut;
-                        });
-                    } else {
-                        navigator.replace(Route::DashboardRoute {});
-                    }
-                }
-            }
-        })
-    };
-
-    let busy = matches!(auth.read().phase, AuthPhase::Authenticating);
-    let error_msg = auth.read().error.clone();
-    let mut auth_for_validation = auth;
-
-    // Check vault loading state
-    let vaults_loading = vaults.read().as_ref().is_none();
-    let vaults_list = vaults.read().clone().flatten().unwrap_or_default();
-
-    // CRITICAL: If no vaults exist, redirect directly to CreateIdentity
-    // Don't show "Welcome back" when there's nothing to log into
-    if !vaults_loading && vaults_list.is_empty() {
+    use_effect(move || {
         navigator.replace(Route::CreateIdentityRoute {});
-        return rsx! { Fragment {} };
-    }
-
-    // Loading state with beautiful design
-    if vaults_loading {
-        return rsx! {
-            div {
-                style: format!(
-                    "min-height: 100vh; \
-                     display: flex; \
-                     align-items: center; \
-                     justify-content: center; \
-                     font-family: {};",
-                    typography::FONT_BODY
-                ),
-                AuthBackground {}
-                div {
-                    style: format!(
-                        "text-align: center; \
-                         color: {};",
-                        semantic::TEXT_SECONDARY
-                    ),
-                    // Animated spinner
-                    div {
-                        style: format!(
-                            "width: 48px; \
-                             height: 48px; \
-                             margin: 0 auto {}; \
-                             border: 3px solid {}; \
-                             border-top-color: {}; \
-                             border-radius: 50%; \
-                             animation: spin 0.8s linear infinite;",
-                            spacing::XL,
-                            semantic::BORDER_SUBTLE,
-                            semantic::PRIMARY
-                        ),
-                    }
-                    "Loading your vaults..."
-                }
-                style { "@keyframes spin {{ to {{ transform: rotate(360deg); }} }}" }
-            }
-        };
-    }
-
-    // Main login UI with v2 design
+    });
     rsx! {
-        AuthLayoutV2 {
-            title: "Welcome back".to_string(),
-            subtitle: Some("Choose your vault and enter your passphrase to continue.".to_string()),
-            footer: Some(rsx! {
-                div {
-                    style: format!(
-                        "display: flex; \
-                         flex-direction: column; \
-                         gap: {}; \
-                         align-items: center;",
-                        spacing::SM
-                    ),
-                    span {
-                        style: format!(
-                            "font-size: {}; \
-                             color: {};",
-                            typography::SIZE_SM,
-                            semantic::TEXT_SECONDARY
-                        ),
-                        "Need a new vault? "
-                        Link {
-                            to: Route::CreateIdentityRoute {},
-                            style: format!(
-                                "color: {}; \
-                                 font-weight: {}; \
-                                 text-decoration: none; \
-                                 transition: {};",
-                                semantic::PRIMARY,
-                                typography::WEIGHT_MEDIUM,
-                                motion::transition("color")
-                            ),
-                            "Create identity"
-                        }
-                        " or "
-                        Link {
-                            to: Route::RecoverIdentityRoute {},
-                            style: format!(
-                                "color: {}; \
-                                 font-weight: {}; \
-                                 text-decoration: none; \
-                                 transition: {};",
-                                semantic::PRIMARY,
-                                typography::WEIGHT_MEDIUM,
-                                motion::transition("color")
-                            ),
-                            "recover"
-                        }
-                    }
-                }
-            }),
-
-            // Error banner
-            if let Some(err) = &error_msg {
-                ErrorBanner { message: err.clone() }
-            }
-
-            form {
-                onsubmit: move |evt| {
-                    evt.prevent_default();
-                    let selected = selected_vault();
-                    let Some((four_words, _)) = selected else {
-                        auth_for_validation.with_mut(|state| {
-                            state.error = Some("Please select a vault".into());
-                        });
-                        return;
-                    };
-                    if password().is_empty() {
-                        auth_for_validation.with_mut(|state| {
-                            state.error = Some("Please enter your passphrase".into());
-                        });
-                        return;
-                    }
-                    login_action.send(LoginRequest {
-                        four_words,
-                        password: password().clone(),
-                    });
-                },
-
-                // Vault selector as cards (not dropdown)
-                div {
-                    style: format!("margin-bottom: {};", spacing::XL),
-                    label {
-                        style: format!(
-                            "display: block; \
-                             color: {}; \
-                             font-size: {}; \
-                             font-weight: {}; \
-                             margin-bottom: {};",
-                            semantic::TEXT_SECONDARY,
-                            typography::SIZE_SM,
-                            typography::WEIGHT_MEDIUM,
-                            spacing::SM
-                        ),
-                        "Select vault"
-                    }
-                    div {
-                        style: format!(
-                            "display: flex; \
-                             flex-direction: column; \
-                             gap: {};",
-                            spacing::SM
-                        ),
-                        {vaults_list.iter().map(|vault| {
-                            let is_selected = selected_vault().as_ref().map(|(_, name)| name == &vault.display_name).unwrap_or(false);
-                            let vault_four_words = vault.four_words.clone();
-                            let vault_display_name = vault.display_name.clone();
-                            rsx! {
-                                button {
-                                    r#type: "button",
-                                    key: "{vault.four_words}",
-                                    disabled: busy,
-                                    style: format!(
-                                        "width: 100%; \
-                                         display: flex; \
-                                         align-items: center; \
-                                         gap: {}; \
-                                         padding: {} {}; \
-                                         background: {}; \
-                                         border: 1px solid {}; \
-                                         border-radius: {}; \
-                                         cursor: pointer; \
-                                         text-align: left; \
-                                         transition: {};",
-                                        spacing::MD,
-                                        spacing::MD,
-                                        spacing::BASE,
-                                        if is_selected { semantic::BG_ELEVATED } else { semantic::BG_TERTIARY },
-                                        if is_selected { semantic::PRIMARY } else { semantic::BORDER_SUBTLE },
-                                        radius::LG,
-                                        motion::transition("all")
-                                    ),
-                                    onclick: move |_| {
-                                        selected_vault.set(Some((vault_four_words.clone(), vault_display_name.clone())));
-                                    },
-                                    // Avatar circle
-                                    div {
-                                        style: format!(
-                                            "width: 40px; \
-                                             height: 40px; \
-                                             background: {}; \
-                                             border-radius: {}; \
-                                             display: flex; \
-                                             align-items: center; \
-                                             justify-content: center; \
-                                             font-size: {}; \
-                                             font-weight: {}; \
-                                             color: white; \
-                                             flex-shrink: 0;",
-                                            gradients::BUTTON_PRIMARY,
-                                            radius::FULL,
-                                            typography::SIZE_MD,
-                                            typography::WEIGHT_SEMIBOLD
-                                        ),
-                                        "{vault.display_name.chars().next().unwrap_or('?').to_uppercase()}"
-                                    }
-                                    // Vault info
-                                    div {
-                                        style: "flex: 1; min-width: 0;",
-                                        // Primary: Display name (SHOWN)
-                                        div {
-                                            style: format!(
-                                                "font-size: {}; \
-                                                 font-weight: {}; \
-                                                 color: {}; \
-                                                 white-space: nowrap; \
-                                                 overflow: hidden; \
-                                                 text-overflow: ellipsis;",
-                                                typography::SIZE_BASE,
-                                                typography::WEIGHT_MEDIUM,
-                                                semantic::TEXT_PRIMARY
-                                            ),
-                                            "{vault.display_name}"
-                                        }
-                                        // Secondary: Connection address (WHERE) - for vault identification on this device
-                                        div {
-                                            style: format!(
-                                                "font-size: {}; \
-                                                 color: {}; \
-                                                 font-family: {};",
-                                                typography::SIZE_XS,
-                                                semantic::TEXT_MUTED,
-                                                typography::FONT_MONO
-                                            ),
-                                            title: "Connection address for peer discovery",
-                                            "{vault.four_words}"
-                                        }
-                                    }
-                                    // Selection indicator
-                                    if is_selected {
-                                        div {
-                                            style: format!(
-                                                "width: 20px; \
-                                                 height: 20px; \
-                                                 background: {}; \
-                                                 border-radius: {}; \
-                                                 display: flex; \
-                                                 align-items: center; \
-                                                 justify-content: center; \
-                                                 color: white; \
-                                                 font-size: {};",
-                                                semantic::PRIMARY,
-                                                radius::FULL,
-                                                typography::SIZE_XS
-                                            ),
-                                            "✓"
-                                        }
-                                    }
-                                }
-                            }
-                        })}
-                    }
-                }
-
-                // Password input
-                FormField {
-                    label: "Passphrase".to_string(),
-                    input_type: "password".to_string(),
-                    placeholder: Some("Enter your vault passphrase".to_string()),
-                    value: password(),
-                    disabled: busy,
-                    oninput: move |evt: FormEvent| password.set(evt.value()),
-                }
-
-                // Submit button
-                PrimaryButton {
-                    disabled: busy || selected_vault().is_none(),
-                    loading: busy,
-                    "Unlock vault"
-                }
-            }
-        }
+        div { class: "min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center", "Redirecting..." }
     }
 }
 
 #[component]
 fn CreateIdentityRoute() -> Element {
-    let auth = use_auth();
+    let mut auth = use_auth();
     let navigator = use_navigator();
     let services = use_context::<Arc<UiServices>>();
     let auth_service = services.auth();
 
-    if auth.read().is_authenticated() {
+    if matches!(auth.read().phase, AuthPhase::Authenticated) {
         navigator.replace(Route::DashboardRoute {});
     }
 
+    if matches!(auth.read().phase, AuthPhase::PendingMnemonic) {
+        let mnemonic = auth.read().pending_mnemonic.clone().unwrap_or_default();
+        let words: Vec<&str> = mnemonic.split_whitespace().collect();
+        let mut acknowledged = use_signal(|| false);
+
+        return rsx! {
+            AuthLayoutV2 {
+                title: "Your recovery phrase".to_string(),
+                subtitle: Some("Write these words down on paper. This is the only time you will see them.".to_string()),
+                footer: Some(rsx! {
+                    div {
+                        style: format!(
+                            "display: flex; \
+                             flex-direction: column; \
+                             gap: {}; \
+                             align-items: center;",
+                            spacing::SM
+                        ),
+                        span {
+                            style: format!(
+                                "font-size: {}; \
+                                 color: {};",
+                                typography::SIZE_XS,
+                                semantic::TEXT_MUTED
+                            ),
+                            "We do not store your recovery phrase. If you lose it, we cannot recover your identity."
+                        }
+                    }
+                }),
+
+                div {
+                    style: format!(
+                        "display: grid; \
+                         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); \
+                         gap: {}; \
+                         margin-bottom: {};",
+                        spacing::SM,
+                        spacing::XL
+                    ),
+                    {words.iter().enumerate().map(|(idx, word)| {
+                        rsx! {
+                            div {
+                                key: "{idx}",
+                                style: format!(
+                                    "padding: {} {}; \
+                                     border-radius: {}; \
+                                     background: {}; \
+                                     border: 1px solid {}; \
+                                     font-family: {}; \
+                                     font-size: {};",
+                                    spacing::SM,
+                                    spacing::BASE,
+                                    radius::MD,
+                                    semantic::BG_TERTIARY,
+                                    semantic::BORDER_SUBTLE,
+                                    typography::FONT_MONO,
+                                    typography::SIZE_SM
+                                ),
+                                span {
+                                    style: format!("opacity: 0.6; margin-right: {};", spacing::XS),
+                                    "{idx + 1}."
+                                }
+                                "{word}"
+                            }
+                        }
+                    })}
+                }
+
+                div {
+                    style: format!(
+                        "display: flex; \
+                         align-items: center; \
+                         gap: {}; \
+                         margin-bottom: {};",
+                        spacing::SM,
+                        spacing::LG
+                    ),
+                    input {
+                        r#type: "checkbox",
+                        checked: acknowledged(),
+                        onclick: move |_| acknowledged.set(!acknowledged()),
+                    }
+                    span {
+                        style: format!("font-size: {}; color: {};", typography::SIZE_SM, semantic::TEXT_SECONDARY),
+                        "I have written this phrase down"
+                    }
+                }
+
+                PrimaryButton {
+                    disabled: !acknowledged(),
+                    onclick: move |_| {
+                        auth.with_mut(|state| {
+                            state.phase = AuthPhase::Authenticated;
+                            state.pending_mnemonic = None;
+                            state.error = None;
+                        });
+                        navigator.replace(Route::DashboardRoute {});
+                    },
+                    "Continue"
+                }
+            }
+        };
+    }
+
     let mut display_name = use_signal(String::new);
-    let mut password = use_signal(String::new);
-    let mut confirm = use_signal(String::new);
 
     let create_action = {
         let mut auth = auth;
@@ -924,8 +703,6 @@ fn CreateIdentityRoute() -> Element {
                             state.error = Some(err);
                             state.phase = AuthPhase::LoggedOut;
                         });
-                    } else {
-                        navigator.replace(Route::DashboardRoute {});
                     }
                 }
             }
@@ -934,14 +711,10 @@ fn CreateIdentityRoute() -> Element {
 
     let busy = matches!(auth.read().phase, AuthPhase::Authenticating);
     let error_msg = auth.read().error.clone();
-    let mut auth_for_submit = auth;
-    let password_value = password();
 
     // Validation
     let name_valid = !display_name().trim().is_empty();
-    let password_valid = password().len() >= 8;
-    let passwords_match = password() == confirm() && !password().is_empty();
-    let can_submit = name_valid && password_valid && passwords_match;
+    let can_submit = name_valid;
 
     rsx! {
         AuthLayoutV2 {
@@ -1002,25 +775,6 @@ fn CreateIdentityRoute() -> Element {
                             }
                         }
                     }
-                    // Login option (smaller, secondary)
-                    span {
-                        style: format!(
-                            "font-size: {}; \
-                             color: {};",
-                            typography::SIZE_SM,
-                            semantic::TEXT_MUTED
-                        ),
-                        "Have an existing vault? "
-                        Link {
-                            to: Route::LoginRoute {},
-                            style: format!(
-                                "color: {}; \
-                                 text-decoration: none;",
-                                semantic::TEXT_SECONDARY
-                            ),
-                            "Sign in"
-                        }
-                    }
                 }
             }),
 
@@ -1069,21 +823,8 @@ fn CreateIdentityRoute() -> Element {
             form {
                 onsubmit: move |evt| {
                     evt.prevent_default();
-                    if password() != confirm() {
-                        auth_for_submit.with_mut(|state| {
-                            state.error = Some("Passphrases don't match".into())
-                        });
-                        return;
-                    }
-                    if password().len() < 8 {
-                        auth_for_submit.with_mut(|state| {
-                            state.error = Some("Passphrase must be at least 8 characters".into())
-                        });
-                        return;
-                    }
                     create_action.send(CreateRequest {
                         display_name: display_name().trim().to_string(),
-                        password: password().clone(),
                     });
                 },
 
@@ -1096,52 +837,6 @@ fn CreateIdentityRoute() -> Element {
                     disabled: busy,
                     required: true,
                     oninput: move |evt: FormEvent| display_name.set(evt.value()),
-                }
-
-                // Password input with strength indicator
-                FormField {
-                    label: "Create passphrase".to_string(),
-                    input_type: "password".to_string(),
-                    placeholder: Some("At least 8 characters".to_string()),
-                    value: password(),
-                    disabled: busy,
-                    required: true,
-                    oninput: move |evt: FormEvent| password.set(evt.value()),
-                }
-
-                // Password strength indicator
-                PasswordStrength { password: password_value.clone() }
-
-                // Confirm password
-                FormField {
-                    label: "Confirm passphrase".to_string(),
-                    input_type: "password".to_string(),
-                    placeholder: Some("Type it again".to_string()),
-                    value: confirm(),
-                    disabled: busy,
-                    required: true,
-                    oninput: move |evt: FormEvent| confirm.set(evt.value()),
-                }
-
-                // Match indicator
-                if !confirm().is_empty() {
-                    div {
-                        style: format!(
-                            "margin-top: -{}; \
-                             margin-bottom: {}; \
-                             font-size: {}; \
-                             color: {};",
-                            spacing::MD,
-                            spacing::XL,
-                            typography::SIZE_XS,
-                            if passwords_match { semantic::SUCCESS } else { palette::ROSE_400 }
-                        ),
-                        if passwords_match {
-                            "✓ Passphrases match"
-                        } else {
-                            "✗ Passphrases don't match"
-                        }
-                    }
                 }
 
                 // Submit button
@@ -1162,7 +857,7 @@ fn CreateIdentityRoute() -> Element {
                         typography::SIZE_XS,
                         semantic::TEXT_MUTED
                     ),
-                    "🔒 A recovery phrase will be generated after creation."
+                    "A recovery phrase will be generated after creation. Write it down."
                 }
             }
         }
@@ -1171,19 +866,55 @@ fn CreateIdentityRoute() -> Element {
 
 #[component]
 fn RecoverIdentityRoute() -> Element {
+    rsx! {
+        RecoverIdentityForm {
+            title: "Recover identity".to_string(),
+            subtitle: "Restore your vault using your recovery phrase.".to_string(),
+            temporary: false,
+            allow_cancel: false,
+        }
+    }
+}
+
+#[component]
+fn LoginOtherRoute() -> Element {
+    rsx! {
+        RecoverIdentityForm {
+            title: "Login other user".to_string(),
+            subtitle: "Temporary session. Data will be wiped when you log out.".to_string(),
+            temporary: true,
+            allow_cancel: true,
+        }
+    }
+}
+
+#[derive(Clone, Props, PartialEq)]
+struct RecoverIdentityFormProps {
+    title: String,
+    subtitle: String,
+    temporary: bool,
+    #[props(default = false)]
+    allow_cancel: bool,
+}
+
+#[component]
+fn RecoverIdentityForm(props: RecoverIdentityFormProps) -> Element {
     let auth = use_auth();
     let navigator = use_navigator();
     let services = use_context::<Arc<UiServices>>();
     let auth_service = services.auth();
+    let title = props.title.clone();
+    let subtitle = props.subtitle.clone();
+    let allow_cancel = props.allow_cancel;
+    let temporary = props.temporary;
 
-    if auth.read().is_authenticated() {
+    if auth.read().is_authenticated() && !temporary {
         navigator.replace(Route::DashboardRoute {});
     }
 
     let mut mnemonic = use_signal(String::new);
-    let mut passphrase = use_signal(String::new);
     let mut display_name = use_signal(String::new);
-    let mut password = use_signal(String::new);
+    let mut friend_words = use_signal(String::new);
 
     let recover_action = {
         let mut auth = auth;
@@ -1213,13 +944,12 @@ fn RecoverIdentityRoute() -> Element {
     let mnemonic_word_count = mnemonic_text.split_whitespace().count();
     let mnemonic_valid = mnemonic_word_count == 12 || mnemonic_word_count == 24;
     let name_valid = !display_name().trim().is_empty();
-    let password_valid = password().len() >= 8;
-    let can_submit = mnemonic_valid && name_valid && password_valid;
+    let can_submit = mnemonic_valid && name_valid;
 
     rsx! {
         AuthLayoutV2 {
-            title: "Recover identity".to_string(),
-            subtitle: Some("Restore your vault using your BIP39 recovery phrase.".to_string()),
+            title: title,
+            subtitle: Some(subtitle),
             footer: Some(rsx! {
                 div {
                     style: format!(
@@ -1236,7 +966,7 @@ fn RecoverIdentityRoute() -> Element {
                             typography::SIZE_SM,
                             semantic::TEXT_SECONDARY
                         ),
-                        "Don't have a phrase? "
+                            "Don't have a phrase? "
                         Link {
                             to: Route::CreateIdentityRoute {},
                             style: format!(
@@ -1249,22 +979,24 @@ fn RecoverIdentityRoute() -> Element {
                             "Create new identity"
                         }
                     }
-                    span {
-                        style: format!(
-                            "font-size: {}; \
-                             color: {};",
-                            typography::SIZE_SM,
-                            semantic::TEXT_MUTED
-                        ),
-                        "Have an existing vault? "
-                        Link {
-                            to: Route::LoginRoute {},
+                    if allow_cancel {
+                        span {
                             style: format!(
-                                "color: {}; \
-                                 text-decoration: none;",
-                                semantic::TEXT_SECONDARY
+                                "font-size: {}; \
+                                 color: {};",
+                                typography::SIZE_SM,
+                                semantic::TEXT_MUTED
                             ),
-                            "Sign in"
+                            "Return to your account "
+                            Link {
+                                to: Route::DashboardRoute {},
+                                style: format!(
+                                    "color: {}; \
+                                     text-decoration: none;",
+                                    semantic::TEXT_SECONDARY
+                                ),
+                                "Go back"
+                            }
                         }
                     }
                 }
@@ -1307,12 +1039,12 @@ fn RecoverIdentityRoute() -> Element {
             form {
                 onsubmit: move |evt| {
                     evt.prevent_default();
-                    let pass = passphrase().trim().to_string();
+                    let friend = friend_words().trim().to_string();
                     recover_action.send(RecoverRequest {
                         mnemonic: mnemonic().trim().to_string(),
-                        passphrase: if pass.is_empty() { None } else { Some(pass) },
                         display_name: display_name().trim().to_string(),
-                        password: password().clone(),
+                        friend_four_words: if friend.is_empty() { None } else { Some(friend) },
+                        temporary: temporary,
                     });
                 },
 
@@ -1348,16 +1080,6 @@ fn RecoverIdentityRoute() -> Element {
                     }
                 }
 
-                // Optional passphrase
-                FormField {
-                    label: "BIP39 passphrase (optional)".to_string(),
-                    input_type: "password".to_string(),
-                    placeholder: Some("Leave blank if you didn't set one".to_string()),
-                    value: passphrase(),
-                    disabled: busy,
-                    oninput: move |evt: FormEvent| passphrase.set(evt.value()),
-                }
-
                 // Display name
                 FormField {
                     label: "Display name".to_string(),
@@ -1369,15 +1091,29 @@ fn RecoverIdentityRoute() -> Element {
                     oninput: move |evt: FormEvent| display_name.set(evt.value()),
                 }
 
-                // New vault password
+                // Friend connection words (optional)
                 FormField {
-                    label: "New vault passphrase".to_string(),
-                    input_type: "password".to_string(),
-                    placeholder: Some("At least 8 characters".to_string()),
-                    value: password(),
+                    label: "Friend connection words (optional)".to_string(),
+                    input_type: "text".to_string(),
+                    placeholder: Some("four-word connection from a friend".to_string()),
+                    value: friend_words(),
                     disabled: busy,
-                    required: true,
-                    oninput: move |evt: FormEvent| password.set(evt.value()),
+                    oninput: move |evt: FormEvent| friend_words.set(evt.value()),
+                }
+                if temporary {
+                    div {
+                        style: format!(
+                            "margin-top: -{}; \
+                             margin-bottom: {}; \
+                             font-size: {}; \
+                             color: {};",
+                            spacing::SM,
+                            spacing::LG,
+                            typography::SIZE_XS,
+                            semantic::TEXT_MUTED
+                        ),
+                        "Temporary session: data stored locally will be wiped when you log out."
+                    }
                 }
 
                 // Submit button
@@ -1757,12 +1493,27 @@ fn NetworkRoute() -> Element {
 #[component]
 fn MoreRoute() -> Element {
     let mut tour_state = use_tour_state();
+    let auth = use_auth();
+    let services = use_context::<Arc<UiServices>>();
+    let auth_service = services.auth();
 
     let start_tour = move |_| {
         tour_state.with_mut(|state| {
             state.start();
         });
         info!(target: "ui.onboarding", "Tour started from Settings");
+    };
+
+    let logout_action = move |_| {
+        let mut auth_signal = auth;
+        let auth_service = auth_service.clone();
+        spawn(async move {
+            if let Err(err) = process_logout(auth_signal, auth_service).await {
+                auth_signal.with_mut(|state| {
+                    state.error = Some(err);
+                });
+            }
+        });
     };
 
     render_authenticated_page(
@@ -1792,6 +1543,24 @@ fn MoreRoute() -> Element {
                         r#type: "button",
                         onclick: start_tour,
                         "Start Tour"
+                    }
+                }
+
+                div {
+                    class: "rounded-xl border border-slate-800 bg-slate-950/60 p-6",
+                    h2 { class: "mb-4 text-lg font-semibold text-slate-100", "Account" }
+                    div { class: "flex flex-col gap-3 text-sm text-slate-300",
+                        Link {
+                            to: Route::LoginOtherRoute {},
+                            class: "rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-200 hover:border-emerald-500 hover:text-emerald-200",
+                            "Login other user (temporary)"
+                        }
+                        button {
+                            class: "rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-200 hover:border-rose-400 hover:text-rose-200",
+                            r#type: "button",
+                            onclick: logout_action,
+                            "Log out"
+                        }
                     }
                 }
 
@@ -2411,7 +2180,7 @@ fn render_authenticated_page(_title: &'static str, body: Element) -> Element {
     let auth = use_auth();
     let navigator = use_navigator();
     if !auth.read().is_authenticated() {
-        navigator.replace(Route::LoginRoute {});
+        navigator.replace(Route::CreateIdentityRoute {});
         return rsx! {
             div { class: "min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center", "Redirecting..." }
         };
@@ -2848,48 +2617,15 @@ fn SkeletonSpacesSection() -> Element {
     }
 }
 
-struct LoginRequest {
-    four_words: String,
-    password: String,
-}
-
 struct CreateRequest {
     display_name: String,
-    password: String,
 }
 
 struct RecoverRequest {
     mnemonic: String,
-    passphrase: Option<String>,
     display_name: String,
-    password: String,
-}
-
-async fn process_login(
-    mut auth: Signal<AuthState>,
-    auth_service: Arc<AuthController>,
-    payload: LoginRequest,
-) -> Result<(), String> {
-    let LoginRequest {
-        four_words,
-        password,
-    } = payload;
-    auth.with_mut(|state| {
-        state.phase = AuthPhase::Authenticating;
-        state.error = None;
-    });
-
-    let session = auth_service
-        .login(four_words.trim(), password.as_str())
-        .await
-        .map_err(|err| err.to_string())?;
-
-    auth.with_mut(|state| {
-        state.phase = AuthPhase::Authenticated;
-        state.session = Some(session.clone());
-        state.error = None;
-    });
-    Ok(())
+    friend_four_words: Option<String>,
+    temporary: bool,
 }
 
 async fn process_create(
@@ -2897,23 +2633,21 @@ async fn process_create(
     auth_service: Arc<AuthController>,
     payload: CreateRequest,
 ) -> Result<(), String> {
-    let CreateRequest {
-        display_name,
-        password,
-    } = payload;
+    let CreateRequest { display_name } = payload;
     auth.with_mut(|state| {
         state.phase = AuthPhase::Authenticating;
         state.error = None;
     });
 
-    let session = auth_service
-        .create_identity(display_name.trim(), password.as_str())
+    let result = auth_service
+        .create_identity(display_name.trim())
         .await
         .map_err(|err| err.to_string())?;
 
     auth.with_mut(|state| {
-        state.phase = AuthPhase::Authenticated;
-        state.session = Some(session.clone());
+        state.phase = AuthPhase::PendingMnemonic;
+        state.session = Some(result.session.clone());
+        state.pending_mnemonic = Some(result.mnemonic);
         state.error = None;
     });
     Ok(())
@@ -2926,9 +2660,9 @@ async fn process_recover(
 ) -> Result<(), String> {
     let RecoverRequest {
         mnemonic,
-        passphrase,
         display_name,
-        password,
+        friend_four_words,
+        temporary,
     } = payload;
     auth.with_mut(|state| {
         state.phase = AuthPhase::Authenticating;
@@ -2938,9 +2672,10 @@ async fn process_recover(
     let session = auth_service
         .recover_identity(
             mnemonic.trim(),
-            passphrase.as_deref(),
+            None,
             display_name.trim(),
-            password.as_str(),
+            friend_four_words.as_deref(),
+            temporary,
         )
         .await
         .map_err(|err| err.to_string())?;
@@ -2949,6 +2684,7 @@ async fn process_recover(
         state.phase = AuthPhase::Authenticated;
         state.session = Some(session.clone());
         state.error = None;
+        state.pending_mnemonic = None;
     });
     Ok(())
 }
@@ -2960,9 +2696,15 @@ async fn process_logout(
 ) -> Result<(), String> {
     auth_service.logout().await.map_err(|err| err.to_string())?;
     auth.with_mut(|state| {
-        state.session = None;
-        state.phase = AuthPhase::LoggedOut;
+        if let Some(session) = auth_service.current_session() {
+            state.session = Some(session);
+            state.phase = AuthPhase::Authenticated;
+        } else {
+            state.session = None;
+            state.phase = AuthPhase::LoggedOut;
+        }
         state.error = None;
+        state.pending_mnemonic = None;
     });
     Ok(())
 }

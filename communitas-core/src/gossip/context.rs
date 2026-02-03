@@ -102,6 +102,9 @@ pub struct GossipContext {
     /// Site fetcher for discovering and fetching sites
     pub site_fetcher: Option<Arc<super::sites::SiteFetcher>>,
 
+    /// Sites dispatcher coordinating shared transport routing
+    pub sites_dispatcher: Option<Arc<super::sites_dispatcher::SitesDispatcher>>,
+
     /// Sites protocol listener (routes incoming requests to publisher)
     pub sites_listener: Option<Arc<super::sites_listener::SitesListener>>,
 
@@ -300,7 +303,7 @@ impl GossipContext {
         // Sites needs its own transport to avoid conflicts.
         //
         // BOTH SitesListener AND SiteFetcher will share this dedicated Sites transport.
-        let (sites_listener, site_fetcher) = {
+        let (sites_listener, site_fetcher, sites_dispatcher) = {
             let sites_bind = if let Some(main_port) = listen_port {
                 let sites_port = main_port + 1;
                 std::net::SocketAddr::new(
@@ -352,7 +355,7 @@ impl GossipContext {
 
             tracing::info!("Sites dispatcher started with listener and fetcher");
 
-            ((listener, handle), fetcher)
+            ((listener, handle), fetcher, dispatcher)
         };
 
         // 14. Initialize connectivity watchdog (Phase 2 TDD - MESH_CAPABILITIES.md §3.2)
@@ -383,6 +386,7 @@ impl GossipContext {
             rendezvous,
             site_publisher: Some(site_publisher),
             site_fetcher: Some(site_fetcher),
+            sites_dispatcher: Some(sites_dispatcher),
             sites_listener: Some(sites_listener.0),
             sites_listener_handle: Some(sites_listener.1),
             name_registry: Some(Arc::new(super::name_record::NameRegistry::new())),
@@ -409,6 +413,19 @@ impl GossipContext {
     /// Get the listen port (if explicitly set during initialization)
     pub fn listen_port(&self) -> Option<u16> {
         self.listen_port
+    }
+
+    /// Shutdown background networking tasks (Sites dispatcher/listener, etc.)
+    pub fn shutdown(&self) {
+        if let Some(dispatcher) = &self.sites_dispatcher {
+            dispatcher.stop();
+        }
+        if let Some(listener) = &self.sites_listener {
+            listener.stop();
+        }
+        if let Some(handle) = &self.sites_listener_handle {
+            handle.abort();
+        }
     }
 
     /// Get connection words for this node's listen address

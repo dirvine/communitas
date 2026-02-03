@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-02-01T20:04:35.979600Z",
+  "scenario_name": "Phase 9: Websites",
+  "tools_covered": [
+    "create_website",
+    "get_website",
+    "update_website",
+    "delete_website"
+  ],
+  "total_tests": 8,
+  "passed": 0,
+  "failed": 8,
+  "results": [
+    {
+      "test_id": "WEB-001",
+      "test_name": "Alice creates organisation website",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 428
+    },
+    {
+      "test_id": "WEB-002",
+      "test_name": "Get website details",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 302
+    },
+    {
+      "test_id": "WEB-003",
+      "test_name": "Update website content",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 563
+    },
+    {
+      "test_id": "WEB-004",
+      "test_name": "Verify website updated",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 247
+    },
+    {
+      "test_id": "WEB-005",
+      "test_name": "Charlie creates personal website",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 157
+    },
+    {
+      "test_id": "WEB-006",
+      "test_name": "Dave accesses Charlie's website",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 1
+    },
+    {
+      "test_id": "WEB-007",
+      "test_name": "Charlie deletes website",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 174
+    },
+    {
+      "test_id": "WEB-008",
+      "test_name": "Verify website deleted",
+      "passed": false,
+      "error_message": "Expected error containing 'not found', got 'entity_id is required'",
+      "duration_ms": 181
+    }
+  ]
+}

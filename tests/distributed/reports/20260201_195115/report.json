@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-02-01T19:51:20.175534Z",
+  "scenario_name": "Phase 2: Entity Lifecycle",
+  "tools_covered": [
+    "create_entity",
+    "get_entity",
+    "list_entities",
+    "join_entity"
+  ],
+  "total_tests": 8,
+  "passed": 0,
+  "failed": 8,
+  "results": [
+    {
+      "test_id": "ENT-001",
+      "test_name": "Alice creates organisation",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 400
+    },
+    {
+      "test_id": "ENT-002",
+      "test_name": "Alice creates group in organisation",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 312
+    },
+    {
+      "test_id": "ENT-003",
+      "test_name": "Alice creates channel",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 229
+    },
+    {
+      "test_id": "ENT-004",
+      "test_name": "Alice creates project",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 242
+    },
+    {
+      "test_id": "ENT-005",
+      "test_name": "Get organisation by ID",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 228
+    },
+    {
+      "test_id": "ENT-006",
+      "test_name": "List all entities",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 241
+    },
+    {
+      "test_id": "ENT-007",
+      "test_name": "Bob creates personal entity",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 354
+    },
+    {
+      "test_id": "ENT-008",
+      "test_name": "Verify entity isolation before join",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 363
+    }
+  ]
+}

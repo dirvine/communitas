@@ -114,7 +114,7 @@ async fn test_edit_message_content() {
             "send_message",
             json!({
                 "entity_id": "channel-edit-test",
-                "content": "Original content",
+                "text": "Original content",
                 "message_type": "text"
             }),
         )
@@ -192,7 +192,7 @@ async fn test_delete_message() {
             "send_message",
             json!({
                 "entity_id": "channel-delete-test",
-                "content": "Message to delete",
+                "text": "Message to delete",
                 "message_type": "text"
             }),
         )
@@ -251,7 +251,7 @@ async fn test_deleted_message_not_in_list() {
             "send_message",
             json!({
                 "entity_id": "channel-delete-verify",
-                "content": "Message to remove from list",
+                "text": "Message to remove from list",
                 "message_type": "text"
             }),
         )
@@ -322,7 +322,7 @@ async fn test_edit_timestamp_tracked() {
             "send_message",
             json!({
                 "entity_id": "channel-ts-test",
-                "content": "Original",
+                "text": "Original",
                 "message_type": "text"
             }),
         )
@@ -377,7 +377,7 @@ async fn test_multiple_edits() {
             "send_message",
             json!({
                 "entity_id": "channel-multi-edit",
-                "content": "Version 1",
+                "text": "Version 1",
                 "message_type": "text"
             }),
         )
@@ -428,7 +428,7 @@ async fn test_edit_preserves_other_fields() {
             "send_message",
             json!({
                 "entity_id": "channel-fields-test",
-                "content": "Original",
+                "text": "Original",
                 "message_type": "text",
                 "metadata": {"priority": "high"}
             }),

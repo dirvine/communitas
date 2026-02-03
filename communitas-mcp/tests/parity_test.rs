@@ -438,7 +438,7 @@ fn test_kanban_board_parity() {
             "create_kanban_board",
             Some(json!({
                 "entity_id": "test-entity",
-                "name": "Parity Test Board",
+                "board_name": "Parity Test Board",
                 "description": "Testing MCP-UiServices parity"
             })),
         )
@@ -740,7 +740,7 @@ fn test_kanban_card_operations_parity() {
             "create_kanban_board",
             Some(json!({
                 "entity_id": "test-entity",
-                "name": "Card Test Board"
+                "board_name": "Card Test Board"
             })),
         )
         .await;
@@ -778,7 +778,7 @@ fn test_kanban_card_operations_parity() {
             Some(json!({
                 "entity_id": "test-entity",
                 "board_id": board_id,
-                "name": "To Do",
+                "column_name": "To Do",
                 "position": 0
             })),
         )

@@ -11,6 +11,7 @@ tools_covered:
   - get_disk_stats
 
 test_cases:
+
   # Write a file to organisation disk
   - id: FILE-001
     name: "Alice writes file to org disk"
@@ -19,6 +20,7 @@ test_cases:
       - tool: write_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/docs/readme.md"
           content: "# Acme Corp\n\nWelcome to our organisation!"
         expect:
@@ -32,12 +34,12 @@ test_cases:
       - tool: read_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/docs/readme.md"
         expect:
           status: success
-          contains:
-            - "Acme Corp"
-            - "Welcome"
+          fields:
+            content: "# Acme Corp\n\nWelcome to our organisation!"
 
   # Bob writes to same disk
   - id: FILE-003
@@ -47,6 +49,7 @@ test_cases:
       - tool: write_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/docs/guidelines.md"
           content: "# Team Guidelines\n\n1. Be respectful\n2. Communicate clearly"
         expect:
@@ -61,12 +64,15 @@ test_cases:
       - tool: list_files
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/docs"
         expect:
           status: success
           contains:
-            - name: "readme.md"
-            - name: "guidelines.md"
+            - files:
+                - name: "readme.md"
+            - files:
+                - name: "guidelines.md"
 
   # Charlie writes to shared disk
   - id: FILE-005
@@ -76,6 +82,7 @@ test_cases:
       - tool: write_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/meetings/2025-01-02.md"
           content: "# Meeting Notes\n\nAttendees: Alice, Bob, Charlie, Dave\n\n## Discussion\n- Project kickoff"
         expect:
@@ -90,12 +97,12 @@ test_cases:
       - tool: read_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/meetings/2025-01-02.md"
         expect:
           status: success
-          contains:
-            - "Meeting Notes"
-            - "Project kickoff"
+          fields:
+            content: "# Meeting Notes\n\nAttendees: Alice, Bob, Charlie, Dave\n\n## Discussion\n- Project kickoff"
 
   # Get disk stats
   - id: FILE-007
@@ -105,6 +112,7 @@ test_cases:
       - tool: get_disk_stats
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
         expect:
           status: success
 
@@ -116,6 +124,7 @@ test_cases:
       - tool: write_file
         params:
           entity_id: "${project_id}"
+          disk_type: "shared"
           path: "/tasks.md"
           content: "# Sprint Tasks\n\n- [ ] Task 1\n- [ ] Task 2"
         expect:
@@ -129,6 +138,7 @@ test_cases:
       - tool: delete_file
         params:
           entity_id: "${project_id}"
+          disk_type: "shared"
           path: "/tasks.md"
         expect:
           status: success
@@ -141,6 +151,7 @@ test_cases:
       - tool: read_file
         params:
           entity_id: "${project_id}"
+          disk_type: "shared"
           path: "/tasks.md"
         expect:
           status: error
@@ -154,6 +165,7 @@ test_cases:
       - tool: write_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/docs/dave-notes.md"
           content: "Dave's contribution"
         expect:

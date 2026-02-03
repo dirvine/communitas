@@ -19,6 +19,10 @@
 //! based architecture.
 
 use crate::disk_service::EntityDiskService;
+use crate::encrypted_storage::{
+    IdentityKeyMaterial, identity_keys_exist, load_identity_keys, store_identity_keys,
+    vault_dir_from_root,
+};
 use crate::keystore::Keystore;
 use crate::message_sync::MessageSyncService;
 use crate::types::{DeviceType, UserProfile};
@@ -178,43 +182,80 @@ impl CoreContext {
         }
         info!("CoreContext::initialize: four-word format validated");
 
-        // Initialize keystore for secure key management
-        info!("CoreContext::initialize: creating keystore");
-        let keystore = Keystore::new();
+        let vault_dir = vault_dir_from_root(&storage_dir);
+        let mut key_material: Option<IdentityKeyMaterial> = None;
 
-        // Use four-word identity as hex identifier for keystore lookups
-        let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
-        info!("CoreContext::initialize: id_hex = {}", id_hex);
+        if identity_keys_exist(&vault_dir, &four_words).await {
+            match load_identity_keys(&vault_dir, &four_words).await {
+                Ok(keys) => {
+                    key_material = Some(keys);
+                }
+                Err(err) => {
+                    warn!(
+                        "Failed to load identity keys from vault for '{}': {}",
+                        four_words, err
+                    );
+                }
+            }
+        }
 
-        // Try to load existing ML-DSA keys from secure keystore
-        let (public_key, signing_key) = match keystore.load_mldsa_keys(&id_hex) {
-            Ok((pk_bytes, sk_bytes)) => {
+        if key_material.is_none() {
+            // Try legacy keyring for migration
+            info!("CoreContext::initialize: creating keystore");
+            let keystore = Keystore::new();
+            let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
+            info!("CoreContext::initialize: id_hex = {}", id_hex);
+
+            if let Ok((pk_bytes, sk_bytes)) = keystore.load_mldsa_keys(&id_hex) {
                 info!(
-                    "Loaded existing ML-DSA-87 keypair for identity '{}' from keystore",
+                    "Loaded existing ML-DSA-87 keypair for identity '{}' from keyring",
                     four_words
                 );
+                if let Err(err) = store_identity_keys(
+                    &vault_dir,
+                    &four_words,
+                    &display_name,
+                    &pk_bytes,
+                    &sk_bytes,
+                )
+                .await
+                {
+                    warn!("Failed to migrate identity keys to vault: {err}");
+                } else {
+                    info!(
+                        "Migrated identity keys to vault storage for '{}'",
+                        four_words
+                    );
+                }
 
-                // Deserialize keys from stored bytes
+                key_material = Some(IdentityKeyMaterial {
+                    public_key: pk_bytes,
+                    secret_key: sk_bytes,
+                });
+            }
+        }
+
+        let (public_key, signing_key) = match key_material {
+            Some(keys) => {
                 let public_key = PublicKey::try_from_bytes(
-                    pk_bytes
+                    keys.public_key
                         .as_slice()
                         .try_into()
-                        .map_err(|_| "Invalid public key length in keystore".to_string())?,
+                        .map_err(|_| "Invalid public key length in vault".to_string())?,
                 )
                 .map_err(|e| format!("Failed to deserialize public key: {}", e))?;
 
                 let signing_key = PrivateKey::try_from_bytes(
-                    sk_bytes
+                    keys.secret_key
                         .as_slice()
                         .try_into()
-                        .map_err(|_| "Invalid signing key length in keystore".to_string())?,
+                        .map_err(|_| "Invalid signing key length in vault".to_string())?,
                 )
                 .map_err(|e| format!("Failed to deserialize signing key: {}", e))?;
 
                 (public_key, signing_key)
             }
-            Err(_) => {
-                // No existing keys - generate new ones using cryptographically secure RNG
+            None => {
                 info!(
                     "Generating new ML-DSA-87 keypair for identity '{}' using CSPRNG",
                     four_words
@@ -224,21 +265,23 @@ impl CoreContext {
                 let (public_key, signing_key) = try_keygen_with_rng(&mut rng)
                     .map_err(|e| format!("Failed to generate ML-DSA-87 keypair: {}", e))?;
 
-                // Store keys securely in platform keychain
                 let pk_bytes = public_key.clone().into_bytes();
                 let sk_bytes = signing_key.clone().into_bytes();
 
-                keystore
-                    .save_mldsa_keys(&id_hex, &pk_bytes, &sk_bytes)
-                    .map_err(|e| {
-                        warn!(
-                            "Failed to save keys to keystore: {}. Keys will not persist.",
-                            e
-                        );
-                        e
-                    })?;
-
-                info!("Saved ML-DSA-87 keypair to secure keystore (Level 5 PQC security)");
+                if let Err(err) = store_identity_keys(
+                    &vault_dir,
+                    &four_words,
+                    &display_name,
+                    &pk_bytes,
+                    &sk_bytes,
+                )
+                .await
+                {
+                    warn!(
+                        "Failed to store identity keys in vault: {}. Keys may not persist.",
+                        err
+                    );
+                }
 
                 (public_key, signing_key)
             }
@@ -974,8 +1017,9 @@ impl CoreContext {
     ///
     /// Shuts down gossip services, presence beacons, and transport
     pub async fn stop_networking(&mut self) -> Result<(), String> {
-        if let Some(_gossip) = self.gossip.take() {
+        if let Some(gossip) = self.gossip.take() {
             info!("Stopping gossip networking for {}", self.four_words);
+            gossip.shutdown();
             // Clear WebRTC service (depends on gossip)
             self.webrtc = None;
             // Note: Graceful shutdown will be implemented when needed
@@ -1224,11 +1268,6 @@ impl CoreContext {
     /// Get device type
     pub fn device_type(&self) -> DeviceType {
         self.profile.device_type
-    }
-
-    /// Check if passkey is registered for this profile
-    pub fn has_passkey(&self) -> bool {
-        self.profile.has_passkey()
     }
 }
 

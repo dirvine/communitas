@@ -113,6 +113,7 @@ test_cases:
       - tool: write_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/docs/readme.md"
           content: "# Acme Corp\n\nUpdated while Dave was offline.\n\nNew content!"
         expect:
@@ -136,11 +137,12 @@ test_cases:
       - tool: read_file
         params:
           entity_id: "${org_id}"
+          disk_type: "shared"
           path: "/docs/readme.md"
         expect:
           status: success
-          contains:
-            - "Updated while Dave was offline"
+          fields:
+            content: "# Acme Corp\n\nUpdated while Dave was offline.\n\nNew content!"
 
   # Test entity creation sync
   - id: SYNC-011
@@ -166,4 +168,4 @@ test_cases:
         expect:
           status: success
           fields:
-            network_active: true
+            is_active: true

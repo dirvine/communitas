@@ -1,5 +1,7 @@
 # Phase 8: WebAuthn/Passkey Authentication Integration - COMPLETE
 
+> Status Update (2026-02-02): Passkey/WebAuthn support is deferred and removed from the app for now. This document is kept as historical context.
+
 **Status:** ✅ PRODUCTION READY
 **Date:** January 25, 2026
 **Commits:** 86b375f, d6c0820, 322788d

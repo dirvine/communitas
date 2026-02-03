@@ -1,7 +1,7 @@
 # WebAuthn/Passkey Authentication API
 
-**Status:** Production Ready (Phase 8.2)
-**Last Updated:** January 25, 2026
+**Status:** Deferred (passkeys removed from app as of 2026-02-02)
+**Last Updated:** February 2, 2026
 **Module:** `communitas-core::encrypted_storage`
 
 ## Overview

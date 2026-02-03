@@ -1,0 +1,224 @@
+{
+  "timestamp": "2026-02-01T19:52:10.075962Z",
+  "scenario_name": "Phase 6: Kanban",
+  "tools_covered": [
+    "kanban_create_board",
+    "kanban_get_board",
+    "kanban_list_boards",
+    "kanban_update_board",
+    "kanban_delete_board",
+    "kanban_create_column",
+    "kanban_list_columns",
+    "kanban_update_column",
+    "kanban_delete_column",
+    "kanban_reorder_columns",
+    "kanban_create_card",
+    "kanban_get_card",
+    "kanban_list_cards",
+    "kanban_update_card",
+    "kanban_delete_card",
+    "kanban_move_card",
+    "kanban_assign_card",
+    "kanban_unassign_card",
+    "kanban_create_tag",
+    "kanban_list_tags",
+    "kanban_update_tag",
+    "kanban_delete_tag",
+    "kanban_add_tag_to_card",
+    "kanban_remove_tag_from_card",
+    "kanban_create_step",
+    "kanban_list_steps",
+    "kanban_update_step",
+    "kanban_delete_step",
+    "kanban_create_comment",
+    "kanban_list_comments",
+    "kanban_delete_comment"
+  ],
+  "total_tests": 26,
+  "passed": 0,
+  "failed": 26,
+  "results": [
+    {
+      "test_id": "KAN-001",
+      "test_name": "Alice creates kanban board",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 269
+    },
+    {
+      "test_id": "KAN-002",
+      "test_name": "Get board details",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 265
+    },
+    {
+      "test_id": "KAN-003",
+      "test_name": "Create To Do column",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 252
+    },
+    {
+      "test_id": "KAN-004",
+      "test_name": "Create In Progress column",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 272
+    },
+    {
+      "test_id": "KAN-005",
+      "test_name": "Create Done column",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 248
+    },
+    {
+      "test_id": "KAN-006",
+      "test_name": "Create bug tag",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 268
+    },
+    {
+      "test_id": "KAN-007",
+      "test_name": "Create feature tag",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 249
+    },
+    {
+      "test_id": "KAN-008",
+      "test_name": "Alice creates card",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 252
+    },
+    {
+      "test_id": "KAN-009",
+      "test_name": "Bob creates card",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 404
+    },
+    {
+      "test_id": "KAN-010",
+      "test_name": "Charlie creates card",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 178
+    },
+    {
+      "test_id": "KAN-011",
+      "test_name": "Assign card to Bob",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 392
+    },
+    {
+      "test_id": "KAN-012",
+      "test_name": "Add feature tag to card",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 243
+    },
+    {
+      "test_id": "KAN-013",
+      "test_name": "Move card to In Progress",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 375
+    },
+    {
+      "test_id": "KAN-014",
+      "test_name": "Add steps to card",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 365
+    },
+    {
+      "test_id": "KAN-015",
+      "test_name": "Add second step",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 365
+    },
+    {
+      "test_id": "KAN-016",
+      "test_name": "Complete step",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 361
+    },
+    {
+      "test_id": "KAN-017",
+      "test_name": "Add comment to card",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 165
+    },
+    {
+      "test_id": "KAN-018",
+      "test_name": "List all cards",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 274
+    },
+    {
+      "test_id": "KAN-019",
+      "test_name": "Verify board synced to Dave",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 1
+    },
+    {
+      "test_id": "KAN-020",
+      "test_name": "Move card to Done",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 394
+    },
+    {
+      "test_id": "KAN-021",
+      "test_name": "List columns",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 250
+    },
+    {
+      "test_id": "KAN-022",
+      "test_name": "List tags",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 280
+    },
+    {
+      "test_id": "KAN-023",
+      "test_name": "List comments",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 261
+    },
+    {
+      "test_id": "KAN-024",
+      "test_name": "Update card title",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 397
+    },
+    {
+      "test_id": "KAN-025",
+      "test_name": "Remove tag from card",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 247
+    },
+    {
+      "test_id": "KAN-026",
+      "test_name": "List all boards",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 235
+    }
+  ]
+}

@@ -17,7 +17,6 @@ use crate::command::{
 };
 use crate::crdt::EntityType;
 use crate::encrypted_storage::{EncryptedStorageManager, StorageConfig, VaultInfo};
-use crate::keystore::Keystore;
 use crate::peer_presence::PresenceRecord;
 use crate::recovery::recover_identity;
 use base64::Engine;
@@ -138,21 +137,16 @@ impl CommunitasApi {
         &self,
         four_words: String,
         display_name: String,
-        password: String,
     ) -> Result<String, String> {
         let mut auth = self.auth.write().await;
-        auth.create_vault(&four_words, &password, &display_name)
+        auth.create_vault(&four_words, &display_name)
             .await
             .map_err(|e| e.to_string())
     }
 
-    pub async fn auth_delete_vault(
-        &self,
-        four_words: String,
-        password: String,
-    ) -> Result<(), String> {
+    pub async fn auth_delete_vault(&self, four_words: String) -> Result<(), String> {
         let mut auth = self.auth.write().await;
-        auth.delete_vault(&four_words, &password)
+        auth.delete_vault(&four_words)
             .await
             .map_err(|e| e.to_string())
     }
@@ -168,13 +162,9 @@ impl CommunitasApi {
         Ok(vaults.into_iter().map(UiVaultInfo::from).collect())
     }
 
-    pub async fn auth_login(
-        &self,
-        four_words: String,
-        password: String,
-    ) -> Result<UiSessionInfo, String> {
+    pub async fn auth_login(&self, four_words: String) -> Result<UiSessionInfo, String> {
         let mut auth = self.auth.write().await;
-        auth.login(&four_words, &password, None)
+        auth.login(&four_words)
             .await
             .map(UiSessionInfo::from)
             .map_err(|e| e.to_string())
@@ -192,17 +182,13 @@ impl CommunitasApi {
         Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
     }
 
-    pub async fn auth_import_vault(
-        &self,
-        backup_base64: String,
-        password: String,
-    ) -> Result<String, String> {
+    pub async fn auth_import_vault(&self, backup_base64: String) -> Result<String, String> {
         let backup_bytes = base64::engine::general_purpose::STANDARD
             .decode(backup_base64.as_bytes())
             .map_err(|e| format!("Invalid base64 backup: {e}"))?;
 
         let mut auth = self.auth.write().await;
-        auth.import_vault(&backup_bytes, &password)
+        auth.import_vault(&backup_bytes)
             .await
             .map_err(|e| e.to_string())
     }
@@ -240,56 +226,13 @@ impl CommunitasApi {
         Ok(recent.into_iter().map(UiRecentIdentity::from).collect())
     }
 
-    /// Switch to another identity using passkey/biometric authentication
-    ///
-    /// This will logout the current session and login to the new identity.
-    /// Requires that the target identity has a passkey registered.
-    pub async fn auth_switch_identity(&self, four_words: String) -> Result<UiSessionInfo, String> {
-        let mut auth = self.auth.write().await;
-        let session_info = auth
-            .switch_identity(&four_words)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(UiSessionInfo::from(session_info))
-    }
-
-    /// Attempt auto-login using the most recent identity with passkey
+    /// Attempt auto-login using the most recent identity
     ///
     /// Returns the session info if successful, None if no auto-login available.
     pub async fn auth_try_auto_login(&self) -> Result<Option<UiSessionInfo>, String> {
         let mut auth = self.auth.write().await;
         let result = auth.try_auto_login().await.map_err(|e| e.to_string())?;
         Ok(result.map(UiSessionInfo::from))
-    }
-
-    /// Check if an identity has a passkey registered for biometric auth
-    pub async fn auth_has_passkey(&self, four_words: String) -> Result<bool, String> {
-        let auth = self.auth.read().await;
-        auth.passkey_has_passkey(&four_words)
-            .await
-            .map_err(|e| e.to_string())
-    }
-
-    /// Register a passkey for the current session (enables biometric auth)
-    ///
-    /// This stores credentials in the platform keyring for secure biometric authentication.
-    pub async fn auth_register_passkey(&self) -> Result<(), String> {
-        let mut auth = self.auth.write().await;
-        let session = auth
-            .get_current_session()
-            .ok_or_else(|| "No active session".to_string())?;
-        auth.passkey_register(&session.four_words, &session.display_name)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// Delete passkey for an identity (disables biometric auth)
-    pub async fn auth_delete_passkey(&self, four_words: String) -> Result<(), String> {
-        let mut auth = self.auth.write().await;
-        auth.passkey_delete(&four_words)
-            .await
-            .map_err(|e| e.to_string())
     }
 
     /// Remove a recent identity from the list (does not delete the vault)
@@ -1254,21 +1197,6 @@ pub fn recover_identity_from_mnemonic(
     )
     .map_err(|e| e.to_string())?;
 
-    let keystore = Keystore::new();
-    let id_hex = blake3::hash(keys.four_words.as_bytes())
-        .to_hex()
-        .to_string();
-    let pubkey = keys.verifying_key_bytes().to_vec();
-    let privkey = keys.signing_key_bytes().to_vec();
-
-    keystore
-        .save_mldsa_keys(&id_hex, &pubkey, &privkey)
-        .map_err(|e| format!("Failed to persist keys: {e}"))?;
-
-    if let Some(words) = split_four_words(&keys.four_words) {
-        let _ = keystore.save_words(&id_hex, &words);
-    }
-
     Ok(UiRecoveredIdentity::from(keys))
 }
 
@@ -1510,7 +1438,6 @@ pub struct UiRecentIdentity {
     pub four_words: String,
     pub display_name: String,
     pub last_used: u64,
-    pub has_passkey: bool,
 }
 
 impl From<crate::encrypted_storage::RecentIdentity> for UiRecentIdentity {
@@ -1519,7 +1446,6 @@ impl From<crate::encrypted_storage::RecentIdentity> for UiRecentIdentity {
             four_words: value.four_words,
             display_name: value.display_name,
             last_used: value.last_used,
-            has_passkey: value.has_passkey,
         }
     }
 }
@@ -1910,19 +1836,5 @@ fn map_event(event: Event) -> Option<UiEvent> {
             entity_id, path, ..
         } => Some(UiEvent::FileDeleted { entity_id, path }),
         _ => None,
-    }
-}
-
-fn split_four_words(four_words: &str) -> Option<[String; 4]> {
-    let parts: Vec<String> = four_words.split('-').map(|s| s.to_string()).collect();
-    if parts.len() == 4 {
-        Some([
-            parts[0].clone(),
-            parts[1].clone(),
-            parts[2].clone(),
-            parts[3].clone(),
-        ])
-    } else {
-        None
     }
 }

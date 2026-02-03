@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Communitas Desktop Layout Playground</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      /* Digital Forest Sanctuary palette */
+      --jade-50: #ecfdf5;
+      --jade-100: #d1fae5;
+      --jade-200: #a7f3d0;
+      --jade-300: #6ee7b7;
+      --jade-400: #34d399;
+      --jade-500: #10b981;
+      --jade-600: #059669;
+      --jade-700: #047857;
+      --jade-800: #065f46;
+      --jade-900: #064e3b;
+
+      --forest-950: #0a0f14;
+      --forest-900: #0f1720;
+      --forest-850: #141d28;
+      --forest-800: #1a2634;
+      --forest-700: #243344;
+      --forest-600: #334155;
+      --forest-500: #475569;
+      --forest-400: #64748b;
+      --forest-300: #94a3b8;
+      --forest-200: #cbd5e1;
+      --forest-100: #e2e8f0;
+      --forest-50: #f1f5f9;
+
+      --amber-500: #f59e0b;
+      --violet-500: #8b5cf6;
+      --coral-500: #f97316;
+      --sky-500: #0ea5e9;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      background: var(--forest-950);
+      color: var(--forest-100);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    .playground-container {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Controls Panel */
+    .controls-panel {
+      background: var(--forest-900);
+      border-right: 1px solid rgba(52, 211, 153, 0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .controls-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      padding-bottom: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .controls-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(52, 211, 153, 0.15);
+    }
+
+    .controls-header h1 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--forest-50);
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--jade-500) 0%, var(--jade-700) 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    /* Preset Buttons */
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .preset-btn {
+      padding: 0.5rem 0.875rem;
+      background: var(--forest-800);
+      border: 1px solid rgba(52, 211, 153, 0.15);
+      border-radius: 0.5rem;
+      color: var(--forest-200);
+      font-size: 0.8125rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .preset-btn:hover {
+      background: var(--forest-700);
+      border-color: var(--jade-500);
+      color: var(--jade-400);
+    }
+
+    .preset-btn.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: var(--jade-500);
+      color: var(--jade-400);
+    }
+
+    /* Control Groups */
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .control-group h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--forest-400);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .control-row label {
+      font-size: 0.8125rem;
+      color: var(--forest-300);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .control-row label span {
+      font-family: 'SF Mono', ui-monospace, monospace;
+      font-size: 0.75rem;
+      color: var(--jade-400);
+      background: var(--forest-800);
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: var(--forest-700);
+      border-radius: 3px;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--jade-500);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    select {
+      width: 100%;
+      padding: 0.625rem 0.75rem;
+      background: var(--forest-800);
+      border: 1px solid rgba(52, 211, 153, 0.15);
+      border-radius: 0.5rem;
+      color: var(--forest-100);
+      font-size: 0.8125rem;
+      cursor: pointer;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--jade-500);
+    }
+
+    /* Toggle Switches */
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+    }
+
+    .toggle-row span {
+      font-size: 0.8125rem;
+      color: var(--forest-300);
+    }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: var(--forest-600);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .toggle.active {
+      background: var(--jade-600);
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s ease;
+    }
+
+    .toggle.active::after {
+      transform: translateX(20px);
+    }
+
+    /* Prompt Output */
+    .prompt-output {
+      flex-shrink: 0;
+      background: var(--forest-800);
+      border-top: 1px solid rgba(52, 211, 153, 0.15);
+      overflow: hidden;
+    }
+
+    .prompt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--forest-800);
+      border-bottom: 1px solid rgba(52, 211, 153, 0.1);
+    }
+
+    .prompt-header span {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--jade-400);
+    }
+
+    .copy-btn {
+      padding: 0.375rem 0.75rem;
+      background: var(--jade-600);
+      border: none;
+      border-radius: 0.375rem;
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .copy-btn:hover {
+      background: var(--jade-500);
+    }
+
+    .copy-btn.copied {
+      background: var(--jade-700);
+    }
+
+    .prompt-content {
+      padding: 1rem;
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--forest-200);
+      min-height: 80px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    /* Preview Panel */
+    .preview-panel {
+      background: var(--forest-950);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .preview-header {
+      padding: 1rem 1.5rem;
+      background: var(--forest-900);
+      border-bottom: 1px solid rgba(52, 211, 153, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .preview-header h2 {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--forest-300);
+    }
+
+    .preview-dimensions {
+      font-family: 'SF Mono', ui-monospace, monospace;
+      font-size: 0.75rem;
+      color: var(--forest-500);
+      background: var(--forest-800);
+      padding: 0.25rem 0.625rem;
+      border-radius: 0.25rem;
+    }
+
+    .preview-frame {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      overflow: auto;
+    }
+
+    /* App Preview */
+    .app-preview {
+      background: var(--forest-900);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s ease;
+    }
+
+    /* macOS Title Bar */
+    .titlebar {
+      height: 28px;
+      background: linear-gradient(180deg, var(--forest-800) 0%, var(--forest-850) 100%);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+    }
+
+    .traffic-light {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .traffic-light.red { background: #ff5f56; }
+    .traffic-light.yellow { background: #ffbd2e; }
+    .traffic-light.green { background: #27ca40; }
+
+    .titlebar-text {
+      flex: 1;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--forest-400);
+      font-weight: 500;
+    }
+
+    /* App Layout */
+    .app-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: linear-gradient(180deg, rgba(15, 23, 32, 0.98) 0%, rgba(10, 15, 20, 0.99) 100%);
+      border-right: 1px solid rgba(52, 211, 153, 0.08);
+      display: flex;
+      flex-direction: column;
+      transition: width 0.25s ease;
+      overflow: hidden;
+    }
+
+    .sidebar.collapsed {
+      width: 72px !important;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem;
+    }
+
+    .sidebar.collapsed .sidebar-content {
+      display: none;
+    }
+
+    /* Profile Section */
+    .profile-section {
+      padding: 1rem;
+      border-bottom: 1px solid rgba(52, 211, 153, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--jade-600), var(--jade-800));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: white;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .presence-dot {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #22c55e;
+      border: 2px solid var(--forest-900);
+    }
+
+    .profile-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .profile-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--forest-50);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .profile-status {
+      font-size: 0.6875rem;
+      color: var(--forest-400);
+      font-family: 'SF Mono', monospace;
+    }
+
+    /* Sidebar Search */
+    .sidebar-search {
+      margin: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--forest-800);
+      border: 1px solid rgba(52, 211, 153, 0.08);
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sidebar-search-icon {
+      color: var(--forest-500);
+      font-size: 0.8125rem;
+    }
+
+    .sidebar-search-placeholder {
+      color: var(--forest-500);
+      font-size: 0.8125rem;
+    }
+
+    .sidebar-search-kbd {
+      margin-left: auto;
+      padding: 0.125rem 0.375rem;
+      background: var(--forest-700);
+      border-radius: 0.25rem;
+      font-size: 0.625rem;
+      font-family: 'SF Mono', monospace;
+      color: var(--forest-400);
+    }
+
+    /* Sidebar Section */
+    .sidebar-section {
+      margin: 0.5rem 0;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--forest-500);
+    }
+
+    .section-add {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border-radius: 4px;
+      color: var(--forest-500);
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    /* Nav Items */
+    .nav-item {
+      display: flex;
+      align-items: center;
+      padding: 0.5rem 0.75rem;
+      margin: 0.125rem 0;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      position: relative;
+    }
+
+    .nav-item:hover {
+      background: var(--forest-700);
+    }
+
+    .nav-item.selected {
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .nav-item.selected::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 60%;
+      background: var(--jade-500);
+      border-radius: 0 2px 2px 0;
+    }
+
+    .nav-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.875rem;
+      margin-right: 0.625rem;
+    }
+
+    .nav-icon.org { color: var(--jade-500); }
+    .nav-icon.project { color: var(--amber-500); }
+    .nav-icon.channel { color: var(--sky-500); }
+    .nav-icon.group { color: var(--violet-500); }
+    .nav-icon.person { color: var(--coral-500); }
+
+    .nav-label {
+      flex: 1;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--forest-200);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-item.selected .nav-label {
+      font-weight: 600;
+      color: var(--forest-50);
+    }
+
+    .nav-badge {
+      min-width: 18px;
+      height: 18px;
+      padding: 0 0.375rem;
+      background: var(--jade-600);
+      border-radius: 9px;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .nav-chevron {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.625rem;
+      color: var(--forest-500);
+      margin-right: 0.25rem;
+      transition: transform 0.15s ease;
+    }
+
+    .nav-chevron.expanded {
+      transform: rotate(90deg);
+    }
+
+    .nav-children {
+      padding-left: 1.5rem;
+    }
+
+    /* Contact Items */
+    .contact-item {
+      display: flex;
+      align-items: center;
+      padding: 0.375rem 0.75rem;
+      margin: 0.125rem 0;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .contact-item:hover {
+      background: var(--forest-700);
+    }
+
+    .contact-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--coral-500), #f97316);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: white;
+      margin-right: 0.625rem;
+      position: relative;
+    }
+
+    .contact-presence {
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 1.5px solid var(--forest-900);
+    }
+
+    .contact-presence.online { background: #22c55e; }
+    .contact-presence.away { background: #eab308; }
+    .contact-presence.busy { background: #ef4444; }
+    .contact-presence.offline { background: var(--forest-500); }
+
+    .contact-name {
+      flex: 1;
+      font-size: 0.8125rem;
+      color: var(--forest-200);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      background: var(--forest-900);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Content Header */
+    .content-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid rgba(52, 211, 153, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .header-breadcrumb {
+      font-size: 0.75rem;
+      color: var(--forest-500);
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .header-title h1 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--forest-50);
+    }
+
+    .header-icon {
+      font-size: 1.25rem;
+    }
+
+    .header-icon.org { color: var(--jade-500); }
+    .header-icon.channel { color: var(--sky-500); }
+
+    .header-members {
+      font-size: 0.75rem;
+      color: var(--forest-400);
+      margin-left: 0.5rem;
+    }
+
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .header-btn {
+      padding: 0.5rem 0.875rem;
+      border-radius: 0.5rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .header-btn.primary {
+      background: linear-gradient(135deg, var(--jade-500), var(--jade-600));
+      border: none;
+      color: white;
+    }
+
+    .header-btn.secondary {
+      background: var(--forest-800);
+      border: 1px solid rgba(52, 211, 153, 0.15);
+      color: var(--forest-200);
+    }
+
+    /* Tab Bar */
+    .tab-bar {
+      display: flex;
+      padding: 0 1.5rem;
+      border-bottom: 1px solid rgba(52, 211, 153, 0.08);
+      background: var(--forest-850);
+    }
+
+    .tab {
+      padding: 0.875rem 1.25rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--forest-400);
+      cursor: pointer;
+      position: relative;
+      transition: color 0.15s ease;
+    }
+
+    .tab:hover {
+      color: var(--forest-200);
+    }
+
+    .tab.active {
+      color: var(--jade-400);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--jade-500);
+      border-radius: 1px 1px 0 0;
+    }
+
+    /* Messages Area */
+    .messages-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .date-separator {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.5rem 0;
+    }
+
+    .date-separator::before,
+    .date-separator::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(52, 211, 153, 0.1);
+    }
+
+    .date-separator span {
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: var(--forest-500);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .message {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .message-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--violet-500), #a78bfa);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .message-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .message-author {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--forest-100);
+    }
+
+    .message-time {
+      font-size: 0.6875rem;
+      color: var(--forest-500);
+    }
+
+    .message-text {
+      font-size: 0.875rem;
+      color: var(--forest-200);
+      line-height: 1.5;
+    }
+
+    .message-reactions {
+      display: flex;
+      gap: 0.375rem;
+      margin-top: 0.5rem;
+    }
+
+    .reaction {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      background: var(--forest-800);
+      border-radius: 1rem;
+      font-size: 0.75rem;
+    }
+
+    .reaction-count {
+      color: var(--forest-400);
+      font-size: 0.6875rem;
+    }
+
+    /* Composer */
+    .composer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid rgba(52, 211, 153, 0.08);
+      background: var(--forest-850);
+    }
+
+    .composer-input {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.75rem;
+      background: var(--forest-800);
+      border: 1px solid rgba(52, 211, 153, 0.15);
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+    }
+
+    .composer-textarea {
+      flex: 1;
+      min-height: 24px;
+      background: transparent;
+      border: none;
+      color: var(--forest-100);
+      font-size: 0.875rem;
+      resize: none;
+      outline: none;
+    }
+
+    .composer-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .composer-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 0.375rem;
+      color: var(--forest-400);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .composer-btn:hover {
+      background: var(--forest-700);
+      color: var(--forest-200);
+    }
+
+    .composer-send {
+      background: var(--jade-600);
+      color: white;
+    }
+
+    .composer-send:hover {
+      background: var(--jade-500);
+      color: white;
+    }
+
+    /* Thread Panel */
+    .thread-panel {
+      background: var(--forest-850);
+      border-left: 1px solid rgba(52, 211, 153, 0.08);
+      display: flex;
+      flex-direction: column;
+      transition: width 0.25s ease;
+      overflow: hidden;
+    }
+
+    .thread-panel.collapsed {
+      width: 0 !important;
+      border-left: none;
+    }
+
+    .thread-header {
+      padding: 1rem;
+      border-bottom: 1px solid rgba(52, 211, 153, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .thread-header h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--forest-100);
+    }
+
+    .thread-close {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 0.375rem;
+      color: var(--forest-400);
+      cursor: pointer;
+    }
+
+    .thread-content {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+
+    .thread-parent {
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(52, 211, 153, 0.08);
+      margin-bottom: 1rem;
+    }
+
+    .thread-replies {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .thread-reply {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .thread-reply-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--sky-500), #38bdf8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.625rem;
+      font-weight: 600;
+      color: white;
+    }
+
+    .thread-reply-content {
+      flex: 1;
+    }
+
+    .thread-reply-author {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--forest-100);
+    }
+
+    .thread-reply-text {
+      font-size: 0.8125rem;
+      color: var(--forest-300);
+      margin-top: 0.125rem;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--forest-600);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--forest-500);
+    }
+  </style>
+</head>
+<body>
+  <div class="playground-container">
+    <!-- Controls Panel -->
+    <div class="controls-panel">
+      <div class="controls-scroll">
+        <div class="controls-header">
+          <div class="logo">◆</div>
+          <h1>Communitas Layout</h1>
+        </div>
+
+        <!-- Presets -->
+        <div class="control-group">
+          <h2>Presets</h2>
+          <div class="presets">
+            <button class="preset-btn active" onclick="applyPreset('default')">Default</button>
+            <button class="preset-btn" onclick="applyPreset('compact')">Compact</button>
+            <button class="preset-btn" onclick="applyPreset('spacious')">Spacious</button>
+            <button class="preset-btn" onclick="applyPreset('focus')">Focus Mode</button>
+            <button class="preset-btn" onclick="applyPreset('mobile')">Mobile</button>
+          </div>
+        </div>
+
+        <!-- Window Size -->
+        <div class="control-group">
+          <h2>Window Size</h2>
+          <div class="control-row">
+            <label>Width <span id="windowWidthValue">1280px</span></label>
+            <input type="range" id="windowWidth" min="800" max="1600" value="1280" oninput="updateState()">
+          </div>
+          <div class="control-row">
+            <label>Height <span id="windowHeightValue">800px</span></label>
+            <input type="range" id="windowHeight" min="500" max="1000" value="800" oninput="updateState()">
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="control-group">
+          <h2>Sidebar</h2>
+          <div class="control-row">
+            <label>Width <span id="sidebarWidthValue">280px</span></label>
+            <input type="range" id="sidebarWidth" min="200" max="360" value="280" oninput="updateState()">
+          </div>
+          <div class="toggle-row">
+            <span>Collapsed</span>
+            <div class="toggle" id="sidebarCollapsed" onclick="toggleOption('sidebarCollapsed')"></div>
+          </div>
+          <div class="toggle-row">
+            <span>Show Search</span>
+            <div class="toggle active" id="showSearch" onclick="toggleOption('showSearch')"></div>
+          </div>
+          <div class="toggle-row">
+            <span>Hierarchical Navigation</span>
+            <div class="toggle active" id="hierarchicalNav" onclick="toggleOption('hierarchicalNav')"></div>
+          </div>
+        </div>
+
+        <!-- Thread Panel -->
+        <div class="control-group">
+          <h2>Thread Panel</h2>
+          <div class="control-row">
+            <label>Width <span id="threadPanelWidthValue">360px</span></label>
+            <input type="range" id="threadPanelWidth" min="280" max="480" value="360" oninput="updateState()">
+          </div>
+          <div class="toggle-row">
+            <span>Visible</span>
+            <div class="toggle active" id="threadPanelVisible" onclick="toggleOption('threadPanelVisible')"></div>
+          </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="control-group">
+          <h2>Content Area</h2>
+          <div class="control-row">
+            <label>Active Tab</label>
+            <select id="activeTab" onchange="updateState()">
+              <option value="chat">Chat</option>
+              <option value="board">Board</option>
+              <option value="drive">Drive</option>
+              <option value="docs">Documents</option>
+              <option value="details">Details</option>
+            </select>
+          </div>
+          <div class="control-row">
+            <label>Entity Type</label>
+            <select id="entityType" onchange="updateState()">
+              <option value="org">Organization</option>
+              <option value="channel" selected>Channel</option>
+              <option value="project">Project</option>
+              <option value="group">Group</option>
+            </select>
+          </div>
+          <div class="toggle-row">
+            <span>Show Tab Bar</span>
+            <div class="toggle active" id="showTabBar" onclick="toggleOption('showTabBar')"></div>
+          </div>
+        </div>
+
+        <!-- Spacing -->
+        <div class="control-group">
+          <h2>Spacing</h2>
+          <div class="control-row">
+            <label>Content Padding</label>
+            <select id="contentPadding" onchange="updateState()">
+              <option value="compact">Compact (12px)</option>
+              <option value="default" selected>Default (24px)</option>
+              <option value="spacious">Spacious (32px)</option>
+            </select>
+          </div>
+          <div class="control-row">
+            <label>Message Gap <span id="messageGapValue">16px</span></label>
+            <input type="range" id="messageGap" min="8" max="32" value="16" oninput="updateState()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Prompt Output -->
+      <div class="prompt-output">
+        <div class="prompt-header">
+          <span>Generated Prompt</span>
+          <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">Copy</button>
+        </div>
+        <div class="prompt-content" id="promptContent">
+          Update the Communitas desktop layout to use the default configuration.
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview Panel -->
+    <div class="preview-panel">
+      <div class="preview-header">
+        <h2>Live Preview</h2>
+        <span class="preview-dimensions" id="previewDimensions">1280 × 800</span>
+      </div>
+      <div class="preview-frame">
+        <div class="app-preview" id="appPreview">
+          <!-- Title Bar -->
+          <div class="titlebar">
+            <div class="traffic-light red"></div>
+            <div class="traffic-light yellow"></div>
+            <div class="traffic-light green"></div>
+            <span class="titlebar-text">Communitas</span>
+          </div>
+
+          <!-- App Layout -->
+          <div class="app-layout" id="appLayout">
+            <!-- Sidebar -->
+            <div class="sidebar" id="sidebar">
+              <div class="profile-section">
+                <div class="avatar">
+                  DI
+                  <div class="presence-dot"></div>
+                </div>
+                <div class="profile-info">
+                  <div class="profile-name">David Irvine</div>
+                  <div class="profile-status">forest-moon-star-ocean</div>
+                </div>
+              </div>
+
+              <div class="sidebar-content" id="sidebarContent">
+                <div class="sidebar-search" id="searchBox">
+                  <span class="sidebar-search-icon">⌕</span>
+                  <span class="sidebar-search-placeholder">Search...</span>
+                  <span class="sidebar-search-kbd">⌘K</span>
+                </div>
+
+                <div class="sidebar-section">
+                  <div class="section-header">
+                    <span>Spaces</span>
+                    <span class="section-add">+</span>
+                  </div>
+
+                  <div id="navItems">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
+                <div class="sidebar-section">
+                  <div class="section-header">
+                    <span>Contacts</span>
+                    <span class="section-add">+</span>
+                  </div>
+
+                  <div id="contactItems">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content" id="mainContent">
+              <!-- Header -->
+              <div class="content-header">
+                <div>
+                  <div class="header-breadcrumb">Saorsa Labs</div>
+                  <div class="header-title">
+                    <span class="header-icon channel" id="headerIcon">#</span>
+                    <h1 id="headerTitle">general</h1>
+                    <span class="header-members">24 online</span>
+                  </div>
+                </div>
+                <div class="header-actions">
+                  <button class="header-btn primary">📞 Call</button>
+                  <button class="header-btn secondary">⚙️</button>
+                </div>
+              </div>
+
+              <!-- Tab Bar -->
+              <div class="tab-bar" id="tabBar">
+                <div class="tab active" id="tabChat">Chat</div>
+                <div class="tab" id="tabBoard">Board</div>
+                <div class="tab" id="tabDrive">Drive</div>
+                <div class="tab" id="tabDocs">Docs</div>
+                <div class="tab" id="tabDetails">Details</div>
+              </div>
+
+              <!-- Messages Area -->
+              <div class="messages-area" id="messagesArea">
+                <div class="date-separator">
+                  <span>Today</span>
+                </div>
+
+                <div class="message">
+                  <div class="message-avatar">AI</div>
+                  <div class="message-content">
+                    <div class="message-header">
+                      <span class="message-author">Alice</span>
+                      <span class="message-time">10:23 AM</span>
+                    </div>
+                    <div class="message-text">Hey everyone! Just pushed the new layout changes to the repo. Let me know what you think!</div>
+                    <div class="message-reactions">
+                      <div class="reaction">👍 <span class="reaction-count">3</span></div>
+                      <div class="reaction">🎉 <span class="reaction-count">2</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="message">
+                  <div class="message-avatar" style="background: linear-gradient(135deg, var(--jade-500), var(--jade-700));">DI</div>
+                  <div class="message-content">
+                    <div class="message-header">
+                      <span class="message-author">David Irvine</span>
+                      <span class="message-time">10:25 AM</span>
+                    </div>
+                    <div class="message-text">Looks great! The new sidebar feels much more intuitive. Love the hierarchical navigation.</div>
+                  </div>
+                </div>
+
+                <div class="message">
+                  <div class="message-avatar" style="background: linear-gradient(135deg, var(--coral-500), #fb923c);">BM</div>
+                  <div class="message-content">
+                    <div class="message-header">
+                      <span class="message-author">Bob Miller</span>
+                      <span class="message-time">10:28 AM</span>
+                    </div>
+                    <div class="message-text">The thread panel is a nice touch. Makes it easy to follow conversations without losing context.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Composer -->
+              <div class="composer">
+                <div class="composer-input">
+                  <div class="composer-textarea" contenteditable="true" data-placeholder="Message #general..."></div>
+                  <div class="composer-actions">
+                    <button class="composer-btn">📎</button>
+                    <button class="composer-btn">😊</button>
+                    <button class="composer-btn composer-send">→</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Thread Panel -->
+            <div class="thread-panel" id="threadPanel">
+              <div class="thread-header">
+                <h3>Thread</h3>
+                <button class="thread-close">×</button>
+              </div>
+              <div class="thread-content">
+                <div class="thread-parent">
+                  <div class="message">
+                    <div class="message-avatar">AI</div>
+                    <div class="message-content">
+                      <div class="message-header">
+                        <span class="message-author">Alice</span>
+                        <span class="message-time">10:23 AM</span>
+                      </div>
+                      <div class="message-text">Hey everyone! Just pushed the new layout changes.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="thread-replies">
+                  <div class="thread-reply">
+                    <div class="thread-reply-avatar">CM</div>
+                    <div class="thread-reply-content">
+                      <div class="thread-reply-author">Carol Martinez</div>
+                      <div class="thread-reply-text">The animation transitions are smooth!</div>
+                    </div>
+                  </div>
+                  <div class="thread-reply">
+                    <div class="thread-reply-avatar" style="background: linear-gradient(135deg, var(--amber-500), #fbbf24);">ES</div>
+                    <div class="thread-reply-content">
+                      <div class="thread-reply-author">Eve Smith</div>
+                      <div class="thread-reply-text">+1, really polished feel.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Default state
+    const DEFAULTS = {
+      windowWidth: 1280,
+      windowHeight: 800,
+      sidebarWidth: 280,
+      sidebarCollapsed: false,
+      showSearch: true,
+      hierarchicalNav: true,
+      threadPanelWidth: 360,
+      threadPanelVisible: true,
+      activeTab: 'chat',
+      entityType: 'channel',
+      showTabBar: true,
+      contentPadding: 'default',
+      messageGap: 16
+    };
+
+    // Current state
+    const state = { ...DEFAULTS };
+
+    // Nav items data
+    const navData = [
+      { type: 'org', name: 'Saorsa Labs', icon: '◆', expanded: true, children: [
+        { type: 'channel', name: 'general', icon: '#', badge: 3 },
+        { type: 'channel', name: 'development', icon: '#' },
+        { type: 'project', name: 'Communitas', icon: '◈', children: [
+          { type: 'channel', name: 'frontend', icon: '#' },
+          { type: 'channel', name: 'backend', icon: '#' },
+        ]},
+        { type: 'group', name: 'Core Team', icon: '◎' },
+      ]},
+      { type: 'org', name: 'MaidSafe', icon: '◆', children: [
+        { type: 'channel', name: 'announcements', icon: '#', badge: 5 },
+      ]},
+    ];
+
+    const contactsData = [
+      { name: 'Alice Johnson', initials: 'AJ', status: 'online' },
+      { name: 'Bob Miller', initials: 'BM', status: 'away' },
+      { name: 'Carol Martinez', initials: 'CM', status: 'busy' },
+      { name: 'David Chen', initials: 'DC', status: 'offline' },
+    ];
+
+    // Entity type configs
+    const entityConfigs = {
+      org: { icon: '◆', iconClass: 'org', label: 'Saorsa Labs' },
+      channel: { icon: '#', iconClass: 'channel', label: 'general' },
+      project: { icon: '◈', iconClass: 'project', label: 'Communitas' },
+      group: { icon: '◎', iconClass: 'group', label: 'Core Team' },
+    };
+
+    // Presets
+    const presets = {
+      default: { ...DEFAULTS },
+      compact: {
+        ...DEFAULTS,
+        sidebarWidth: 240,
+        threadPanelWidth: 300,
+        contentPadding: 'compact',
+        messageGap: 12
+      },
+      spacious: {
+        ...DEFAULTS,
+        sidebarWidth: 320,
+        threadPanelWidth: 420,
+        contentPadding: 'spacious',
+        messageGap: 24
+      },
+      focus: {
+        ...DEFAULTS,
+        sidebarCollapsed: true,
+        threadPanelVisible: false,
+        showTabBar: false
+      },
+      mobile: {
+        ...DEFAULTS,
+        windowWidth: 800,
+        windowHeight: 600,
+        sidebarWidth: 240,
+        threadPanelVisible: false,
+        sidebarCollapsed: true
+      }
+    };
+
+    function applyPreset(presetName) {
+      const preset = presets[presetName];
+      Object.assign(state, preset);
+
+      // Update controls
+      document.getElementById('windowWidth').value = state.windowWidth;
+      document.getElementById('windowHeight').value = state.windowHeight;
+      document.getElementById('sidebarWidth').value = state.sidebarWidth;
+      document.getElementById('threadPanelWidth').value = state.threadPanelWidth;
+      document.getElementById('activeTab').value = state.activeTab;
+      document.getElementById('entityType').value = state.entityType;
+      document.getElementById('contentPadding').value = state.contentPadding;
+      document.getElementById('messageGap').value = state.messageGap;
+
+      // Update toggles
+      updateToggle('sidebarCollapsed', state.sidebarCollapsed);
+      updateToggle('showSearch', state.showSearch);
+      updateToggle('hierarchicalNav', state.hierarchicalNav);
+      updateToggle('threadPanelVisible', state.threadPanelVisible);
+      updateToggle('showTabBar', state.showTabBar);
+
+      // Update preset buttons
+      document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+
+      updateAll();
+    }
+
+    function toggleOption(id) {
+      state[id] = !state[id];
+      updateToggle(id, state[id]);
+      updateAll();
+    }
+
+    function updateToggle(id, value) {
+      const toggle = document.getElementById(id);
+      if (value) {
+        toggle.classList.add('active');
+      } else {
+        toggle.classList.remove('active');
+      }
+    }
+
+    function updateState() {
+      state.windowWidth = parseInt(document.getElementById('windowWidth').value);
+      state.windowHeight = parseInt(document.getElementById('windowHeight').value);
+      state.sidebarWidth = parseInt(document.getElementById('sidebarWidth').value);
+      state.threadPanelWidth = parseInt(document.getElementById('threadPanelWidth').value);
+      state.activeTab = document.getElementById('activeTab').value;
+      state.entityType = document.getElementById('entityType').value;
+      state.contentPadding = document.getElementById('contentPadding').value;
+      state.messageGap = parseInt(document.getElementById('messageGap').value);
+
+      updateAll();
+    }
+
+    function updateAll() {
+      renderPreview();
+      updatePrompt();
+      updateValueLabels();
+    }
+
+    function updateValueLabels() {
+      document.getElementById('windowWidthValue').textContent = state.windowWidth + 'px';
+      document.getElementById('windowHeightValue').textContent = state.windowHeight + 'px';
+      document.getElementById('sidebarWidthValue').textContent = state.sidebarWidth + 'px';
+      document.getElementById('threadPanelWidthValue').textContent = state.threadPanelWidth + 'px';
+      document.getElementById('messageGapValue').textContent = state.messageGap + 'px';
+      document.getElementById('previewDimensions').textContent = `${state.windowWidth} × ${state.windowHeight}`;
+    }
+
+    function renderPreview() {
+      const appPreview = document.getElementById('appPreview');
+      const sidebar = document.getElementById('sidebar');
+      const threadPanel = document.getElementById('threadPanel');
+      const tabBar = document.getElementById('tabBar');
+      const searchBox = document.getElementById('searchBox');
+      const messagesArea = document.getElementById('messagesArea');
+      const headerIcon = document.getElementById('headerIcon');
+      const headerTitle = document.getElementById('headerTitle');
+
+      // Window size
+      appPreview.style.width = state.windowWidth + 'px';
+      appPreview.style.height = state.windowHeight + 'px';
+
+      // Sidebar
+      if (state.sidebarCollapsed) {
+        sidebar.classList.add('collapsed');
+        sidebar.style.width = '72px';
+      } else {
+        sidebar.classList.remove('collapsed');
+        sidebar.style.width = state.sidebarWidth + 'px';
+      }
+
+      // Search
+      searchBox.style.display = state.showSearch && !state.sidebarCollapsed ? 'flex' : 'none';
+
+      // Thread panel
+      if (state.threadPanelVisible) {
+        threadPanel.classList.remove('collapsed');
+        threadPanel.style.width = state.threadPanelWidth + 'px';
+      } else {
+        threadPanel.classList.add('collapsed');
+      }
+
+      // Tab bar
+      tabBar.style.display = state.showTabBar ? 'flex' : 'none';
+
+      // Update active tab
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      document.getElementById('tab' + state.activeTab.charAt(0).toUpperCase() + state.activeTab.slice(1)).classList.add('active');
+
+      // Entity type
+      const config = entityConfigs[state.entityType];
+      headerIcon.textContent = config.icon;
+      headerIcon.className = 'header-icon ' + config.iconClass;
+      headerTitle.textContent = config.label;
+
+      // Content padding
+      const paddingMap = { compact: '12px', default: '24px', spacious: '32px' };
+      messagesArea.style.padding = paddingMap[state.contentPadding];
+
+      // Message gap
+      messagesArea.style.gap = state.messageGap + 'px';
+
+      // Render nav items
+      renderNavItems();
+      renderContacts();
+    }
+
+    function renderNavItems() {
+      const container = document.getElementById('navItems');
+      container.innerHTML = '';
+
+      if (state.hierarchicalNav) {
+        navData.forEach(item => {
+          container.appendChild(createHierarchicalNavItem(item, 0));
+        });
+      } else {
+        // Flat list
+        const flatItems = flattenNav(navData);
+        flatItems.forEach(item => {
+          container.appendChild(createFlatNavItem(item));
+        });
+      }
+    }
+
+    function createHierarchicalNavItem(item, level) {
+      const div = document.createElement('div');
+
+      const navItem = document.createElement('div');
+      navItem.className = 'nav-item' + (item.name === 'general' ? ' selected' : '');
+      navItem.style.paddingLeft = (12 + level * 16) + 'px';
+
+      if (item.children && item.children.length > 0) {
+        const chevron = document.createElement('span');
+        chevron.className = 'nav-chevron' + (item.expanded ? ' expanded' : '');
+        chevron.textContent = '▶';
+        navItem.appendChild(chevron);
+      }
+
+      const icon = document.createElement('span');
+      icon.className = 'nav-icon ' + item.type;
+      icon.textContent = item.icon;
+      navItem.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'nav-label';
+      label.textContent = item.name;
+      navItem.appendChild(label);
+
+      if (item.badge) {
+        const badge = document.createElement('span');
+        badge.className = 'nav-badge';
+        badge.textContent = item.badge;
+        navItem.appendChild(badge);
+      }
+
+      div.appendChild(navItem);
+
+      if (item.children && item.expanded) {
+        const childContainer = document.createElement('div');
+        childContainer.className = 'nav-children';
+        item.children.forEach(child => {
+          childContainer.appendChild(createHierarchicalNavItem(child, level + 1));
+        });
+        div.appendChild(childContainer);
+      }
+
+      return div;
+    }
+
+    function createFlatNavItem(item) {
+      const navItem = document.createElement('div');
+      navItem.className = 'nav-item' + (item.name === 'general' ? ' selected' : '');
+
+      const icon = document.createElement('span');
+      icon.className = 'nav-icon ' + item.type;
+      icon.textContent = item.icon;
+      navItem.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'nav-label';
+      label.textContent = item.name;
+      navItem.appendChild(label);
+
+      if (item.badge) {
+        const badge = document.createElement('span');
+        badge.className = 'nav-badge';
+        badge.textContent = item.badge;
+        navItem.appendChild(badge);
+      }
+
+      return navItem;
+    }
+
+    function flattenNav(items, result = []) {
+      items.forEach(item => {
+        result.push(item);
+        if (item.children) {
+          flattenNav(item.children, result);
+        }
+      });
+      return result;
+    }
+
+    function renderContacts() {
+      const container = document.getElementById('contactItems');
+      container.innerHTML = '';
+
+      contactsData.forEach(contact => {
+        const item = document.createElement('div');
+        item.className = 'contact-item';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'contact-avatar';
+        avatar.textContent = contact.initials;
+
+        const presence = document.createElement('div');
+        presence.className = 'contact-presence ' + contact.status;
+        avatar.appendChild(presence);
+
+        item.appendChild(avatar);
+
+        const name = document.createElement('span');
+        name.className = 'contact-name';
+        name.textContent = contact.name;
+        item.appendChild(name);
+
+        container.appendChild(item);
+      });
+    }
+
+    function updatePrompt() {
+      const parts = [];
+
+      // Window size
+      if (state.windowWidth !== DEFAULTS.windowWidth || state.windowHeight !== DEFAULTS.windowHeight) {
+        parts.push(`window size of ${state.windowWidth}×${state.windowHeight}px`);
+      }
+
+      // Sidebar
+      if (state.sidebarCollapsed) {
+        parts.push('collapsed sidebar (72px)');
+      } else if (state.sidebarWidth !== DEFAULTS.sidebarWidth) {
+        parts.push(`sidebar width of ${state.sidebarWidth}px`);
+      }
+
+      if (!state.showSearch && DEFAULTS.showSearch) {
+        parts.push('hidden sidebar search');
+      }
+
+      if (!state.hierarchicalNav && DEFAULTS.hierarchicalNav) {
+        parts.push('flat navigation (no hierarchy)');
+      }
+
+      // Thread panel
+      if (!state.threadPanelVisible) {
+        parts.push('hidden thread panel');
+      } else if (state.threadPanelWidth !== DEFAULTS.threadPanelWidth) {
+        parts.push(`thread panel width of ${state.threadPanelWidth}px`);
+      }
+
+      // Content
+      if (state.activeTab !== DEFAULTS.activeTab) {
+        parts.push(`${state.activeTab} tab active`);
+      }
+
+      if (state.entityType !== DEFAULTS.entityType) {
+        parts.push(`${state.entityType} entity view`);
+      }
+
+      if (!state.showTabBar && DEFAULTS.showTabBar) {
+        parts.push('hidden tab bar');
+      }
+
+      // Spacing
+      if (state.contentPadding !== DEFAULTS.contentPadding) {
+        const paddingDesc = state.contentPadding === 'compact' ? 'compact (12px)' : 'spacious (32px)';
+        parts.push(`${paddingDesc} content padding`);
+      }
+
+      if (state.messageGap !== DEFAULTS.messageGap) {
+        parts.push(`${state.messageGap}px message spacing`);
+      }
+
+      // Build prompt
+      let prompt;
+      if (parts.length === 0) {
+        prompt = 'The current Communitas desktop layout uses the default configuration with a 280px sidebar, 360px thread panel, hierarchical navigation, and standard spacing.';
+      } else {
+        prompt = `Update the Communitas desktop layout to use ${parts.join(', ')}.`;
+
+        // Add context about the changes
+        if (state.sidebarCollapsed || !state.threadPanelVisible) {
+          prompt += ' This creates a more focused view with more space for the main content area.';
+        }
+        if (state.contentPadding === 'compact' || state.messageGap < 14) {
+          prompt += ' The compact spacing allows more messages to be visible at once.';
+        }
+        if (state.contentPadding === 'spacious' || state.messageGap > 20) {
+          prompt += ' The spacious layout improves readability with generous whitespace.';
+        }
+      }
+
+      document.getElementById('promptContent').textContent = prompt;
+    }
+
+    function copyPrompt() {
+      const prompt = document.getElementById('promptContent').textContent;
+      navigator.clipboard.writeText(prompt).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    // Initialize
+    updateAll();
+  </script>
+</body>
+</html>

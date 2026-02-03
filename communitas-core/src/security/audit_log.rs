@@ -5,7 +5,6 @@
 //! - Identity switches
 //! - Device changes
 //! - Recovery operations
-//! - Passkey registrations
 //!
 //! Events are stored encrypted using ChaCha20-Poly1305 with a device-derived key.
 //! Logs rotate based on size (10MB) and age (60 days).
@@ -46,10 +45,6 @@ pub enum AuditEventType {
     DeviceChange,
     /// Identity recovered from mnemonic
     Recovery,
-    /// Passkey registered
-    PasskeyRegister,
-    /// Passkey used for authentication
-    PasskeyAuth,
     /// Session refreshed before expiration
     SessionRefresh,
     /// Session expired
@@ -65,8 +60,6 @@ impl std::fmt::Display for AuditEventType {
             Self::IdentitySwitch => write!(f, "identity_switch"),
             Self::DeviceChange => write!(f, "device_change"),
             Self::Recovery => write!(f, "recovery"),
-            Self::PasskeyRegister => write!(f, "passkey_register"),
-            Self::PasskeyAuth => write!(f, "passkey_auth"),
             Self::SessionRefresh => write!(f, "session_refresh"),
             Self::SessionExpired => write!(f, "session_expired"),
         }

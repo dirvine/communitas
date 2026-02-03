@@ -1,0 +1,84 @@
+{
+  "timestamp": "2026-02-01T23:12:07.100164Z",
+  "scenario_name": "Phase 3: Member Management",
+  "tools_covered": [
+    "add_member",
+    "remove_member",
+    "list_members"
+  ],
+  "total_tests": 10,
+  "passed": 0,
+  "failed": 10,
+  "results": [
+    {
+      "test_id": "MEM-001",
+      "test_name": "Alice adds Bob as admin",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 506
+    },
+    {
+      "test_id": "MEM-002",
+      "test_name": "Alice adds Charlie as member",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 242
+    },
+    {
+      "test_id": "MEM-003",
+      "test_name": "Alice adds Dave as member",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 250
+    },
+    {
+      "test_id": "MEM-004",
+      "test_name": "List organisation members",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 249
+    },
+    {
+      "test_id": "MEM-005",
+      "test_name": "Admin Bob can modify membership",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 711
+    },
+    {
+      "test_id": "MEM-006",
+      "test_name": "Member cannot remove admin",
+      "passed": false,
+      "error_message": "Expected error containing 'permission', got 'Invalid or missing entity_type'",
+      "duration_ms": 3
+    },
+    {
+      "test_id": "MEM-007",
+      "test_name": "Member cannot remove owner",
+      "passed": false,
+      "error_message": "Expected error containing 'permission', got 'Invalid or missing entity_type'",
+      "duration_ms": 346
+    },
+    {
+      "test_id": "MEM-008",
+      "test_name": "Admin can remove member",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 361
+    },
+    {
+      "test_id": "MEM-009",
+      "test_name": "Re-add Charlie for further tests",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 242
+    },
+    {
+      "test_id": "MEM-010",
+      "test_name": "Verify member list synced across nodes",
+      "passed": false,
+      "error_message": "Expected status 'success', got 'error'",
+      "duration_ms": 229
+    }
+  ]
+}

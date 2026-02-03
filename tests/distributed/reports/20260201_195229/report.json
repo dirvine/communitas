@@ -1,0 +1,95 @@
+{
+  "timestamp": "2026-02-01T19:53:02.617411Z",
+  "scenario_name": "Phase 8: P2P Networking",
+  "tools_covered": [
+    "network_start",
+    "network_stop",
+    "network_connect",
+    "network_disconnect",
+    "network_status",
+    "network_peers",
+    "network_external_address"
+  ],
+  "total_tests": 11,
+  "passed": 1,
+  "failed": 10,
+  "results": [
+    {
+      "test_id": "NET-001",
+      "test_name": "Check network status on all nodes",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 232
+    },
+    {
+      "test_id": "NET-002",
+      "test_name": "Get external address",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 251
+    },
+    {
+      "test_id": "NET-003",
+      "test_name": "List connected peers",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 270
+    },
+    {
+      "test_id": "NET-004",
+      "test_name": "Dave stops network",
+      "passed": true,
+      "error_message": null,
+      "duration_ms": 0
+    },
+    {
+      "test_id": "NET-005",
+      "test_name": "Verify Dave's network stopped",
+      "passed": false,
+      "error_message": "Expected field 'network_active' to be Bool(false), got None",
+      "duration_ms": 0
+    },
+    {
+      "test_id": "NET-006",
+      "test_name": "Alice sends message while Dave offline",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 259
+    },
+    {
+      "test_id": "NET-007",
+      "test_name": "Dave restarts network",
+      "passed": false,
+      "error_message": "Failed to call tool 'network_start'",
+      "duration_ms": 30002
+    },
+    {
+      "test_id": "NET-008",
+      "test_name": "Wait for Dave to reconnect",
+      "passed": false,
+      "error_message": "Expected field 'network_active' to be Bool(true), got None",
+      "duration_ms": 0
+    },
+    {
+      "test_id": "NET-009",
+      "test_name": "Verify Dave received offline message",
+      "passed": false,
+      "error_message": "Expected result to contain Object {\"text\": String(\"Message sent while Dave is offline\")}, got Object {\"content\": Array [Object {\"text\": String(\"{\\n  \\\"messages\\\": []\\n}\"), \"type\": String(\"text\")}], \"isError\": Bool(false)}",
+      "duration_ms": 0
+    },
+    {
+      "test_id": "NET-010",
+      "test_name": "Alice checks peer count",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 350
+    },
+    {
+      "test_id": "NET-011",
+      "test_name": "All nodes check connectivity",
+      "passed": false,
+      "error_message": "MCP error (-32600): Invalid Request: Vault locked. Use 'create_unlock_grant' from a trusted UI to unlock.",
+      "duration_ms": 355
+    }
+  ]
+}

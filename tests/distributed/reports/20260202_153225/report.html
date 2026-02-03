@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed MCP Test Report</title>
+  <style>
+    :root {
+      --success-color: #22c55e;
+      --failure-color: #ef4444;
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #e5e7eb;
+      --border-color: #374151;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #f1f5f9;
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      color: #9ca3af;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+    }
+    .card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card .value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+    .card.success .value { color: var(--success-color); }
+    .card.failure .value { color: var(--failure-color); }
+    .tools {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+    }
+    .tools h2 {
+      margin-top: 0;
+    }
+    .tools ul {
+      columns: 3;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tools li {
+      padding: 0.25rem 0;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      margin-bottom: 2rem;
+    }
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    th {
+      background: #0f172a;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr.pass { background: rgba(34, 197, 94, 0.1); }
+    tr.fail { background: rgba(239, 68, 68, 0.1); }
+    .error {
+      color: var(--failure-color);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Combined Scenario</h1>
+    <div class="timestamp">Generated: 2026-02-02 15:32:55 UTC</div>
+
+    <div class="summary">
+      <div class="card failure">
+        <h3>Status</h3>
+        <div class="value">FAIL</div>
+      </div>
+      <div class="card">
+        <h3>Total Tests</h3>
+        <div class="value">34</div>
+      </div>
+      <div class="card success">
+        <h3>Passed</h3>
+        <div class="value">29</div>
+      </div>
+      <div class="card failure">
+        <h3>Failed</h3>
+        <div class="value">5</div>
+      </div>
+      <div class="card">
+        <h3>Pass Rate</h3>
+        <div class="value">85.3%</div>
+      </div>
+    </div>
+
+    <div class="tools">
+      <h2>Tools Covered</h2>
+      <ul>
+        <li>health_check</li>
+          <li>create_vault</li>
+          <li>authenticate</li>
+          <li>authenticate_token</li>
+          <li>core_status</li>
+          <li>create_entity</li>
+          <li>get_entity</li>
+          <li>list_entities</li>
+          <li>join_entity</li>
+          <li>add_member</li>
+          <li>remove_member</li>
+          <li>list_members</li>
+      </ul>
+    </div>
+
+    <h2>Test Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Test ID</th>
+          <th>Name</th>
+          <th>Error</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-001</td>
+          <td>All nodes health check</td>
+          <td>-</td>
+          <td>634ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-002</td>
+          <td>Check core status (unauthenticated)</td>
+          <td>-</td>
+          <td>453ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-003</td>
+          <td>Create vault for Alice</td>
+          <td>-</td>
+          <td>417ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-004</td>
+          <td>Create vault for Bob</td>
+          <td>-</td>
+          <td>356ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-005</td>
+          <td>Create vault for Charlie</td>
+          <td>-</td>
+          <td>398ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-006</td>
+          <td>Create vault for Dave</td>
+          <td>-</td>
+          <td>291ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-007</td>
+          <td>Verify authenticated status</td>
+          <td>-</td>
+          <td>521ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-008</td>
+          <td>Re-authenticate with password</td>
+          <td>-</td>
+          <td>310ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-008A</td>
+          <td>Logout before wrong password attempt</td>
+          <td>-</td>
+          <td>1293ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-009</td>
+          <td>Reject wrong password</td>
+          <td>-</td>
+          <td>414ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-010</td>
+          <td>Re-authenticate after wrong password</td>
+          <td>-</td>
+          <td>544ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-001</td>
+          <td>Start networking on all nodes</td>
+          <td>-</td>
+          <td>6285ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-001</td>
+          <td>Alice creates organisation</td>
+          <td>-</td>
+          <td>349ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-002</td>
+          <td>Alice creates group in organisation</td>
+          <td>-</td>
+          <td>368ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-003</td>
+          <td>Alice creates channel</td>
+          <td>-</td>
+          <td>493ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-004</td>
+          <td>Alice creates project</td>
+          <td>-</td>
+          <td>500ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-005</td>
+          <td>Get organisation by ID</td>
+          <td>-</td>
+          <td>531ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-006</td>
+          <td>List all entities</td>
+          <td>-</td>
+          <td>950ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-007</td>
+          <td>Bob joins shared entities</td>
+          <td>-</td>
+          <td>1770ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-008</td>
+          <td>Charlie joins shared entities</td>
+          <td>-</td>
+          <td>951ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-009</td>
+          <td>Dave joins shared entities</td>
+          <td>-</td>
+          <td>913ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-010</td>
+          <td>Bob creates personal entity</td>
+          <td>-</td>
+          <td>571ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-011</td>
+          <td>Verify entity isolation before join</td>
+          <td>-</td>
+          <td>568ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-001</td>
+          <td>Alice adds Bob as admin</td>
+          <td>-</td>
+          <td>341ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-002</td>
+          <td>Alice adds Charlie as member</td>
+          <td>-</td>
+          <td>389ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-003</td>
+          <td>Alice adds Dave as member</td>
+          <td>-</td>
+          <td>468ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-004</td>
+          <td>List organisation members</td>
+          <td>-</td>
+          <td>517ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-005</td>
+          <td>Admin Bob can modify membership</td>
+          <td>-</td>
+          <td>620ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-005A</td>
+          <td>Membership replicated to all nodes</td>
+          <td class="error">Expected result to contain Object {&quot;members&quot;: Array [Object {&quot;member_id&quot;: String(&quot;ocean-forest-moon-star&quot;)}]}, got Object {&quot;members&quot;: Array [Object {&quot;joined_at&quot;: Number(1770046363), &quot;member_id&quot;: String(&quot;river-mountain-sun-cloud&quot;), &quot;role&quot;: String(&quot;admin&quot;)}]}</td>
+          <td>650ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-006</td>
+          <td>Member cannot remove admin</td>
+          <td class="error">Expected error containing &#39;permission&#39;, got &#39;Failed to remove member: Member not found: river-mountain-sun-cloud&#39;</td>
+          <td>235ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-007</td>
+          <td>Member cannot remove owner</td>
+          <td class="error">Expected error containing &#39;permission&#39;, got &#39;Failed to remove member: Member not found: ocean-forest-moon-star&#39;</td>
+          <td>353ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-008</td>
+          <td>Admin can remove member</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>569ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>MEM-009</td>
+          <td>Re-add Charlie for further tests</td>
+          <td class="error">Expected status &#39;success&#39;, got &#39;error&#39;</td>
+          <td>410ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MEM-010</td>
+          <td>Verify member list synced across nodes</td>
+          <td>-</td>
+          <td>3664ms</td>
+        </tr>
+
+      </tbody>
+    </table>
+
+    <h2>Unlock Telemetry</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Actor</th>
+          <th>Node</th>
+          <th>Event</th>
+          <th>Detail</th>
+          <th>TTL (s)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-02-02T15:32:30.890877+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:31.604405+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:31.868927+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:31.868950+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:32.183651+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_invalidated</td>
+          <td>lease reset</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.142898+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.142912+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.142984+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.143196+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>unlock_refresh</td>
+          <td>requesting new unlock lease</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.444103+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.613619+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.674004+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.718573+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.718586+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.734595+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>create_unlock_grant</td>
+          <td>lease ttl 600s</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.864405+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.864420+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.887241+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.887253+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.971630+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>get_unlock_status</td>
+          <td>status=unlocked</td>
+          <td>600</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:33.971647+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>unlock_granted</td>
+          <td>lease expires in 599 seconds</td>
+          <td>599</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:39.428604+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 594s</td>
+          <td>594</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:39.778046+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 593s</td>
+          <td>593</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:40.146818+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 593s</td>
+          <td>593</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:40.640623+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 593s</td>
+          <td>593</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:41.141596+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:41.673565+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 592s</td>
+          <td>592</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:42.623901+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 591s</td>
+          <td>591</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:43.314538+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 590s</td>
+          <td>590</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:43.731188+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 590s</td>
+          <td>590</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:44.171098+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:44.394876+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 589s</td>
+          <td>589</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:44.844791+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:44.978568+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:45.254602+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:45.346079+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 588s</td>
+          <td>588</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:45.722288+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 587s</td>
+          <td>587</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:45.835110+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 587s</td>
+          <td>587</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:46.049648+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 587s</td>
+          <td>587</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:46.259182+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 587s</td>
+          <td>587</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:46.830597+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 586s</td>
+          <td>586</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:47.398682+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 586s</td>
+          <td>586</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:47.740194+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 585s</td>
+          <td>585</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:48.129426+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 585s</td>
+          <td>585</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:48.598443+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 585s</td>
+          <td>585</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:49.116437+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 584s</td>
+          <td>584</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:49.737357+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 583s</td>
+          <td>583</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:49.737374+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 583s</td>
+          <td>583</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:49.737421+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 583s</td>
+          <td>583</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:49.737577+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 583s</td>
+          <td>583</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:50.387843+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 583s</td>
+          <td>583</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:50.623153+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 582s</td>
+          <td>582</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:50.976478+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 582s</td>
+          <td>582</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:51.546093+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 582s</td>
+          <td>582</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:51.956324+00:00</td>
+          <td>alice</td>
+          <td>alice</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 581s</td>
+          <td>581</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:51.956333+00:00</td>
+          <td>bob</td>
+          <td>bob</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 581s</td>
+          <td>581</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:51.956393+00:00</td>
+          <td>dave</td>
+          <td>dave</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 581s</td>
+          <td>581</td>
+        </tr>
+        <tr>
+          <td>2026-02-02T15:32:51.956485+00:00</td>
+          <td>charlie</td>
+          <td>charlie</td>
+          <td>cache_hit</td>
+          <td>existing lease valid for 581s</td>
+          <td>581</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

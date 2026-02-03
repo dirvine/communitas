@@ -1,5 +1,7 @@
 # Passkey Authentication Guide
 
+> Status (2026-02-02): Passkey support is deferred and currently unavailable. This guide is retained for future reintroduction.
+
 **Using Passkey to Log In**
 
 Once you've registered a passkey, logging in is faster and more secure than passwords. This guide shows you how to authenticate with your passkey.

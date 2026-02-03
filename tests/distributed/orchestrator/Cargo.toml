@@ -18,7 +18,7 @@ serde_yaml = "0.9"
 serde_json = "1"
 
 # HTTP client for MCP and Anthropic API
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Error handling
 anyhow = "1"

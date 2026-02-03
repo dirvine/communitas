@@ -188,7 +188,9 @@ mod tests {
     fn test_base64_encode_decode_roundtrip() {
         let original = b"test data for encoding";
         let encoded = base64::engine::general_purpose::STANDARD.encode(original);
-        let decoded = base64::engine::general_purpose::STANDARD.decode(&encoded).unwrap();
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&encoded)
+            .unwrap();
         assert_eq!(original.as_slice(), decoded.as_slice());
     }
 
@@ -200,8 +202,12 @@ mod tests {
         let pk_b64 = base64::engine::general_purpose::STANDARD.encode(&pk);
         let sk_b64 = base64::engine::general_purpose::STANDARD.encode(&sk);
 
-        let pk_decoded = base64::engine::general_purpose::STANDARD.decode(&pk_b64).unwrap();
-        let sk_decoded = base64::engine::general_purpose::STANDARD.decode(&sk_b64).unwrap();
+        let pk_decoded = base64::engine::general_purpose::STANDARD
+            .decode(&pk_b64)
+            .unwrap();
+        let sk_decoded = base64::engine::general_purpose::STANDARD
+            .decode(&sk_b64)
+            .unwrap();
 
         assert_eq!(pk.len(), pk_decoded.len());
         assert_eq!(sk.len(), sk_decoded.len());

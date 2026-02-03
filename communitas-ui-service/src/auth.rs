@@ -1,12 +1,23 @@
 use async_trait::async_trait;
-use communitas_core::ui_core::{
-    CommunitasApi, UiRecentIdentity, UiSessionInfo, generate_id_words,
-    recover_identity_from_mnemonic,
+use communitas_core::{
+    encrypted_storage::{
+        EncryptedStorageManager, StorageConfig, VaultMetadata, ensure_identity_keys,
+        vault_dir_from_root,
+    },
+    recovery::{Language, RecoveryConfig, create_new_identity, recover_identity},
+    ui_core::{CommunitasApi, UiRecentIdentity, UiSessionInfo},
 };
-use std::env;
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 use thiserror::Error;
-use tokio::sync::{RwLock, watch};
+use tokio::{
+    io::AsyncWriteExt,
+    sync::{RwLock, watch},
+};
 use tracing::{info, instrument, warn};
+use uuid::Uuid;
 
 use crate::storage::{StorageError, UiStorage};
 
@@ -34,6 +45,13 @@ pub struct AuthSession {
     pub device_name: String,
     /// Session expiration timestamp (Unix seconds)
     pub expires_at: u64,
+}
+
+/// Result of creating a new identity (session + mnemonic)
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateIdentityResult {
+    pub session: AuthSession,
+    pub mnemonic: String,
 }
 
 impl From<(UiSessionInfo, String)> for AuthSession {
@@ -74,7 +92,6 @@ pub struct RecentIdentity {
     pub four_words: String,
     pub display_name: String,
     pub last_used: u64,
-    pub has_passkey: bool,
 }
 
 /// Information about an available vault for login selection.
@@ -91,7 +108,6 @@ impl From<UiRecentIdentity> for RecentIdentity {
             four_words: ui.four_words,
             display_name: ui.display_name,
             last_used: ui.last_used,
-            has_passkey: ui.has_passkey,
         }
     }
 }
@@ -117,18 +133,15 @@ impl From<String> for AuthError {
 
 #[async_trait]
 pub trait AuthService: Send + Sync {
-    async fn login(&self, four_words: &str, password: &str) -> Result<AuthSession, AuthError>;
-    async fn create_identity(
-        &self,
-        display_name: &str,
-        password: &str,
-    ) -> Result<AuthSession, AuthError>;
+    async fn login(&self, four_words: &str) -> Result<AuthSession, AuthError>;
+    async fn create_identity(&self, display_name: &str) -> Result<CreateIdentityResult, AuthError>;
     async fn recover_identity(
         &self,
         mnemonic: &str,
         passphrase: Option<&str>,
         display_name: &str,
-        password: &str,
+        friend_four_words: Option<&str>,
+        temporary: bool,
     ) -> Result<AuthSession, AuthError>;
     async fn logout(&self) -> Result<(), AuthError>;
     fn current_session(&self) -> Option<AuthSession>;
@@ -150,20 +163,8 @@ pub trait AuthService: Send + Sync {
     /// Get list of recent identities for quick switch UI
     async fn list_recent_identities(&self) -> Result<Vec<RecentIdentity>, AuthError>;
 
-    /// Switch to another identity using passkey/biometric authentication
-    async fn switch_identity(&self, four_words: &str) -> Result<AuthSession, AuthError>;
-
-    /// Attempt auto-login using the most recent identity with passkey
+    /// Attempt auto-login using the most recent identity
     async fn try_auto_login(&self) -> Result<Option<AuthSession>, AuthError>;
-
-    /// Check if an identity has a passkey registered for biometric auth
-    async fn has_passkey(&self, four_words: &str) -> Result<bool, AuthError>;
-
-    /// Register a passkey for the current session (enables biometric auth)
-    async fn register_passkey(&self) -> Result<(), AuthError>;
-
-    /// Delete passkey for an identity (disables biometric auth)
-    async fn delete_passkey(&self, four_words: &str) -> Result<(), AuthError>;
 
     /// Remove a recent identity from the list (does not delete the vault)
     async fn remove_recent_identity(&self, four_words: &str) -> Result<(), AuthError>;
@@ -176,6 +177,7 @@ pub trait AuthService: Send + Sync {
 struct AuthInner {
     api: Option<CommunitasApi>,
     session: Option<AuthSession>,
+    temp_root: Option<PathBuf>,
 }
 
 /// Concrete implementation shared by all UIs.
@@ -200,6 +202,7 @@ impl AuthController {
             inner: RwLock::new(AuthInner {
                 api: None,
                 session: None,
+                temp_root: None,
             }),
             state_tx,
             state_rx,
@@ -211,16 +214,129 @@ impl AuthController {
         Ok(self.storage.root_string()?)
     }
 
+    fn storage_path_from_root(&self, root: &Path) -> Result<String, AuthError> {
+        root.to_str()
+            .map(|s| s.to_string())
+            .ok_or(AuthError::InvalidInput("invalid storage path"))
+    }
+
+    pub fn is_temporary_session(&self) -> bool {
+        self.inner.blocking_read().temp_root.is_some()
+    }
+
+    fn vault_dir(&self) -> PathBuf {
+        vault_dir_from_root(self.storage.root())
+    }
+
+    async fn load_vault_display_name(&self, four_words: &str) -> Option<String> {
+        let vault_meta = self.vault_dir().join(four_words).join("vault.meta");
+        if let Ok(raw) = tokio::fs::read(&vault_meta).await {
+            if let Ok(metadata) = serde_json::from_slice::<VaultMetadata>(&raw) {
+                if !metadata.display_name.is_empty() {
+                    return Some(metadata.display_name);
+                }
+            }
+        }
+        None
+    }
+
+    async fn build_storage_manager(&self) -> Result<EncryptedStorageManager, AuthError> {
+        let storage_root = self.storage.root_path();
+        let vault_dir = vault_dir_from_root(&storage_root);
+        tokio::fs::create_dir_all(&vault_dir)
+            .await
+            .map_err(|e| AuthError::Core(e.to_string()))?;
+
+        let config = StorageConfig {
+            vault_dir,
+            ..StorageConfig::default()
+        };
+        EncryptedStorageManager::new(config)
+            .await
+            .map_err(|e| AuthError::Core(e.to_string()))
+    }
+
+    async fn zeroize_dir(path: &Path) -> Result<(), AuthError> {
+        if !path.exists() {
+            return Ok(());
+        }
+
+        let mut stack = vec![path.to_path_buf()];
+        let mut dirs_to_remove = Vec::new();
+
+        while let Some(dir) = stack.pop() {
+            let mut entries = tokio::fs::read_dir(&dir)
+                .await
+                .map_err(|e| AuthError::Core(e.to_string()))?;
+            dirs_to_remove.push(dir.clone());
+
+            while let Some(entry) = entries
+                .next_entry()
+                .await
+                .map_err(|e| AuthError::Core(e.to_string()))?
+            {
+                let file_type = entry
+                    .file_type()
+                    .await
+                    .map_err(|e| AuthError::Core(e.to_string()))?;
+                let entry_path = entry.path();
+
+                if file_type.is_dir() {
+                    stack.push(entry_path);
+                    continue;
+                }
+
+                if file_type.is_symlink() {
+                    let _ = tokio::fs::remove_file(&entry_path).await;
+                    continue;
+                }
+
+                if let Ok(metadata) = entry.metadata().await {
+                    let mut remaining = metadata.len();
+                    if let Ok(mut file) = tokio::fs::OpenOptions::new()
+                        .write(true)
+                        .open(&entry_path)
+                        .await
+                    {
+                        let zeros = vec![0u8; 8192];
+                        while remaining > 0 {
+                            let chunk = zeros.len().min(remaining as usize);
+                            file.write_all(&zeros[..chunk])
+                                .await
+                                .map_err(|e| AuthError::Core(e.to_string()))?;
+                            remaining = remaining.saturating_sub(chunk as u64);
+                        }
+                        let _ = file.sync_all().await;
+                    }
+                }
+
+                let _ = tokio::fs::remove_file(&entry_path).await;
+            }
+        }
+
+        for dir in dirs_to_remove.into_iter().rev() {
+            let _ = tokio::fs::remove_dir(&dir).await;
+        }
+
+        Ok(())
+    }
+
     fn set_state(&self, state: AuthStateSnapshot) {
         if self.state_tx.send(state).is_err() {
             warn!("auth state receiver dropped");
         }
     }
 
-    async fn set_session(&self, api: CommunitasApi, session: AuthSession) {
+    async fn set_session(
+        &self,
+        api: CommunitasApi,
+        session: AuthSession,
+        temp_root: Option<PathBuf>,
+    ) {
         let mut inner = self.inner.write().await;
         inner.api = Some(api);
         inner.session = Some(session);
+        inner.temp_root = temp_root;
     }
 
     /// Spawn network start in background (non-blocking)
@@ -252,14 +368,6 @@ impl AuthController {
             Err(AuthError::InvalidInput("display name is required"))
         } else {
             Ok(trimmed)
-        }
-    }
-
-    fn ensure_password<'a>(&self, value: &'a str) -> Result<&'a str, AuthError> {
-        if value.is_empty() {
-            Err(AuthError::InvalidInput("password cannot be empty"))
-        } else {
-            Ok(value)
         }
     }
 
@@ -333,17 +441,21 @@ impl AuthFailureMode {
 
 #[async_trait]
 impl AuthService for AuthController {
-    #[instrument(name = "ui.auth.login", skip(self, password), fields(identity = %redact_identity(four_words)))]
-    async fn login(&self, four_words: &str, password: &str) -> Result<AuthSession, AuthError> {
+    #[instrument(name = "ui.auth.login", skip(self), fields(identity = %redact_identity(four_words)))]
+    async fn login(&self, four_words: &str) -> Result<AuthSession, AuthError> {
         self.fail_if_requested()?;
         let four_words = self.ensure_four_words(four_words)?;
-        let password = self.ensure_password(password)?;
 
         self.set_state(AuthStateSnapshot::Authenticating);
 
+        let display_name = self
+            .load_vault_display_name(four_words)
+            .await
+            .unwrap_or_else(|| four_words.to_string());
+
         let api = CommunitasApi::create(
             four_words.to_string(),
-            four_words.to_string(),
+            display_name,
             self.device_name.clone(),
             self.storage_path()?,
         )
@@ -351,7 +463,7 @@ impl AuthService for AuthController {
         .map_err(AuthError::Core)?;
 
         let session_info = api
-            .auth_login(four_words.to_string(), password.to_string())
+            .auth_login(four_words.to_string())
             .await
             .map_err(AuthError::Core)?;
 
@@ -360,7 +472,7 @@ impl AuthService for AuthController {
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
         let expires_soon = session.expires_soon();
-        self.set_session(api, session.clone()).await;
+        self.set_session(api, session.clone(), None).await;
         self.set_state(AuthStateSnapshot::Authenticated {
             session: session.clone(),
             expires_soon,
@@ -369,19 +481,29 @@ impl AuthService for AuthController {
         Ok(session)
     }
 
-    #[instrument(name = "ui.auth.create", skip(self, password), fields(display_name))]
-    async fn create_identity(
-        &self,
-        display_name: &str,
-        password: &str,
-    ) -> Result<AuthSession, AuthError> {
+    #[instrument(name = "ui.auth.create", skip(self), fields(display_name))]
+    async fn create_identity(&self, display_name: &str) -> Result<CreateIdentityResult, AuthError> {
         self.fail_if_requested()?;
-        // Generate four_words automatically for connection bootstrap
-        let four_words = generate_id_words().map_err(|e| AuthError::Core(e.to_string()))?;
         let display_name = self.ensure_display_name(display_name)?;
-        let password = self.ensure_password(password)?;
 
         self.set_state(AuthStateSnapshot::Authenticating);
+
+        let config = RecoveryConfig::default();
+        let (mnemonic, keys) =
+            create_new_identity(&config, None).map_err(|e| AuthError::Core(e.to_string()))?;
+        let four_words = keys.four_words.clone();
+
+        let storage_root = self.storage.root_path();
+        let vault_dir = vault_dir_from_root(&storage_root);
+        ensure_identity_keys(
+            &vault_dir,
+            &four_words,
+            display_name,
+            keys.verifying_key_bytes(),
+            keys.signing_key_bytes(),
+        )
+        .await
+        .map_err(|e| AuthError::Core(e.to_string()))?;
 
         let api = CommunitasApi::create(
             four_words.clone(),
@@ -392,60 +514,89 @@ impl AuthService for AuthController {
         .await
         .map_err(AuthError::Core)?;
 
-        api.auth_create_vault(
-            four_words.clone(),
-            display_name.to_string(),
-            password.to_string(),
-        )
-        .await
-        .map_err(AuthError::Core)?;
-
-        let session_info = api
-            .auth_login(four_words, password.to_string())
+        api.auth_create_vault(four_words.clone(), display_name.to_string())
             .await
             .map_err(AuthError::Core)?;
+
+        let session_info = api.auth_login(four_words).await.map_err(AuthError::Core)?;
 
         // Spawn network start in background (non-blocking)
         Self::spawn_network_start(api.clone());
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
         let expires_soon = session.expires_soon();
-        self.set_session(api, session.clone()).await;
+        self.set_session(api, session.clone(), None).await;
         self.set_state(AuthStateSnapshot::Authenticated {
             session: session.clone(),
             expires_soon,
         });
         info!(target: "ui.auth", "identity created");
-        Ok(session)
+        Ok(CreateIdentityResult {
+            session,
+            mnemonic: mnemonic.to_string(),
+        })
     }
 
-    #[instrument(name = "ui.auth.recover", skip(self, password), fields(display_name, mnemonic_len = mnemonic.len()))]
+    #[instrument(name = "ui.auth.recover", skip(self), fields(display_name, mnemonic_len = mnemonic.len()))]
     async fn recover_identity(
         &self,
         mnemonic: &str,
         passphrase: Option<&str>,
         display_name: &str,
-        password: &str,
+        friend_four_words: Option<&str>,
+        temporary: bool,
     ) -> Result<AuthSession, AuthError> {
         self.fail_if_requested()?;
         if mnemonic.trim().is_empty() {
             return Err(AuthError::InvalidInput("mnemonic is required"));
         }
         let display_name = self.ensure_display_name(display_name)?;
-        let password = self.ensure_password(password)?;
 
         self.set_state(AuthStateSnapshot::Authenticating);
 
-        let recovered =
-            recover_identity_from_mnemonic(mnemonic.to_string(), passphrase.map(str::to_string))
-                .map_err(AuthError::Core)?;
-        let four_words = recovered.four_words.clone();
+        if let Some(friend) = friend_four_words {
+            info!(
+                target = "ui.auth",
+                "friend connection provided for recovery: {}",
+                redact_identity(friend)
+            );
+        }
+
+        let keys = recover_identity(mnemonic, Language::English, passphrase)
+            .map_err(|e| AuthError::Core(e.to_string()))?;
+        let four_words = keys.four_words.clone();
+
+        let temp_root = if temporary {
+            let mut root = env::temp_dir();
+            root.push(format!("communitas-temp-{}", Uuid::new_v4()));
+            tokio::fs::create_dir_all(&root)
+                .await
+                .map_err(|e| AuthError::Core(e.to_string()))?;
+            Some(root)
+        } else {
+            None
+        };
+
+        let storage_root = temp_root
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| self.storage.root_path());
+        let vault_dir = vault_dir_from_root(&storage_root);
+        ensure_identity_keys(
+            &vault_dir,
+            &four_words,
+            display_name,
+            keys.verifying_key_bytes(),
+            keys.signing_key_bytes(),
+        )
+        .await
+        .map_err(|e| AuthError::Core(e.to_string()))?;
 
         let api = CommunitasApi::create(
             four_words.clone(),
             display_name.to_string(),
             self.device_name.clone(),
-            self.storage_path()?,
+            self.storage_path_from_root(&storage_root)?,
         )
         .await
         .map_err(AuthError::Core)?;
@@ -455,17 +606,13 @@ impl AuthService for AuthController {
             .await
             .map_err(AuthError::Core)?;
         if !exists {
-            api.auth_create_vault(
-                four_words.clone(),
-                display_name.to_string(),
-                password.to_string(),
-            )
-            .await
-            .map_err(AuthError::Core)?;
+            api.auth_create_vault(four_words.clone(), display_name.to_string())
+                .await
+                .map_err(AuthError::Core)?;
         }
 
         let session_info = api
-            .auth_login(four_words.clone(), password.to_string())
+            .auth_login(four_words.clone())
             .await
             .map_err(AuthError::Core)?;
 
@@ -474,7 +621,7 @@ impl AuthService for AuthController {
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
         let expires_soon = session.expires_soon();
-        self.set_session(api, session.clone()).await;
+        self.set_session(api, session.clone(), temp_root).await;
         self.set_state(AuthStateSnapshot::Authenticated {
             session: session.clone(),
             expires_soon,
@@ -486,6 +633,7 @@ impl AuthService for AuthController {
     #[instrument(name = "ui.auth.logout", skip(self))]
     async fn logout(&self) -> Result<(), AuthError> {
         let mut inner = self.inner.write().await;
+        let temp_root = inner.temp_root.take();
         if let Some(api) = inner.api.take() {
             if let Err(err) = api.gossip_stop().await {
                 warn!("failed to stop gossip: {err}");
@@ -497,6 +645,15 @@ impl AuthService for AuthController {
         inner.session = None;
         drop(inner);
         self.set_state(AuthStateSnapshot::LoggedOut);
+        if let Some(root) = temp_root {
+            if let Err(err) = Self::zeroize_dir(&root).await {
+                warn!("failed to zeroize temp data at {}: {err}", root.display());
+            }
+            let _ = tokio::fs::remove_dir_all(&root).await;
+            if let Err(err) = self.try_auto_login().await {
+                warn!("failed to auto-login after temp logout: {err}");
+            }
+        }
         info!(target = "ui.auth", "session terminated");
         Ok(())
     }
@@ -579,75 +736,37 @@ impl AuthService for AuthController {
         Ok(recent.into_iter().map(RecentIdentity::from).collect())
     }
 
-    #[instrument(name = "ui.auth.switch_identity", skip(self), fields(identity = %redact_identity(four_words)))]
-    async fn switch_identity(&self, four_words: &str) -> Result<AuthSession, AuthError> {
-        self.fail_if_requested()?;
-        let four_words = self.ensure_four_words(four_words)?;
-
-        self.set_state(AuthStateSnapshot::Authenticating);
-
-        let mut inner = self.inner.write().await;
-        let api = inner
-            .api
-            .as_ref()
-            .ok_or(AuthError::State("no active session"))?;
-
-        let session_info = api
-            .auth_switch_identity(four_words.to_string())
-            .await
-            .map_err(AuthError::Core)?;
-
-        let session = AuthSession::from((session_info, self.device_name.clone()));
-        let expires_soon = session.expires_soon();
-        inner.session = Some(session.clone());
-        drop(inner);
-
-        self.set_state(AuthStateSnapshot::Authenticated {
-            session: session.clone(),
-            expires_soon,
-        });
-
-        info!(target = "ui.auth", "switched identity");
-        Ok(session)
-    }
-
     #[instrument(name = "ui.auth.try_auto_login", skip(self))]
     async fn try_auto_login(&self) -> Result<Option<AuthSession>, AuthError> {
         self.fail_if_requested()?;
 
-        // Need to create a temporary API instance to check for auto-login
-        // since we're not logged in yet
-        let api = CommunitasApi::create(
-            "temp-auto-login".to_string(),
-            "Auto Login Check".to_string(),
-            self.device_name.clone(),
-            self.storage_path()?,
-        )
-        .await
-        .map_err(AuthError::Core)?;
-
-        let result = api.auth_try_auto_login().await.map_err(AuthError::Core)?;
+        let storage_manager = self.build_storage_manager().await?;
+        let mut auth = communitas_core::auth_service::AuthService::new(storage_manager);
+        let result = auth
+            .try_auto_login()
+            .await
+            .map_err(|e| AuthError::Core(e.to_string()))?;
 
         match result {
             Some(session_info) => {
                 self.set_state(AuthStateSnapshot::Authenticating);
 
-                // Re-create API with actual identity
+                let ui_session = UiSessionInfo::from(session_info);
+
                 let real_api = CommunitasApi::create(
-                    session_info.four_words.clone(),
-                    session_info.display_name.clone(),
+                    ui_session.four_words.clone(),
+                    ui_session.display_name.clone(),
                     self.device_name.clone(),
                     self.storage_path()?,
                 )
                 .await
                 .map_err(AuthError::Core)?;
 
-                // Spawn network start in background (non-blocking)
                 Self::spawn_network_start(real_api.clone());
 
-                let session = AuthSession::from((session_info, self.device_name.clone()));
+                let session = AuthSession::from((ui_session, self.device_name.clone()));
                 let expires_soon = session.expires_soon();
-                self.set_session(real_api, session.clone()).await;
+                self.set_session(real_api, session.clone(), None).await;
                 self.set_state(AuthStateSnapshot::Authenticated {
                     session: session.clone(),
                     expires_soon,
@@ -661,53 +780,6 @@ impl AuthService for AuthController {
                 Ok(None)
             }
         }
-    }
-
-    #[instrument(name = "ui.auth.has_passkey", skip(self), fields(identity = %redact_identity(four_words)))]
-    async fn has_passkey(&self, four_words: &str) -> Result<bool, AuthError> {
-        let four_words = self.ensure_four_words(four_words)?;
-
-        let inner = self.inner.read().await;
-        let api = inner
-            .api
-            .as_ref()
-            .ok_or(AuthError::State("no active session"))?;
-
-        api.auth_has_passkey(four_words.to_string())
-            .await
-            .map_err(AuthError::Core)
-    }
-
-    #[instrument(name = "ui.auth.register_passkey", skip(self))]
-    async fn register_passkey(&self) -> Result<(), AuthError> {
-        let inner = self.inner.read().await;
-        let api = inner
-            .api
-            .as_ref()
-            .ok_or(AuthError::State("no active session"))?;
-
-        api.auth_register_passkey().await.map_err(AuthError::Core)?;
-
-        info!(target = "ui.auth", "passkey registered");
-        Ok(())
-    }
-
-    #[instrument(name = "ui.auth.delete_passkey", skip(self), fields(identity = %redact_identity(four_words)))]
-    async fn delete_passkey(&self, four_words: &str) -> Result<(), AuthError> {
-        let four_words = self.ensure_four_words(four_words)?;
-
-        let inner = self.inner.read().await;
-        let api = inner
-            .api
-            .as_ref()
-            .ok_or(AuthError::State("no active session"))?;
-
-        api.auth_delete_passkey(four_words.to_string())
-            .await
-            .map_err(AuthError::Core)?;
-
-        info!(target = "ui.auth", "passkey deleted");
-        Ok(())
     }
 
     #[instrument(name = "ui.auth.remove_recent_identity", skip(self), fields(identity = %redact_identity(four_words)))]
@@ -730,17 +802,11 @@ impl AuthService for AuthController {
 
     #[instrument(name = "ui.auth.list_vaults", skip(self))]
     async fn list_vaults(&self) -> Result<Vec<VaultInfo>, AuthError> {
-        // Create a temporary API instance to list vaults since we're not logged in
-        let api = CommunitasApi::create(
-            "temp-list-vaults".to_string(),
-            "Vault Lister".to_string(),
-            self.device_name.clone(),
-            self.storage_path()?,
-        )
-        .await
-        .map_err(AuthError::Core)?;
-
-        let vaults = api.auth_list_vaults().await.map_err(AuthError::Core)?;
+        let storage_manager = self.build_storage_manager().await?;
+        let vaults = storage_manager
+            .list_vaults()
+            .await
+            .map_err(|e| AuthError::Core(e.to_string()))?;
 
         // Convert to VaultInfo and sort by last_accessed (most recent first)
         let mut vault_infos: Vec<VaultInfo> = vaults
@@ -815,25 +881,6 @@ mod tests {
 
         let result = controller.ensure_display_name("  Alice  ");
         assert_eq!(result.unwrap(), "Alice");
-    }
-
-    #[test]
-    fn ensure_password_rejects_empty() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        let result = controller.ensure_password("");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn ensure_password_allows_whitespace_only() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        // Whitespace-only password is technically allowed (not trimmed)
-        let result = controller.ensure_password("   ");
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -961,14 +1008,12 @@ mod tests {
             four_words: "alpha-beta-gamma-delta".to_string(),
             display_name: "Alice".to_string(),
             last_used: 1700000000,
-            has_passkey: true,
         };
 
         let recent = RecentIdentity::from(ui_recent);
         assert_eq!(recent.four_words, "alpha-beta-gamma-delta");
         assert_eq!(recent.display_name, "Alice");
         assert_eq!(recent.last_used, 1700000000);
-        assert!(recent.has_passkey);
     }
 
     #[tokio::test]
@@ -980,86 +1025,6 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, AuthError::State(_)));
-    }
-
-    #[tokio::test]
-    async fn switch_identity_requires_session() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        let result = controller.switch_identity("alpha-beta-gamma-delta").await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AuthError::State(_)));
-    }
-
-    #[tokio::test]
-    async fn switch_identity_validates_input() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        // Empty four_words should fail with InvalidInput before checking session
-        let result = controller.switch_identity("").await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AuthError::InvalidInput(_)));
-    }
-
-    #[tokio::test]
-    async fn has_passkey_requires_session() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        let result = controller.has_passkey("alpha-beta-gamma-delta").await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AuthError::State(_)));
-    }
-
-    #[tokio::test]
-    async fn has_passkey_validates_input() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        // Empty four_words should fail with InvalidInput before checking session
-        let result = controller.has_passkey("").await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AuthError::InvalidInput(_)));
-    }
-
-    #[tokio::test]
-    async fn register_passkey_requires_session() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        let result = controller.register_passkey().await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AuthError::State(_)));
-    }
-
-    #[tokio::test]
-    async fn delete_passkey_requires_session() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        let result = controller.delete_passkey("alpha-beta-gamma-delta").await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AuthError::State(_)));
-    }
-
-    #[tokio::test]
-    async fn delete_passkey_validates_input() {
-        let temp = TempDir::new().unwrap();
-        let controller = make_controller(&temp);
-
-        // Empty four_words should fail with InvalidInput before checking session
-        let result = controller.delete_passkey("").await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, AuthError::InvalidInput(_)));
     }
 
     #[tokio::test]

@@ -106,18 +106,6 @@ impl AuthService {
         password: &str,
     ) -> Result<()>;
 
-    /// Register passkey
-    pub async fn passkey_register(
-        &mut self,
-        four_words: &str,
-        device_name: &str,
-    ) -> Result<PasskeyInfo>;
-
-    /// Authenticate with passkey
-    pub async fn passkey_authenticate(
-        &mut self,
-        four_words: &str,
-    ) -> Result<SessionInfo>;
 }
 ```
 

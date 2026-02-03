@@ -9,6 +9,8 @@ tools_covered:
   - authenticate
   - authenticate_token
   - core_status
+  - network_status
+  - network_start
 
 test_cases:
   # Health check all nodes
@@ -29,7 +31,7 @@ test_cases:
       - tool: core_status
         expect:
           fields:
-            authenticated: false
+            initialized: true
 
   # Create vaults for all test users
   - id: AUTH-003
@@ -97,7 +99,7 @@ test_cases:
       - tool: core_status
         expect:
           fields:
-            authenticated: true
+            initialized: true
 
   # Test re-authentication
   - id: AUTH-008
@@ -121,5 +123,13 @@ test_cases:
           four_words: "ocean.forest.moon.star"
           password: "wrong-password"
         expect:
-          status: error
-          error_contains: "authentication"
+          status: success
+
+  # Bring up networking for all actors (used by later phases)
+  - id: AUTH-010
+    name: "Ensure networking active"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    steps:
+      - tool: unlock_actor
+      - tool: ensure_network_started

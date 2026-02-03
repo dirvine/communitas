@@ -4,14 +4,12 @@
 //! (Dioxus UI, CLI, MCP, headless, etc.). It encapsulates all business logic for:
 //! - Multi-identity management
 //! - Vault creation and authentication
-//! - Passkey/biometric support
 //! - Session management
 //! - Auto-login functionality
 
 use crate::encrypted_storage::{
-    EncryptedStorageManager, PasskeyInfo, RecentIdentity, Session, VaultInfo, WebAuthnHandler,
+    EncryptedStorageManager, RecentIdentity, Session, VaultInfo, load_identity_keys,
 };
-use crate::keystore::Keystore;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
@@ -44,28 +42,14 @@ impl From<Session> for SessionInfo {
 pub struct AuthService {
     storage_manager: EncryptedStorageManager,
     active_session: Option<Session>,
-    webauthn_handler: Option<WebAuthnHandler>,
 }
 
 impl AuthService {
     /// Create new auth service with storage manager
     pub fn new(storage_manager: EncryptedStorageManager) -> Self {
-        // Try to create WebAuthn handler, log if it fails
-        let webauthn_handler = match WebAuthnHandler::new() {
-            Ok(handler) => Some(handler),
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to initialize WebAuthn handler: {}. Passkey registration will use legacy mode.",
-                    e
-                );
-                None
-            }
-        };
-
         Self {
             storage_manager,
             active_session: None,
-            webauthn_handler,
         }
     }
 
@@ -81,54 +65,31 @@ impl AuthService {
 
     /// Create a new vault for a four-word identity
     ///
-    /// This creates an encrypted vault with PBKDF2 key derivation (100,000 iterations)
-    /// and ChaCha20-Poly1305 encryption.
-    pub async fn create_vault(
-        &mut self,
-        four_words: &str,
-        password: &str,
-        display_name: &str,
-    ) -> Result<String> {
+    /// This creates a local vault directory and metadata.
+    pub async fn create_vault(&mut self, four_words: &str, display_name: &str) -> Result<String> {
         tracing::info!("AuthService: Creating vault for {}", four_words);
 
         let vault_id = self
             .storage_manager
-            .create_vault(four_words, password, display_name)
+            .create_vault(four_words, display_name)
             .await?;
 
         tracing::info!("AuthService: Vault created with ID: {}", vault_id);
         Ok(vault_id)
     }
 
-    /// Login with four-word identity and password
+    /// Login with four-word identity
     ///
-    /// On success, stores session and optionally saves password to keyring for auto-login.
-    pub async fn login(
-        &mut self,
-        four_words: &str,
-        password: &str,
-        _device_name: Option<&str>,
-    ) -> Result<SessionInfo> {
+    /// On success, stores session for the active user.
+    pub async fn login(&mut self, four_words: &str) -> Result<SessionInfo> {
         tracing::info!("AuthService: Login attempt for {}", four_words);
 
-        // Note: EncryptedStorageManager::login expects Option<Vec<u8>> for passkey, we pass None
-        let mut session = self
-            .storage_manager
-            .login(four_words, password, None)
-            .await?;
+        let mut session = self.storage_manager.login(four_words).await?;
 
-        // Retrieve the ML-DSA-87 public key from keystore and attach to session
-        let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
-        let keystore = Keystore::new();
-        if let Ok((pk_bytes, _)) = keystore.load_mldsa_keys(&id_hex) {
-            let pubkey_hex = hex::encode(&pk_bytes);
+        if let Ok(keys) = load_identity_keys(self.storage_manager.vault_dir(), four_words).await {
+            let pubkey_hex = hex::encode(&keys.public_key);
             session = session.with_pubkey_hex(pubkey_hex);
             tracing::debug!("Attached pubkey_hex to session for {}", four_words);
-        } else {
-            tracing::warn!(
-                "Could not load ML-DSA keys for {} - pubkey_hex will be empty",
-                four_words
-            );
         }
 
         let session_info = SessionInfo::from(session.clone());
@@ -215,10 +176,8 @@ impl AuthService {
     }
 
     /// Import vault from backup
-    pub async fn import_vault(&mut self, backup_data: &[u8], password: &str) -> Result<String> {
-        self.storage_manager
-            .import_vault(backup_data, password)
-            .await
+    pub async fn import_vault(&mut self, backup_data: &[u8]) -> Result<String> {
+        self.storage_manager.import_vault(backup_data).await
     }
 
     /// Get recent identities (sorted by last used, max 10)
@@ -239,12 +198,9 @@ impl AuthService {
         self.storage_manager.vault_exists(four_words).await
     }
 
-    /// Delete a vault (requires password confirmation)
-    pub async fn delete_vault(&mut self, four_words: &str, password: &str) -> Result<()> {
+    /// Delete a vault
+    pub async fn delete_vault(&mut self, four_words: &str) -> Result<()> {
         tracing::warn!("AuthService: Deleting vault for {}", four_words);
-
-        // Verify password before deletion
-        let _ = self.login(four_words, password, None).await?;
 
         self.storage_manager.delete_vault(four_words).await?;
 
@@ -260,241 +216,6 @@ impl AuthService {
     }
 
     // ========================================================================
-    // Passkey / Biometric Authentication Methods
-    // ========================================================================
-
-    /// Start WebAuthn passkey registration
-    ///
-    /// Returns a registration challenge that should be passed to the authenticator
-    /// (browser WebAuthn API or platform biometric prompt).
-    ///
-    /// After the authenticator responds, call `passkey_finish_registration` with the response.
-    pub fn passkey_start_registration(
-        &self,
-        four_words: &str,
-        display_name: &str,
-    ) -> Result<webauthn_rs::prelude::CreationChallengeResponse> {
-        let handler = self
-            .webauthn_handler
-            .as_ref()
-            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
-
-        let (ccr, _state) = handler.start_registration(four_words, display_name, &[])?;
-
-        tracing::info!(
-            "AuthService: Started WebAuthn registration for {}",
-            four_words
-        );
-
-        Ok(ccr)
-    }
-
-    /// Finish WebAuthn passkey registration with authenticator response
-    ///
-    /// This completes the registration and stores the credential.
-    pub async fn passkey_finish_registration(
-        &mut self,
-        four_words: &str,
-        device_name: &str,
-        response: &webauthn_rs::prelude::RegisterPublicKeyCredential,
-        state: &webauthn_rs::prelude::PasskeyRegistration,
-    ) -> Result<PasskeyInfo> {
-        let handler = self
-            .webauthn_handler
-            .as_ref()
-            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
-
-        // Verify the registration response
-        let passkey = handler.finish_registration(response, state)?;
-
-        // Convert to our credential format
-        let credential = WebAuthnHandler::passkey_to_credential(&passkey);
-
-        // Store the credential
-        let info = self
-            .storage_manager
-            .passkey_register_webauthn(four_words, device_name, credential)
-            .await?;
-
-        tracing::info!(
-            "AuthService: Finished WebAuthn registration for {}",
-            four_words
-        );
-
-        Ok(info)
-    }
-
-    /// Register a passkey for biometric authentication (legacy - without WebAuthn)
-    ///
-    /// This enables Touch ID, Face ID, or Windows Hello for the identity.
-    /// The password is stored in the platform keyring for secure retrieval.
-    pub async fn passkey_register(
-        &mut self,
-        four_words: &str,
-        device_name: &str,
-    ) -> Result<PasskeyInfo> {
-        tracing::info!(
-            "AuthService: Registering passkey for {} on {}",
-            four_words,
-            device_name
-        );
-
-        let info = self
-            .storage_manager
-            .passkey_register(four_words, device_name)
-            .await?;
-
-        tracing::info!("AuthService: Passkey registered successfully");
-        Ok(info)
-    }
-
-    /// Register a passkey with WebAuthn credential
-    ///
-    /// This stores the WebAuthn credential for true biometric authentication.
-    pub async fn passkey_register_webauthn(
-        &mut self,
-        four_words: &str,
-        device_name: &str,
-        credential: crate::encrypted_storage::passkey::WebAuthnCredential,
-    ) -> Result<PasskeyInfo> {
-        tracing::info!(
-            "AuthService: Registering WebAuthn passkey for {} on {}",
-            four_words,
-            device_name
-        );
-
-        let info = self
-            .storage_manager
-            .passkey_register_webauthn(four_words, device_name, credential)
-            .await?;
-
-        tracing::info!("AuthService: WebAuthn passkey registered successfully");
-        Ok(info)
-    }
-
-    /// Check if WebAuthn is available for passkey operations
-    pub fn webauthn_available(&self) -> bool {
-        self.webauthn_handler.is_some()
-    }
-
-    /// Start WebAuthn passkey authentication
-    ///
-    /// Returns an authentication challenge that should be passed to the authenticator.
-    /// After the authenticator responds, call `passkey_finish_authentication` with the response.
-    pub async fn passkey_start_authentication(
-        &self,
-        four_words: &str,
-    ) -> Result<(
-        webauthn_rs::prelude::RequestChallengeResponse,
-        webauthn_rs::prelude::PasskeyAuthentication,
-    )> {
-        let handler = self
-            .webauthn_handler
-            .as_ref()
-            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
-
-        // Get stored credential and convert to Passkey
-        let credential = self
-            .storage_manager
-            .passkey_get_info(four_words)
-            .await?
-            .webauthn_credential
-            .ok_or_else(|| anyhow!("No WebAuthn credential found for this identity"))?;
-
-        let passkey = WebAuthnHandler::credential_to_passkey(&credential)?;
-
-        let (rcr, state) = handler.start_authentication(&[passkey])?;
-
-        tracing::info!(
-            "AuthService: Started WebAuthn authentication for {}",
-            four_words
-        );
-
-        Ok((rcr, state))
-    }
-
-    /// Finish WebAuthn passkey authentication with authenticator response
-    ///
-    /// This completes the authentication and creates a session.
-    pub async fn passkey_finish_authentication(
-        &mut self,
-        four_words: &str,
-        response: &webauthn_rs::prelude::PublicKeyCredential,
-        state: &webauthn_rs::prelude::PasskeyAuthentication,
-    ) -> Result<SessionInfo> {
-        let handler = self
-            .webauthn_handler
-            .as_ref()
-            .ok_or_else(|| anyhow!("WebAuthn not available"))?;
-
-        // Verify the authentication response
-        let auth_result = handler.finish_authentication(response, state)?;
-
-        tracing::info!(
-            "AuthService: WebAuthn authentication verified for {} (counter: {})",
-            four_words,
-            auth_result.counter
-        );
-
-        // Update the passkey's last used timestamp
-        self.storage_manager.passkey_get_info(four_words).await.ok(); // Just update timestamp, don't fail if this fails
-
-        // Use the password-based authentication to create the session
-        // (The keyring should have the password from previous login)
-        let session = self
-            .storage_manager
-            .passkey_authenticate(four_words)
-            .await?;
-
-        let session_info = SessionInfo::from(session.clone());
-        self.active_session = Some(session);
-
-        tracing::info!(
-            "AuthService: Finished WebAuthn authentication for {}",
-            four_words
-        );
-
-        Ok(session_info)
-    }
-
-    /// Authenticate using passkey/biometric (legacy - without WebAuthn verification)
-    ///
-    /// This retrieves the password from keyring and performs standard vault login.
-    /// For full WebAuthn flow, use passkey_start_authentication and passkey_finish_authentication.
-    pub async fn passkey_authenticate(&mut self, four_words: &str) -> Result<SessionInfo> {
-        tracing::info!("AuthService: Passkey authentication for {}", four_words);
-
-        let session = self
-            .storage_manager
-            .passkey_authenticate(four_words)
-            .await?;
-
-        let session_info = SessionInfo::from(session.clone());
-        self.active_session = Some(session);
-
-        tracing::info!("AuthService: Passkey authentication successful");
-        Ok(session_info)
-    }
-
-    /// Check if identity has a registered passkey
-    pub async fn passkey_has_passkey(&self, four_words: &str) -> Result<bool> {
-        Ok(self.storage_manager.passkey_has_passkey(four_words).await)
-    }
-
-    /// Get passkey information for an identity
-    pub async fn passkey_get_info(&self, four_words: &str) -> Result<PasskeyInfo> {
-        self.storage_manager.passkey_get_info(four_words).await
-    }
-
-    /// Delete passkey for an identity
-    pub async fn passkey_delete(&mut self, four_words: &str) -> Result<()> {
-        tracing::warn!("AuthService: Deleting passkey for {}", four_words);
-        self.storage_manager.passkey_delete(four_words).await?;
-        tracing::warn!("AuthService: Passkey deleted");
-        Ok(())
-    }
-
-    // ========================================================================
     // Auto-Login Methods
     // ========================================================================
 
@@ -503,110 +224,41 @@ impl AuthService {
     /// Returns session info if successful, None if no auto-login available.
     pub async fn try_auto_login(&mut self) -> Result<Option<SessionInfo>> {
         tracing::info!("AuthService: Attempting auto-login");
-
-        // Get last used identity from app config (returns Vec directly, not Result)
-        let recent = self.storage_manager.get_recent_identities().await;
-
-        if recent.is_empty() {
-            tracing::info!("AuthService: No recent identities for auto-login");
-            return Ok(None);
-        }
-
-        let last_identity = &recent[0];
-        tracing::info!(
-            "AuthService: Attempting auto-login for {}",
-            last_identity.four_words
-        );
-
-        // Check if passkey is available
-        if last_identity.has_passkey {
-            match self.passkey_authenticate(&last_identity.four_words).await {
-                Ok(session_info) => {
-                    tracing::info!("AuthService: Auto-login successful via passkey");
-                    return Ok(Some(session_info));
+        match self.storage_manager.try_auto_login().await? {
+            Some(session) => {
+                let mut session = session;
+                if let Ok(keys) =
+                    load_identity_keys(self.storage_manager.vault_dir(), &session.four_words).await
+                {
+                    let pubkey_hex = hex::encode(&keys.public_key);
+                    session = session.with_pubkey_hex(pubkey_hex);
                 }
-                Err(e) => {
-                    tracing::warn!("AuthService: Passkey auto-login failed: {}", e);
-                    // Fall through to return None
-                }
+
+                let session_info = SessionInfo::from(session.clone());
+                self.active_session = Some(session);
+                tracing::info!("AuthService: Auto-login successful");
+                Ok(Some(session_info))
+            }
+            None => {
+                tracing::info!("AuthService: No auto-login available");
+                Ok(None)
             }
         }
-
-        tracing::info!("AuthService: No auto-login available");
-        Ok(None)
     }
 
-    /// Enable auto-login for current session
-    ///
-    /// Stores password in keyring so passkey authentication can work.
-    pub async fn enable_auto_login(&mut self, password: &str) -> Result<()> {
-        let session = self
-            .active_session
-            .as_ref()
-            .ok_or_else(|| anyhow!("No active session"))?;
-
-        tracing::info!(
-            "AuthService: Enabling auto-login for {}",
-            session.four_words
-        );
-
-        // Store password in keyring via storage manager
-        self.storage_manager
-            .store_password_in_keyring(&session.four_words, password)
-            .await?;
-
-        tracing::info!("AuthService: Auto-login enabled");
+    /// Enable auto-login for current session (no-op; auto-login always on for local vaults)
+    pub async fn enable_auto_login(&mut self) -> Result<()> {
+        if self.active_session.is_none() {
+            return Err(anyhow!("No active session"));
+        }
+        tracing::info!("AuthService: Auto-login enabled (local vaults)");
         Ok(())
     }
 
-    /// Disable auto-login for an identity
-    pub async fn disable_auto_login(&mut self, four_words: &str) -> Result<()> {
-        tracing::info!("AuthService: Disabling auto-login for {}", four_words);
-
-        // Remove password from keyring
-        self.storage_manager
-            .remove_password_from_keyring(four_words)
-            .await?;
-
-        // Delete passkey if exists
-        if self.passkey_has_passkey(four_words).await? {
-            self.passkey_delete(four_words).await?;
-        }
-
-        tracing::info!("AuthService: Auto-login disabled");
+    /// Disable auto-login for an identity (no-op; retained for API compatibility)
+    pub async fn disable_auto_login(&mut self, _four_words: &str) -> Result<()> {
+        tracing::info!("AuthService: Auto-login disable requested (no-op)");
         Ok(())
-    }
-
-    // ========================================================================
-    // Identity Switching Methods
-    // ========================================================================
-
-    /// Switch to another identity (logout current, login new)
-    pub async fn switch_identity(&mut self, four_words: &str) -> Result<SessionInfo> {
-        tracing::info!("AuthService: Switching to identity {}", four_words);
-
-        // Logout current session if exists
-        if self.active_session.is_some() {
-            self.logout().await.ok(); // Ignore logout errors
-        }
-
-        // Try passkey authentication first
-        if self.passkey_has_passkey(four_words).await? {
-            match self.passkey_authenticate(four_words).await {
-                Ok(session_info) => {
-                    tracing::info!("AuthService: Identity switch successful via passkey");
-                    return Ok(session_info);
-                }
-                Err(e) => {
-                    tracing::warn!("AuthService: Passkey switch failed: {}", e);
-                    return Err(anyhow!("Passkey authentication required but failed"));
-                }
-            }
-        }
-
-        Err(anyhow!(
-            "Cannot switch to identity without password or passkey"
-        ))
     }
 }
 
@@ -633,7 +285,7 @@ mod tests {
 
         // Create vault
         let vault_id = auth_service
-            .create_vault("ocean-forest-moon-star", "test-password", "Test User")
+            .create_vault("ocean-forest-moon-star", "Test User")
             .await
             .expect("Failed to create vault");
 
@@ -641,11 +293,7 @@ mod tests {
 
         // Login
         let session_info = auth_service
-            .login(
-                "ocean-forest-moon-star",
-                "test-password",
-                Some("Test Device"),
-            )
+            .login("ocean-forest-moon-star")
             .await
             .expect("Failed to login");
 
@@ -682,12 +330,12 @@ mod tests {
 
         // Create and login with first identity
         auth_service
-            .create_vault("ocean-forest-moon-star", "pass1", "User 1")
+            .create_vault("ocean-forest-moon-star", "User 1")
             .await
             .expect("Failed to create vault 1");
 
         auth_service
-            .login("ocean-forest-moon-star", "pass1", Some("Device 1"))
+            .login("ocean-forest-moon-star")
             .await
             .expect("Failed to login 1");
 
@@ -695,12 +343,12 @@ mod tests {
 
         // Create and login with second identity
         auth_service
-            .create_vault("river-cloud-stone-tree", "pass2", "User 2")
+            .create_vault("river-cloud-stone-tree", "User 2")
             .await
             .expect("Failed to create vault 2");
 
         auth_service
-            .login("river-cloud-stone-tree", "pass2", Some("Device 2"))
+            .login("river-cloud-stone-tree")
             .await
             .expect("Failed to login 2");
 
@@ -711,8 +359,17 @@ mod tests {
             .expect("Failed to get recent");
 
         assert_eq!(recent.len(), 2);
-        // Most recent should be first
-        assert_eq!(recent[0].four_words, "river-cloud-stone-tree");
-        assert_eq!(recent[1].four_words, "ocean-forest-moon-star");
+        assert!(
+            recent
+                .iter()
+                .any(|r| r.four_words == "river-cloud-stone-tree")
+        );
+        assert!(
+            recent
+                .iter()
+                .any(|r| r.four_words == "ocean-forest-moon-star")
+        );
+        // Most recent should be first; if timestamps match, either order is acceptable.
+        assert!(recent[0].last_used >= recent[1].last_used);
     }
 }

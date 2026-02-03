@@ -74,6 +74,7 @@ jobs:
             libpipewire-0.3-dev \
             libasound2-dev \
             libdbus-1-dev \
+            libxdo-dev \
             xvfb \
             webkit2gtk-driver
           # Install WebKitGTK (try 4.1 first, fallback to 4.0)

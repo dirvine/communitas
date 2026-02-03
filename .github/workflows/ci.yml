@@ -13,7 +13,7 @@ concurrency:
 jobs:
   rust-checks:
     name: Rust Checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Free disk space
@@ -97,7 +97,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             suffix: ""
           - os: macos-latest
@@ -165,7 +165,7 @@ jobs:
   # Integration and E2E tests
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: rust-checks
     timeout-minutes: 45
     steps:
@@ -220,7 +220,7 @@ jobs:
   # Stress tests (nightly only)
   stress-tests:
     name: Stress Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: rust-checks
     timeout-minutes: 60
     # Only run on schedule or manual trigger

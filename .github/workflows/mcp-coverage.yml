@@ -20,7 +20,7 @@ concurrency:
 jobs:
   coverage:
     name: MCP Tool Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
@@ -132,7 +132,7 @@ jobs:
 
   test-matrix:
     name: MCP Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: coverage
 

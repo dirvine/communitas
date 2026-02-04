@@ -1568,6 +1568,7 @@ async fn main() -> Result<()> {
 
 // ---------------- QUIC Delta Server (raw SPKI) -----------------
 
+use saorsa_gossip_transport::TransportAdapter;
 use saorsa_gossip_transport::quic::config::{
     ClientConfig as QuicClientConfig, ServerConfig as QuicServerConfig,
 };

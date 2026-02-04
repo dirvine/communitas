@@ -5,6 +5,7 @@
 use super::{CrdtError, CrdtResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use yrs::updates::decoder::Decode;
 use yrs::{Any, Doc, Map, MapPrelim, MapRef, Out, ReadTxn, Transact, TransactionMut, Update};
@@ -100,9 +101,32 @@ impl CrdtManager {
         })?;
 
         // Encode Yrs state
-        let state = doc
-            .transact()
-            .encode_state_as_update_v1(&yrs::StateVector::default());
+        let state = {
+            const MAX_TXN_RETRIES: usize = 8;
+            const BASE_DELAY_MS: u64 = 5;
+
+            let mut attempt = 0usize;
+            loop {
+                match doc.try_transact() {
+                    Ok(txn) => {
+                        break txn.encode_state_as_update_v1(&yrs::StateVector::default());
+                    }
+                    Err(err) => {
+                        if attempt >= MAX_TXN_RETRIES {
+                            return Err(CrdtError::Operation(format!(
+                                "Failed to acquire read transaction for {} after {} attempts: {}",
+                                doc_id,
+                                attempt + 1,
+                                err
+                            )));
+                        }
+                        let delay = BASE_DELAY_MS.saturating_mul((attempt + 1) as u64);
+                        tokio::time::sleep(Duration::from_millis(delay)).await;
+                        attempt += 1;
+                    }
+                }
+            }
+        };
 
         // Check encoded size (10MB limit)
         const MAX_ENCODED_SIZE: usize = 10 * 1024 * 1024;
@@ -142,8 +166,14 @@ impl CrdtManager {
 
         // Write files atomically (temp + rename)
         // Create temp files in same directory to avoid cross-filesystem rename (EXDEV error)
-        let yrs_temp = yrs_path.with_extension("yrs.tmp");
-        let meta_temp = meta_path.with_extension("meta.tmp");
+        // Use a unique suffix to avoid collisions when concurrent saves occur.
+        let unique_suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default();
+        let temp_tag = format!("tmp.{}.{}", std::process::id(), unique_suffix);
+        let yrs_temp = yrs_path.with_extension(format!("yrs.{}", temp_tag));
+        let meta_temp = meta_path.with_extension(format!("meta.{}", temp_tag));
 
         // Serialize metadata before parallel write (needed for error handling)
         let meta_json = serde_json::to_string_pretty(&metadata).map_err(|e| {

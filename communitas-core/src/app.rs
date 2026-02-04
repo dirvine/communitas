@@ -664,6 +664,20 @@ impl CommunitasApp {
                         code: "CREATE_ENTITY_FAILED".to_string(),
                     })?;
 
+                if let Some(gossip) = ctx.gossip.as_ref() {
+                    let gossip = gossip.clone();
+                    let entity_id = entity.id.clone();
+                    let entity_type_str = entity_type.as_str().to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = gossip.join_entity(&entity_id, &entity_type_str).await {
+                            warn!(
+                                "Failed to join gossip topic for entity {} ({}): {}",
+                                entity_id, entity_type_str, e
+                            );
+                        }
+                    });
+                }
+
                 let event = Event::EntityCreated {
                     entity_id: entity.id.clone(),
                     name,
@@ -697,6 +711,20 @@ impl CommunitasApp {
                         message: format!("{}", e),
                         code: "CREATE_LOCAL_ENTITY_FAILED".to_string(),
                     })?;
+
+                if let Some(gossip) = ctx.gossip.as_ref() {
+                    let gossip = gossip.clone();
+                    let entity_id = entity.id.clone();
+                    let entity_type_str = entity_type.as_str().to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = gossip.join_entity(&entity_id, &entity_type_str).await {
+                            warn!(
+                                "Failed to join gossip topic for entity {} ({}): {}",
+                                entity_id, entity_type_str, e
+                            );
+                        }
+                    });
+                }
 
                 let event = Event::EntityCreated {
                     entity_id: entity.id.clone(),
@@ -833,16 +861,69 @@ impl CommunitasApp {
                 entity_id,
                 member_id,
             } => {
-                let ctx = self.context.read().await;
-                let deleted_by = ctx.four_words.clone();
-                ctx.entity_service
+                let (entity_service, deleted_by, gossip) = {
+                    let ctx = self.context.read().await;
+                    (
+                        ctx.entity_service.clone(),
+                        ctx.four_words.clone(),
+                        ctx.gossip.clone(),
+                    )
+                };
+
+                let remove_result = entity_service
                     .remove_member(entity_type, &entity_id, &member_id, &deleted_by)
-                    .await
-                    .map_err(|e| CommandError {
+                    .await;
+
+                let remove_result = match remove_result {
+                    Ok(()) => Ok(()),
+                    Err(crate::entity_service::EntityServiceError::PermissionDenied(reason)) => {
+                        if let Some(gossip) = gossip {
+                            if let Err(e) =
+                                gossip.join_entity(&entity_id, entity_type.as_str()).await
+                            {
+                                warn!(
+                                    "Failed to join entity topic {} before retry: {}",
+                                    entity_id, e
+                                );
+                            }
+
+                            if let Err(e) = gossip
+                                .request_member_sync(&entity_id, entity_type.as_str())
+                                .await
+                            {
+                                warn!(
+                                    "Failed to request member sync for {} before retry: {}",
+                                    entity_id, e
+                                );
+                            }
+
+                            // Give the sync response a short window to apply.
+                            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+                            entity_service
+                                .remove_member(entity_type, &entity_id, &member_id, &deleted_by)
+                                .await
+                                .map_err(|e| CommandError {
+                                    command_type: command_type.clone(),
+                                    message: format!("{}", e),
+                                    code: "REMOVE_MEMBER_FAILED".to_string(),
+                                })
+                        } else {
+                            Err(CommandError {
+                                command_type: command_type.clone(),
+                                message: format!("{} (no gossip context for retry)", reason),
+                                code: "REMOVE_MEMBER_FAILED".to_string(),
+                            })
+                        }
+                    }
+                    Err(e) => Err(CommandError {
                         command_type: command_type.clone(),
                         message: format!("{}", e),
                         code: "REMOVE_MEMBER_FAILED".to_string(),
-                    })?;
+                    }),
+                };
+
+                remove_result?;
 
                 let event = Event::MemberRemoved {
                     entity_type,
@@ -992,24 +1073,39 @@ impl CommunitasApp {
                 attachments: raw_attachments,
             } => {
                 let ctx = self.context.read().await;
-                let attachments = attachments_from_strings(raw_attachments);
-                let content = crate::crdt::MessageContent {
-                    text: text.clone(),
-                    author: author.clone(),
-                    attachments,
-                };
-                let message = ctx
-                    .message_service
-                    .send_message(entity_id.clone(), entity_type, content, reply_to_id)
+                let message_id = if matches!(entity_type, EntityType::Channel) {
+                    ctx.send_and_publish_channel_message(
+                        entity_id.clone(),
+                        text.clone(),
+                        reply_to_id,
+                    )
                     .await
                     .map_err(|e| CommandError {
                         command_type: command_type.clone(),
-                        message: format!("{}", e),
+                        message: e,
                         code: "SEND_MESSAGE_FAILED".to_string(),
-                    })?;
+                    })?
+                } else {
+                    let attachments = attachments_from_strings(raw_attachments);
+                    let content = crate::crdt::MessageContent {
+                        text: text.clone(),
+                        author: author.clone(),
+                        attachments,
+                    };
+                    let message = ctx
+                        .message_service
+                        .send_message(entity_id.clone(), entity_type, content, reply_to_id)
+                        .await
+                        .map_err(|e| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("{}", e),
+                            code: "SEND_MESSAGE_FAILED".to_string(),
+                        })?;
+                    message.metadata.id
+                };
 
                 let event = Event::MessageSent {
-                    message_id: message.metadata.id,
+                    message_id,
                     entity_id,
                     entity_type,
                     author,
@@ -2944,6 +3040,27 @@ impl CommunitasApp {
                 entity_type,
                 entity_id,
             } => {
+                let gossip = {
+                    let ctx = self.context.read().await;
+                    ctx.gossip.clone()
+                };
+
+                if let Some(gossip) = gossip {
+                    if let Err(e) = gossip.join_entity(&entity_id, entity_type.as_str()).await {
+                        warn!(
+                            "Failed to join entity topic {} for member list: {}",
+                            entity_id, e
+                        );
+                    }
+
+                    if let Err(e) = gossip
+                        .request_member_sync(&entity_id, entity_type.as_str())
+                        .await
+                    {
+                        warn!("Failed to request member sync for {}: {}", entity_id, e);
+                    }
+                }
+
                 let ctx = self.context.read().await;
                 let members = ctx
                     .entity_service

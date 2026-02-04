@@ -420,6 +420,18 @@ impl CoreContext {
         info!("Starting gossip networking for {}", self.four_words);
 
         // Allocate UDP port using PortManager
+        let env_port = match std::env::var("COMMUNITAS_PORT") {
+            Ok(value) => match value.parse::<u16>() {
+                Ok(port) => Some(port),
+                Err(_) => {
+                    warn!("Invalid COMMUNITAS_PORT value: {}", value);
+                    None
+                }
+            },
+            Err(_) => None,
+        };
+        let preferred_port = preferred_port.or(env_port);
+
         let mut port_manager = if let Some(port) = preferred_port {
             crate::gossip::PortManager::with_preferred_port(port)
         } else {
@@ -463,16 +475,29 @@ impl CoreContext {
             }
         }
 
-        // Load entities for boot sequence topic subscriptions
-        let boot_entities = match self.entity_service.list_entities().await {
-            Ok(entities) => entities
-                .into_iter()
-                .map(|entity| (entity.id, entity.entity_type.as_str().to_string()))
-                .collect::<Vec<_>>(),
-            Err(e) => {
-                warn!("Failed to load entities for boot: {}", e);
+        // Load entities for boot sequence topic subscriptions (optional for tests)
+        let boot_entities = match std::env::var("COMMUNITAS_SKIP_BOOT_ENTITIES") {
+            Ok(value)
+                if matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes"
+                ) =>
+            {
+                info!(
+                    "COMMUNITAS_SKIP_BOOT_ENTITIES set; skipping entity subscriptions during boot"
+                );
                 Vec::new()
             }
+            _ => match self.entity_service.list_entities().await {
+                Ok(entities) => entities
+                    .into_iter()
+                    .map(|entity| (entity.id, entity.entity_type.as_str().to_string()))
+                    .collect::<Vec<_>>(),
+                Err(e) => {
+                    warn!("Failed to load entities for boot: {}", e);
+                    Vec::new()
+                }
+            },
         };
 
         // Execute gossip boot sequence (SPEC.md §2)
@@ -491,8 +516,18 @@ impl CoreContext {
         info!("Gossip boot sequence completed successfully");
 
         // Build listen address
-        let local_ip =
-            local_ip_address::local_ip().map_err(|e| format!("Failed to get local IP: {}", e))?;
+        let local_ip = match std::env::var("COMMUNITAS_LOCAL_IP") {
+            Ok(value) => match value.parse() {
+                Ok(addr) => addr,
+                Err(_) => {
+                    warn!("Invalid COMMUNITAS_LOCAL_IP value: {}", value);
+                    local_ip_address::local_ip()
+                        .map_err(|e| format!("Failed to get local IP: {}", e))?
+                }
+            },
+            Err(_) => local_ip_address::local_ip()
+                .map_err(|e| format!("Failed to get local IP: {}", e))?,
+        };
 
         let listen_addr = std::net::SocketAddr::new(local_ip, listen_port);
 
@@ -547,17 +582,27 @@ impl CoreContext {
 
         // Clone services for use in the handler closure
         let message_service = self.message_service.clone();
+        let entity_service = self.entity_service.clone();
         let gossip_clone = gossip.clone();
 
         // Create handler that processes incoming entity messages
         let handler: crate::gossip::EntityMessageHandler = Arc::new(
             move |entity_id, sender_peer_id, message_bytes| {
+                if sender_peer_id == gossip_clone.peer_id {
+                    debug!(
+                        "Ignoring local echo for entity {} (peer {:?})",
+                        entity_id, sender_peer_id
+                    );
+                    return;
+                }
+
                 // Try to parse as GossipMessageType first (new format)
                 // Fall back to CRDTMessage for backwards compatibility
                 let gossip_msg: Result<crate::crdt::GossipMessageType, _> =
                     serde_json::from_slice(&message_bytes);
 
                 let message_service = message_service.clone();
+                let entity_service = entity_service.clone();
                 let gossip_clone = gossip_clone.clone();
                 let entity_id_clone = entity_id.clone();
 
@@ -590,6 +635,35 @@ impl CoreContext {
                             sync_response.messages.len()
                         );
                         Self::handle_sync_response(message_service, entity_id_clone, sync_response);
+                    }
+                    Ok(crate::crdt::GossipMessageType::MemberUpdate(update)) => {
+                        info!(
+                            "Received member update for entity {} from peer {:?}: {} {}",
+                            entity_id,
+                            sender_peer_id,
+                            update.member_id,
+                            match update.action {
+                                crate::crdt::MemberUpdateAction::Add => "add",
+                                crate::crdt::MemberUpdateAction::Remove => "remove",
+                            }
+                        );
+                        Self::handle_member_update(entity_service, update);
+                    }
+                    Ok(crate::crdt::GossipMessageType::MemberSyncRequest(request)) => {
+                        info!(
+                            "Received member sync request for entity {} from peer {:?}",
+                            entity_id, sender_peer_id
+                        );
+                        Self::handle_member_sync_request(entity_service, gossip_clone, request);
+                    }
+                    Ok(crate::crdt::GossipMessageType::MemberSyncResponse(response)) => {
+                        info!(
+                            "Received member sync response for entity {} from peer {:?} ({} updates)",
+                            entity_id,
+                            sender_peer_id,
+                            response.updates.len()
+                        );
+                        Self::handle_member_sync_response(entity_service, response);
                     }
                     Ok(crate::crdt::GossipMessageType::PeerListRequest(request)) => {
                         info!(
@@ -790,6 +864,114 @@ impl CoreContext {
         });
     }
 
+    /// Handle incoming member update (add/remove) from gossip
+    fn handle_member_update(
+        entity_service: Arc<crate::EntityService>,
+        update: crate::crdt::MemberUpdate,
+    ) {
+        tokio::spawn(async move {
+            info!(
+                "Applying member update: entity={} member={} action={:?} role={:?} updated_by={}",
+                update.entity_id, update.member_id, update.action, update.role, update.updated_by
+            );
+            let action = update.action.clone();
+            let result = entity_service
+                .apply_member_update(
+                    update.entity_type,
+                    &update.entity_id,
+                    &update.member_id,
+                    update.role.as_deref(),
+                    action.clone(),
+                    &update.updated_by,
+                )
+                .await;
+
+            if let Err(err) = result {
+                warn!(
+                    "Failed to apply member update for {} (member {} action {:?} role {:?} updated_by {}): {}",
+                    update.entity_id, update.member_id, action, update.role, update.updated_by, err
+                );
+            } else {
+                info!(
+                    "Applied member update: entity={} member={} action={:?} role={:?} updated_by={}",
+                    update.entity_id, update.member_id, action, update.role, update.updated_by
+                );
+            }
+        });
+    }
+
+    /// Respond to a membership snapshot request by publishing current member updates.
+    fn handle_member_sync_request(
+        entity_service: Arc<crate::EntityService>,
+        gossip: Arc<crate::gossip::GossipContext>,
+        request: crate::crdt::MemberSyncRequest,
+    ) {
+        tokio::spawn(async move {
+            let updates = match entity_service
+                .get_member_updates(request.entity_type, &request.entity_id, &gossip.four_words)
+                .await
+            {
+                Ok(updates) => updates,
+                Err(e) => {
+                    warn!(
+                        "Failed to build member snapshot for {}: {}",
+                        request.entity_id, e
+                    );
+                    return;
+                }
+            };
+
+            let response = crate::crdt::MemberSyncResponse {
+                entity_id: request.entity_id.clone(),
+                entity_type: request.entity_type,
+                responder_peer_id: gossip.four_words.clone(),
+                updates,
+            };
+            let gossip_msg = crate::crdt::GossipMessageType::MemberSyncResponse(response);
+            let Ok(bytes) = serde_json::to_vec(&gossip_msg) else {
+                warn!(
+                    "Failed to serialize member sync response for {}",
+                    request.entity_id
+                );
+                return;
+            };
+
+            if let Err(e) = gossip.publish_to_entity(&request.entity_id, bytes).await {
+                warn!(
+                    "Failed to publish member sync response for {}: {}",
+                    request.entity_id, e
+                );
+            }
+        });
+    }
+
+    /// Apply member snapshot updates to local entity state.
+    fn handle_member_sync_response(
+        entity_service: Arc<crate::EntityService>,
+        response: crate::crdt::MemberSyncResponse,
+    ) {
+        tokio::spawn(async move {
+            for update in response.updates {
+                if let Err(e) = entity_service
+                    .apply_member_update(
+                        update.entity_type,
+                        &update.entity_id,
+                        &update.member_id,
+                        update.role.as_deref(),
+                        update.action.clone(),
+                        &update.updated_by,
+                    )
+                    .await
+                {
+                    warn!(
+                        "Failed to apply member sync update for {} (member {}): {}",
+                        update.entity_id, update.member_id, e
+                    );
+                }
+            }
+        });
+    }
+
     /// Handle peer list request - respond with healthy peers from peer cache
     ///
     /// Selects best peers using quality scoring from the peer cache
@@ -981,7 +1163,7 @@ impl CoreContext {
 
         // Use the native QUIC OBSERVED_ADDRESS mechanism through the transport layer
         // This is the standard way to discover external address via QUIC connections
-        if let Some(external_addr) = gossip.transport.get_external_address() {
+        if let Some(external_addr) = gossip.transport.inner().get_external_address() {
             info!(
                 "Got external address via QUIC OBSERVED_ADDRESS: {}",
                 external_addr

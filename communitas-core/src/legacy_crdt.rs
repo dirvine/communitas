@@ -259,6 +259,42 @@ pub struct SyncResponse {
     pub vector_clock: VectorClock,
 }
 
+/// Member update message - add or remove a member for an entity
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberUpdate {
+    pub entity_id: String,
+    pub entity_type: EntityType,
+    pub member_id: String,
+    pub role: Option<String>,
+    pub updated_by: String,
+    pub action: MemberUpdateAction,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemberUpdateAction {
+    Add,
+    Remove,
+}
+
+/// Request a membership snapshot for an entity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberSyncRequest {
+    pub entity_id: String,
+    pub entity_type: EntityType,
+    pub requester_peer_id: String,
+}
+
+/// Response with member updates representing the current membership state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberSyncResponse {
+    pub entity_id: String,
+    pub entity_type: EntityType,
+    pub responder_peer_id: String,
+    pub updates: Vec<MemberUpdate>,
+}
+
 /// Entity synchronization state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntitySyncState {
@@ -724,6 +760,15 @@ pub enum GossipMessageType {
 
     /// Response with historical messages
     SyncResponse(SyncResponse),
+
+    /// Member add/remove updates for entity membership
+    MemberUpdate(MemberUpdate),
+
+    /// Request a membership snapshot for an entity
+    MemberSyncRequest(MemberSyncRequest),
+
+    /// Response with membership snapshot updates
+    MemberSyncResponse(MemberSyncResponse),
 
     /// Request for a list of known peers (bootstrap node enhancement)
     PeerListRequest(PeerListRequest),

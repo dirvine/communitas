@@ -94,7 +94,7 @@ pub use operations::{Counter, LWWRegister, LamportTimestamp, ORSet, Tombstone};
 pub use crate::legacy_crdt::{
     CRDTMessage, CanvasCursorUpdate, CanvasOperation, CanvasOperationType, CanvasStateRequest,
     CanvasStateResponse, ClockOrdering, EntitySyncState, EntityType, GossipMessageType,
-    LocalMessageState, MessageContent, MessageMetadata, MessageStatus, MissingRange, PeerInfo,
-    PeerListRequest, PeerListResponse, Reaction, SyncRequest, SyncResponse, VectorClock,
-    sort_messages_causally,
+    LocalMessageState, MemberSyncRequest, MemberSyncResponse, MemberUpdate, MemberUpdateAction,
+    MessageContent, MessageMetadata, MessageStatus, MissingRange, PeerInfo, PeerListRequest,
+    PeerListResponse, Reaction, SyncRequest, SyncResponse, VectorClock, sort_messages_causally,
 };

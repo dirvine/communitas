@@ -135,6 +135,9 @@ pub enum EntityServiceError {
     #[error("Member already exists: {0}")]
     MemberAlreadyExists(String),
 
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+
     #[error("CRDT error: {0}")]
     Crdt(#[from] crate::crdt_manager::CrdtError),
 
@@ -159,12 +162,16 @@ pub struct CascadeRemovalResult {
 /// Unified entity and member management service
 pub struct EntityService {
     crdt_manager: Arc<CrdtManager>,
+    member_write_lock: tokio::sync::Mutex<()>,
 }
 
 impl EntityService {
     /// Create a new entity service
     pub fn new(crdt_manager: Arc<CrdtManager>) -> Self {
-        Self { crdt_manager }
+        Self {
+            crdt_manager,
+            member_write_lock: tokio::sync::Mutex::new(()),
+        }
     }
 
     /// Create a new entity
@@ -386,6 +393,7 @@ impl EntityService {
     ) -> EntityServiceResult<()> {
         use yrs::Doc;
 
+        let _member_guard = self.member_write_lock.lock().await;
         let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
 
         // Get or create the document
@@ -399,6 +407,8 @@ impl EntityService {
 
         // Check if member already exists and is active
         let members_map = doc.get_or_insert_map("members");
+        let mut existing_role: Option<String> = None;
+        let mut existing_active = false;
         {
             let txn = doc.transact();
 
@@ -406,11 +416,32 @@ impl EntityService {
                 let is_deleted =
                     CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
                 if !is_deleted {
-                    return Err(EntityServiceError::MemberAlreadyExists(
-                        member_id.to_string(),
-                    ));
+                    existing_role = CrdtManager::get_map_string(&member_data, &txn, "role");
+                    existing_active = true;
                 }
             }
+        }
+
+        if existing_active {
+            // Idempotent add: refresh role + active flag when member already exists.
+            let active_members_map = doc.get_or_insert_map("active_members");
+            {
+                let mut txn = doc.transact_mut();
+                let member_data =
+                    CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+
+                if existing_role.as_deref() != Some(role) {
+                    CrdtManager::set_map_string(&member_data, &mut txn, "role", role);
+                }
+                CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", false);
+                CrdtManager::set_map_bool(&active_members_map, &mut txn, member_id, true);
+            }
+
+            self.crdt_manager
+                .save_document(&doc_id, entity_type.as_str(), entity_id, &doc)
+                .await?;
+
+            return Ok(());
         }
 
         // Add new member
@@ -450,6 +481,7 @@ impl EntityService {
         member_id: &str,
         deleted_by: &str,
     ) -> EntityServiceResult<()> {
+        let _member_guard = self.member_write_lock.lock().await;
         let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
 
         // Load document
@@ -463,12 +495,40 @@ impl EntityService {
         let members_map = doc.get_or_insert_map("members");
         let active_members_map = doc.get_or_insert_map("active_members");
 
-        // Check if member exists
+        // Check permissions before requiring the target to exist.
         {
             let txn = doc.transact();
 
-            if CrdtManager::get_nested_map(&members_map, &txn, member_id).is_none() {
-                return Err(EntityServiceError::MemberNotFound(member_id.to_string()));
+            let deleted_by_data = CrdtManager::get_nested_map(&members_map, &txn, deleted_by);
+            let deleted_by_role =
+                deleted_by_data.and_then(|data| CrdtManager::get_map_string(&data, &txn, "role"));
+            let target_data = CrdtManager::get_nested_map(&members_map, &txn, member_id);
+            let target_role =
+                target_data.and_then(|data| CrdtManager::get_map_string(&data, &txn, "role"));
+
+            if deleted_by != member_id {
+                let deleted_by_role = match deleted_by_role.as_deref() {
+                    Some(role) => role,
+                    None => {
+                        return Err(EntityServiceError::PermissionDenied(
+                            "permission denied: actor not a member".to_string(),
+                        ));
+                    }
+                };
+                let allowed = match deleted_by_role {
+                    "owner" => true,
+                    "admin" => matches!(
+                        target_role.as_deref(),
+                        Some("member") | Some("viewer") | None
+                    ),
+                    _ => false,
+                };
+
+                if !allowed {
+                    return Err(EntityServiceError::PermissionDenied(format!(
+                        "permission denied: {deleted_by} cannot remove {member_id}"
+                    )));
+                }
             }
         }
 
@@ -479,6 +539,7 @@ impl EntityService {
             let member_data =
                 CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
 
+            CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", true);
             CrdtManager::set_map_i64(
                 &member_data,
@@ -497,6 +558,136 @@ impl EntityService {
             .await?;
 
         Ok(())
+    }
+
+    /// Apply a remote membership update without local permission checks.
+    pub async fn apply_member_update(
+        &self,
+        entity_type: EntityType,
+        entity_id: &str,
+        member_id: &str,
+        role: Option<&str>,
+        action: crate::crdt::MemberUpdateAction,
+        updated_by: &str,
+    ) -> EntityServiceResult<()> {
+        use yrs::Doc;
+
+        let _member_guard = self.member_write_lock.lock().await;
+        let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+        let doc = match self.crdt_manager.load_document(&doc_id).await {
+            Ok(doc) => doc,
+            Err(_) => Doc::new(),
+        };
+
+        let members_map = doc.get_or_insert_map("members");
+        let active_members_map = doc.get_or_insert_map("active_members");
+
+        match action {
+            crate::crdt::MemberUpdateAction::Add => {
+                let mut txn = doc.transact_mut();
+                let member_data =
+                    CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+
+                CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
+                CrdtManager::set_map_string(
+                    &member_data,
+                    &mut txn,
+                    "role",
+                    role.unwrap_or("member"),
+                );
+                CrdtManager::set_map_i64(
+                    &member_data,
+                    &mut txn,
+                    "joined_at",
+                    unix_timestamp_result()?,
+                );
+                CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", false);
+                CrdtManager::set_map_bool(&active_members_map, &mut txn, member_id, true);
+            }
+            crate::crdt::MemberUpdateAction::Remove => {
+                let mut txn = doc.transact_mut();
+                let member_data =
+                    CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+
+                CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
+                CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", true);
+                CrdtManager::set_map_i64(
+                    &member_data,
+                    &mut txn,
+                    "deleted_at",
+                    unix_timestamp_result()?,
+                );
+                CrdtManager::set_map_string(&member_data, &mut txn, "deleted_by", updated_by);
+                active_members_map.remove(&mut txn, member_id);
+            }
+        }
+
+        self.crdt_manager
+            .save_document(&doc_id, entity_type.as_str(), entity_id, &doc)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Build a membership snapshot as MemberUpdate entries (active + deleted).
+    pub async fn get_member_updates(
+        &self,
+        entity_type: EntityType,
+        entity_id: &str,
+        updated_by: &str,
+    ) -> EntityServiceResult<Vec<crate::crdt::MemberUpdate>> {
+        let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
+            .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+
+        let members_map = doc.get_or_insert_map("members");
+        let mut updates = Vec::new();
+
+        let txn = doc.transact();
+        for (member_id, _) in members_map.iter(&txn) {
+            let member_id_string = member_id.to_string();
+            let Some(member_data) =
+                CrdtManager::get_nested_map(&members_map, &txn, &member_id_string)
+            else {
+                continue;
+            };
+
+            let deleted = CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
+            let role = CrdtManager::get_map_string(&member_data, &txn, "role");
+            let stored_member_id = CrdtManager::get_map_string(&member_data, &txn, "member_id")
+                .unwrap_or_else(|| member_id_string.clone());
+            let deleted_by = CrdtManager::get_map_string(&member_data, &txn, "deleted_by");
+
+            let joined_at = CrdtManager::get_map_i64(&member_data, &txn, "joined_at").unwrap_or(0);
+            let deleted_at =
+                CrdtManager::get_map_i64(&member_data, &txn, "deleted_at").unwrap_or(0);
+            let timestamp = if deleted { deleted_at } else { joined_at };
+            let timestamp = if timestamp < 0 { 0 } else { timestamp as u64 };
+
+            updates.push(crate::crdt::MemberUpdate {
+                entity_id: entity_id.to_string(),
+                entity_type,
+                member_id: stored_member_id,
+                role,
+                updated_by: if deleted {
+                    deleted_by.unwrap_or_else(|| updated_by.to_string())
+                } else {
+                    updated_by.to_string()
+                },
+                action: if deleted {
+                    crate::crdt::MemberUpdateAction::Remove
+                } else {
+                    crate::crdt::MemberUpdateAction::Add
+                },
+                timestamp,
+            });
+        }
+
+        Ok(updates)
     }
 
     /// List members of entity

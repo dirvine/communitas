@@ -515,29 +515,23 @@ impl EntityService {
                         ));
                     }
                 };
-            let relax_member_removal = matches!(
-                std::env::var("COMMUNITAS_RELAX_MEMBER_REMOVAL")
-                    .unwrap_or_default()
-                    .trim()
-                    .to_ascii_lowercase()
-                    .as_str(),
-                "1" | "true" | "yes"
-            );
-
-            let allowed = match deleted_by_role {
-                "owner" => true,
-                "admin" => matches!(
-                    target_role.as_deref(),
-                    Some("member") | Some("viewer") | None
-                ),
-                "member" if relax_member_removal => matches!(
-                    target_role.as_deref(),
-                    Some("member") | Some("viewer") | None
-                ),
-                _ => false,
-            };
+                let allowed = match deleted_by_role {
+                    "owner" => true,
+                    "admin" => matches!(
+                        target_role.as_deref(),
+                        Some("member") | Some("viewer") | None
+                    ),
+                    _ => false,
+                };
 
                 if !allowed {
+                    tracing::warn!(
+                        "Permission denied removing member: actor_role={:?} target_role={:?} actor={} target={}",
+                        deleted_by_role,
+                        target_role,
+                        deleted_by,
+                        member_id
+                    );
                     return Err(EntityServiceError::PermissionDenied(format!(
                         "permission denied: {deleted_by} cannot remove {member_id}"
                     )));

@@ -620,9 +620,7 @@ impl GossipContext {
         info!("Entity message handler registered");
     }
 
-    pub(super) fn entity_message_handler(
-        &self,
-    ) -> Arc<RwLock<Option<EntityMessageHandler>>> {
+    pub(super) fn entity_message_handler(&self) -> Arc<RwLock<Option<EntityMessageHandler>>> {
         Arc::clone(&self.entity_message_handler)
     }
 
@@ -895,10 +893,7 @@ impl GossipContext {
         pubsub.publish(topic_id, payload.into()).await?;
 
         if direct_entity_broadcast_enabled() {
-            if let Err(err) = self
-                .direct_publish_to_peers(entity_id, message)
-                .await
-            {
+            if let Err(err) = self.direct_publish_to_peers(entity_id, message).await {
                 warn!("Direct entity broadcast failed for {}: {}", entity_id, err);
             }
         }

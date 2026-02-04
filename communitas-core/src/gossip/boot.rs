@@ -615,8 +615,9 @@ impl GossipBootSequence {
                                 if direct_enabled && stream_type == GossipStreamType::Bulk {
                                     if let Ok(envelope) = serde_json::from_slice::<
                                         super::context::DirectEntityEnvelope,
-                                    >(&data)
-                                    {
+                                    >(
+                                        &data
+                                    ) {
                                         if log_transport {
                                             info!(
                                                 "Received direct entity envelope for {} ({} bytes) from {:?}",
@@ -625,8 +626,7 @@ impl GossipBootSequence {
                                                 peer_id
                                             );
                                         }
-                                        if let Some(handler) =
-                                            entity_handler.read().await.as_ref()
+                                        if let Some(handler) = entity_handler.read().await.as_ref()
                                         {
                                             handler(
                                                 envelope.entity_id,

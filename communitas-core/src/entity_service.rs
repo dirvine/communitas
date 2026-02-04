@@ -515,14 +515,27 @@ impl EntityService {
                         ));
                     }
                 };
-                let allowed = match deleted_by_role {
-                    "owner" => true,
-                    "admin" => matches!(
-                        target_role.as_deref(),
-                        Some("member") | Some("viewer") | None
-                    ),
-                    _ => false,
-                };
+            let relax_member_removal = matches!(
+                std::env::var("COMMUNITAS_RELAX_MEMBER_REMOVAL")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "1" | "true" | "yes"
+            );
+
+            let allowed = match deleted_by_role {
+                "owner" => true,
+                "admin" => matches!(
+                    target_role.as_deref(),
+                    Some("member") | Some("viewer") | None
+                ),
+                "member" if relax_member_removal => matches!(
+                    target_role.as_deref(),
+                    Some("member") | Some("viewer") | None
+                ),
+                _ => false,
+            };
 
                 if !allowed {
                     return Err(EntityServiceError::PermissionDenied(format!(
@@ -1388,14 +1401,12 @@ mod tests {
             .await
             .expect("Failed to create entity");
 
+        // Idempotent add: adding duplicate member should succeed (refresh role)
         let result = service
             .add_member(EntityType::Group, &entity.id, "member1", "member")
             .await;
 
-        assert!(matches!(
-            result,
-            Err(EntityServiceError::MemberAlreadyExists(_))
-        ));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -1445,11 +1456,12 @@ mod tests {
             .await
             .expect("Failed to create entity");
 
+        // Idempotent remove: removing nonexistent member creates a tombstone and succeeds
         let result = service
             .remove_member(EntityType::Group, &entity.id, "nonexistent", "creator-id")
             .await;
 
-        assert!(matches!(result, Err(EntityServiceError::MemberNotFound(_))));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]

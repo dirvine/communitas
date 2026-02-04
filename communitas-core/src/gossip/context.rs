@@ -670,6 +670,12 @@ impl GossipContext {
         );
         // 1. Get or create topic ID
         let topic_id = self.map_entity_to_topic(entity_id, entity_type).await?;
+        if log_transport {
+            info!(
+                "Join entity {} ({}): topic {:?}",
+                entity_id, entity_type, topic_id
+            );
+        }
 
         // 2. Create MLS group context (simplified for now)
         let group_ctx = GroupContext::from_entity(entity_id);
@@ -750,6 +756,11 @@ impl GossipContext {
                 Err(e) => {
                     warn!("Failed to serialize sync request: {}", e);
                 }
+            }
+
+            // 3.7. Request membership snapshot to hydrate roles on join.
+            if let Err(e) = self.request_member_sync(entity_id, entity_type).await {
+                warn!("Failed to request member sync for {}: {}", entity_id, e);
             }
         } else {
             debug!(
@@ -865,9 +876,11 @@ impl GossipContext {
 
         if log_transport {
             info!(
-                "Publish entity {}: {} connected peers",
+                "Publish entity {} on topic {:?}: {} connected peers {:?}",
                 entity_id,
-                connected_peers.len()
+                topic_id,
+                connected_peers.len(),
+                connected_peers
             );
         }
 
@@ -893,7 +906,10 @@ impl GossipContext {
         pubsub.publish(topic_id, payload.into()).await?;
 
         if direct_entity_broadcast_enabled() {
-            if let Err(err) = self.direct_publish_to_peers(entity_id, message).await {
+            if let Err(err) = self
+                .direct_publish_to_peers(entity_id, message, GossipStreamType::Bulk)
+                .await
+            {
                 warn!("Direct entity broadcast failed for {}: {}", entity_id, err);
             }
         }
@@ -902,7 +918,33 @@ impl GossipContext {
         Ok(())
     }
 
-    async fn direct_publish_to_peers(&self, entity_id: &str, payload: Vec<u8>) -> Result<()> {
+    /// Request a membership snapshot for an entity.
+    pub async fn request_member_sync(&self, entity_id: &str, entity_type: &str) -> Result<()> {
+        let request = crate::crdt::MemberSyncRequest {
+            entity_id: entity_id.to_string(),
+            entity_type: Self::parse_entity_type(entity_type),
+            requester_peer_id: self.four_words.clone(),
+        };
+        let gossip_msg = crate::crdt::GossipMessageType::MemberSyncRequest(request);
+        let bytes =
+            serde_json::to_vec(&gossip_msg).context("Failed to serialize member sync request")?;
+        self.publish_to_entity(entity_id, bytes).await
+    }
+
+    async fn direct_publish_to_peers(
+        &self,
+        entity_id: &str,
+        payload: Vec<u8>,
+        stream_type: GossipStreamType,
+    ) -> Result<()> {
+        let log_transport = matches!(
+            std::env::var("COMMUNITAS_LOG_TRANSPORT_RECEIVE")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        );
         let peers = self.transport.connected_peers().await;
         if peers.is_empty() {
             return Ok(());
@@ -922,12 +964,30 @@ impl GossipContext {
             serde_json::to_vec(&envelope).context("Failed to serialize direct entity envelope")?;
 
         for (peer_id, _) in peers {
+            if log_transport {
+                info!(
+                    "Direct entity broadcast for {} to peer {:?} ({} bytes)",
+                    entity_id,
+                    peer_id,
+                    bytes.len()
+                );
+            }
             self.transport
-                .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(bytes.clone()))
+                .send_to_peer(peer_id, stream_type, Bytes::from(bytes.clone()))
                 .await?;
         }
 
         Ok(())
+    }
+
+    /// Fallback path for member updates when PubSub delivery is unreliable.
+    pub async fn direct_publish_member_update(
+        &self,
+        entity_id: &str,
+        payload: Vec<u8>,
+    ) -> Result<()> {
+        self.direct_publish_to_peers(entity_id, payload, GossipStreamType::Bulk)
+            .await
     }
 
     // ========================================================================

@@ -612,7 +612,12 @@ impl GossipBootSequence {
                             }
                             // Only process PubSub messages in this loop
                             if stream_type != GossipStreamType::PubSub {
-                                if direct_enabled && stream_type == GossipStreamType::Bulk {
+                                if direct_enabled
+                                    && matches!(
+                                        stream_type,
+                                        GossipStreamType::Bulk | GossipStreamType::Membership
+                                    )
+                                {
                                     if let Ok(envelope) = serde_json::from_slice::<
                                         super::context::DirectEntityEnvelope,
                                     >(
@@ -662,6 +667,52 @@ impl GossipBootSequence {
                 }
             });
             info!("PubSub message processing loop active");
+        }
+
+        // Optional transport probe to validate stream delivery across peers.
+        if matches!(
+            std::env::var("COMMUNITAS_TRANSPORT_PROBE")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        ) {
+            let transport = Arc::clone(&self.context.transport);
+            tokio::spawn(async move {
+                let payload = vec![0xAB; 1024];
+                for attempt in 0..5 {
+                    let peers = transport.connected_peers().await;
+                    if !peers.is_empty() {
+                        for (peer_id, _) in peers {
+                            let _ = transport
+                                .send_to_peer(
+                                    peer_id,
+                                    GossipStreamType::Membership,
+                                    bytes::Bytes::from(payload.clone()),
+                                )
+                                .await;
+                            let _ = transport
+                                .send_to_peer(
+                                    peer_id,
+                                    GossipStreamType::PubSub,
+                                    bytes::Bytes::from(payload.clone()),
+                                )
+                                .await;
+                            let _ = transport
+                                .send_to_peer(
+                                    peer_id,
+                                    GossipStreamType::Bulk,
+                                    bytes::Bytes::from(payload.clone()),
+                                )
+                                .await;
+                        }
+                        break;
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1 + attempt)).await;
+                }
+            });
+            info!("Transport probe enabled");
         }
 
         Ok(())

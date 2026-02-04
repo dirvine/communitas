@@ -302,6 +302,17 @@ pub struct IntroducerConfig {
 
 impl Default for IntroducerConfig {
     fn default() -> Self {
+        if let Ok(value) = std::env::var("COMMUNITAS_NO_INTRODUCERS") {
+            let normalized = value.trim().to_ascii_lowercase();
+            if normalized == "1" || normalized == "true" || normalized == "yes" {
+                tracing::info!("COMMUNITAS_NO_INTRODUCERS set; skipping introducer nodes");
+                return Self {
+                    addresses: Vec::new(),
+                    timeout_secs: 10,
+                };
+            }
+        }
+
         // Check for env var override (enables local testing with custom bootstrap nodes)
         // Format: comma-separated addresses, e.g., "127.0.0.1:11000,127.0.0.1:11001"
         let addresses = if let Ok(env_nodes) = std::env::var("COMMUNITAS_BOOTSTRAP") {

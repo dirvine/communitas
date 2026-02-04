@@ -37,6 +37,7 @@ pub mod name_record;
 pub mod peer_cache;
 pub mod port_manager;
 pub mod presence;
+pub mod self_filtering_transport;
 pub mod signed_provider;
 pub mod sites;
 pub mod sites_dispatcher;

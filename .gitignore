@@ -34,6 +34,10 @@ build/
 
 # OS
 .DS_Store
+.local-cluster/
+tests/distributed/reports/
+communitas-core/tests/conn_words_temp.rs
+communitas-core/tests/transport_smoke_test.rs
 .DS_Store?
 ._*
 .Spotlight-V100

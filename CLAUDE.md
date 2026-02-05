@@ -53,7 +53,7 @@ dx bundle --platform desktop
 cargo build
 
 # Run tests
-cargo test
+cargo nextest run
 
 # Format and lint
 cargo fmt --all
@@ -62,8 +62,8 @@ cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy
 # Build specific crates
 cargo build -p communitas-core
 cargo build -p communitas-kanban
-cargo test -p communitas-core
-cargo test -p communitas-kanban
+cargo nextest run -p communitas-core
+cargo nextest run -p communitas-kanban
 ```
 
 ### MCP Server (AI Agent Interface)
@@ -144,7 +144,7 @@ Per-entity storage with different access policies:
 # Format and check before commit
 cargo fmt --all
 cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
-cargo test
+cargo nextest run
 cd communitas-dioxus && dx check --platform desktop
 
 # Commit with conventional format
@@ -217,7 +217,7 @@ See [docs/development/windows-build.md](docs/development/windows-build.md) for d
 RUST_LOG=debug cargo run -p communitas-headless
 
 # Test debugging
-RUST_LOG=debug cargo test -- --nocapture
+RUST_LOG=debug cargo nextest run --no-capture
 
 # UI debugging
 RUST_LOG=debug dx serve --platform desktop --hotpatch

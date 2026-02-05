@@ -4803,6 +4803,15 @@ impl CommunitasApp {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
+        debug!(
+            entity_id,
+            member_id,
+            role = ?role,
+            action = ?action,
+            updated_by = %updated_by,
+            timestamp,
+            "Publishing member update"
+        );
         let update = MemberUpdate {
             entity_id: entity_id.to_string(),
             entity_type,
@@ -4969,6 +4978,13 @@ impl CommunitasApp {
             responder_peer_id: responder_id.to_string(),
             updates,
         };
+        debug!(
+            entity_id,
+            responder_id = %responder_id,
+            update_count = response.updates.len(),
+            target_member = ?target_member,
+            "Publishing member snapshot"
+        );
         let gossip_msg = crate::crdt::GossipMessageType::MemberSyncResponse(response);
         let Ok(bytes) = serde_json::to_vec(&gossip_msg) else {
             warn!("Failed to serialize member snapshot for {}", entity_id);

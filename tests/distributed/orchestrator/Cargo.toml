@@ -42,6 +42,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 
 # Async synchronization
 async-trait = "0.1"
+communitas-workspace-hack = { version = "0.1", path = "../../../communitas-workspace-hack" }
 
 [dev-dependencies]
 tokio-test = "0.4"

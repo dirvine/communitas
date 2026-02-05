@@ -25,6 +25,7 @@ cpal = "0.15"
 async-trait = "0.1"
 nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
 scap = "0.0.8"
+communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }
 
 [dependencies.tokio]
 workspace = true

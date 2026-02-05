@@ -63,6 +63,7 @@ tower-http.workspace = true
 # TLS with post-quantum cryptography
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 saorsa-pqc.workspace = true
+communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }
 
 [dev-dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

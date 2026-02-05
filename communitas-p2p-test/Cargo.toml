@@ -27,3 +27,4 @@ serde_json = { workspace = true }
 
 # Utils
 uuid = { workspace = true }
+communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }

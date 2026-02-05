@@ -63,7 +63,7 @@ use crate::command::{
     QueryResult, Subscription,
 };
 use crate::core_context::CoreContext;
-use crate::crdt::EntityType;
+use crate::crdt::{EntityType, GossipMessageType, MemberUpdate, MemberUpdateAction};
 use crate::disk_service::DiskType;
 use crate::identity::conn_words;
 use crate::legacy_crdt::{Attachment, AttachmentType};
@@ -75,7 +75,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 use yrs::{Map, ReadTxn, Transact};
 
@@ -665,17 +665,28 @@ impl CommunitasApp {
                     })?;
 
                 if let Some(gossip) = ctx.gossip.as_ref() {
-                    let gossip = gossip.clone();
                     let entity_id = entity.id.clone();
                     let entity_type_str = entity_type.as_str().to_string();
-                    tokio::spawn(async move {
-                        if let Err(e) = gossip.join_entity(&entity_id, &entity_type_str).await {
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(30),
+                        gossip.join_entity(&entity_id, &entity_type_str),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
                             warn!(
                                 "Failed to join gossip topic for entity {} ({}): {}",
                                 entity_id, entity_type_str, e
                             );
                         }
-                    });
+                        Err(_) => {
+                            warn!(
+                                "Timed out joining gossip topic for entity {} ({})",
+                                entity_id, entity_type_str
+                            );
+                        }
+                    }
                 }
 
                 let event = Event::EntityCreated {
@@ -713,17 +724,28 @@ impl CommunitasApp {
                     })?;
 
                 if let Some(gossip) = ctx.gossip.as_ref() {
-                    let gossip = gossip.clone();
                     let entity_id = entity.id.clone();
                     let entity_type_str = entity_type.as_str().to_string();
-                    tokio::spawn(async move {
-                        if let Err(e) = gossip.join_entity(&entity_id, &entity_type_str).await {
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(30),
+                        gossip.join_entity(&entity_id, &entity_type_str),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
                             warn!(
                                 "Failed to join gossip topic for entity {} ({}): {}",
                                 entity_id, entity_type_str, e
                             );
                         }
-                    });
+                        Err(_) => {
+                            warn!(
+                                "Timed out joining gossip topic for entity {} ({})",
+                                entity_id, entity_type_str
+                            );
+                        }
+                    }
                 }
 
                 let event = Event::EntityCreated {
@@ -836,8 +858,15 @@ impl CommunitasApp {
                 member_id,
                 role,
             } => {
-                let ctx = self.context.read().await;
-                ctx.entity_service
+                let (entity_service, gossip, updated_by) = {
+                    let ctx = self.context.read().await;
+                    (
+                        ctx.entity_service.clone(),
+                        ctx.gossip.clone(),
+                        ctx.four_words.clone(),
+                    )
+                };
+                entity_service
                     .add_member(entity_type, &entity_id, &member_id, &role)
                     .await
                     .map_err(|e| CommandError {
@@ -845,6 +874,28 @@ impl CommunitasApp {
                         message: format!("{}", e),
                         code: "ADD_MEMBER_FAILED".to_string(),
                     })?;
+
+                if let Some(gossip) = gossip.as_ref() {
+                    Self::publish_member_update(
+                        gossip.clone(),
+                        entity_type,
+                        &entity_id,
+                        &member_id,
+                        Some(&role),
+                        &updated_by,
+                        MemberUpdateAction::Add,
+                    )
+                    .await;
+                    Self::publish_member_snapshot(
+                        gossip.clone(),
+                        entity_service.clone(),
+                        entity_type,
+                        &entity_id,
+                        &updated_by,
+                        Some(&member_id),
+                    )
+                    .await;
+                }
 
                 let event = Event::MemberAdded {
                     entity_type,
@@ -877,37 +928,148 @@ impl CommunitasApp {
                 let remove_result = match remove_result {
                     Ok(()) => Ok(()),
                     Err(crate::entity_service::EntityServiceError::PermissionDenied(reason)) => {
-                        if let Some(gossip) = gossip {
-                            if let Err(e) =
-                                gossip.join_entity(&entity_id, entity_type.as_str()).await
-                            {
-                                warn!(
-                                    "Failed to join entity topic {} before retry: {}",
-                                    entity_id, e
-                                );
+                        if let Some(gossip) = gossip.as_ref() {
+                            let mut last_reason = reason;
+                            let mut last_error: Option<CommandError> = None;
+
+                            for attempt in 0..3 {
+                                if let Ok(entity) = entity_service.get_entity(&entity_id).await {
+                                    let owner_id = entity.created_by.clone();
+                                    if owner_id != deleted_by {
+                                        if let Ok(result) =
+                                            gossip.find_contact_with_hints(&owner_id).await
+                                        {
+                                            for hint in &result.addr_hints {
+                                                let addr = hint
+                                                    .parse::<std::net::SocketAddr>()
+                                                    .ok()
+                                                    .or_else(|| {
+                                                        crate::identity::conn_from_words(hint).ok()
+                                                    });
+                                                if let Some(addr) = addr {
+                                                    if let Err(err) =
+                                                        gossip.dial_address(addr).await
+                                                    {
+                                                        debug!(
+                                                            "Dial to owner {} at {} before sync failed for {}: {}",
+                                                            owner_id, addr, entity_id, err
+                                                        );
+                                                    }
+                                                }
+                                            }
+
+                                            let request = crate::crdt::MemberSyncRequest {
+                                                entity_id: entity_id.clone(),
+                                                entity_type,
+                                                requester_peer_id: deleted_by.clone(),
+                                            };
+                                            if let Ok(bytes) = serde_json::to_vec(
+                                                &crate::crdt::GossipMessageType::MemberSyncRequest(
+                                                    request,
+                                                ),
+                                            ) {
+                                                if let Err(err) = gossip
+                                                    .direct_send_membership_to_peer(
+                                                        &entity_id,
+                                                        result.peer_id,
+                                                        bytes,
+                                                    )
+                                                    .await
+                                                {
+                                                    warn!(
+                                                        "Direct member sync request to owner {} failed for {}: {}",
+                                                        owner_id, entity_id, err
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                match tokio::time::timeout(
+                                    std::time::Duration::from_secs(5),
+                                    gossip.join_entity(&entity_id, entity_type.as_str()),
+                                )
+                                .await
+                                {
+                                    Ok(Ok(())) => {}
+                                    Ok(Err(err)) => {
+                                        warn!(
+                                            "Failed to join entity topic {} before retry: {}",
+                                            entity_id, err
+                                        );
+                                    }
+                                    Err(_) => {
+                                        warn!(
+                                            "Timed out joining entity topic {} before retry",
+                                            entity_id
+                                        );
+                                    }
+                                }
+
+                                match tokio::time::timeout(
+                                    std::time::Duration::from_secs(20),
+                                    gossip.request_member_sync(&entity_id, entity_type.as_str()),
+                                )
+                                .await
+                                {
+                                    Ok(Ok(())) => {}
+                                    Ok(Err(err)) => {
+                                        warn!(
+                                            "Failed to request member sync for {} before retry: {}",
+                                            entity_id, err
+                                        );
+                                    }
+                                    Err(_) => {
+                                        warn!(
+                                            "Timed out requesting member sync for {} before retry",
+                                            entity_id
+                                        );
+                                    }
+                                }
+
+                                // Give the sync response a short window to apply.
+                                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+
+                                match entity_service
+                                    .remove_member(entity_type, &entity_id, &member_id, &deleted_by)
+                                    .await
+                                {
+                                    Ok(()) => {
+                                        last_error = None;
+                                        break;
+                                    }
+                                    Err(
+                                        crate::entity_service::EntityServiceError::PermissionDenied(
+                                            reason,
+                                        ),
+                                    ) => {
+                                        last_reason = reason;
+                                    }
+                                    Err(e) => {
+                                        last_error = Some(CommandError {
+                                            command_type: command_type.clone(),
+                                            message: format!("{}", e),
+                                            code: "REMOVE_MEMBER_FAILED".to_string(),
+                                        });
+                                        break;
+                                    }
+                                }
+
+                                if attempt < 2 {
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                                }
                             }
 
-                            if let Err(e) = gossip
-                                .request_member_sync(&entity_id, entity_type.as_str())
-                                .await
-                            {
-                                warn!(
-                                    "Failed to request member sync for {} before retry: {}",
-                                    entity_id, e
-                                );
-                            }
-
-                            // Give the sync response a short window to apply.
-                            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-
-                            entity_service
-                                .remove_member(entity_type, &entity_id, &member_id, &deleted_by)
-                                .await
-                                .map_err(|e| CommandError {
+                            if let Some(err) = last_error {
+                                Err(err)
+                            } else {
+                                Err(CommandError {
                                     command_type: command_type.clone(),
-                                    message: format!("{}", e),
+                                    message: format!("{}", last_reason),
                                     code: "REMOVE_MEMBER_FAILED".to_string(),
                                 })
+                            }
                         } else {
                             Err(CommandError {
                                 command_type: command_type.clone(),
@@ -925,6 +1087,19 @@ impl CommunitasApp {
 
                 remove_result?;
 
+                if let Some(gossip) = gossip.as_ref() {
+                    Self::publish_member_update(
+                        gossip.clone(),
+                        entity_type,
+                        &entity_id,
+                        &member_id,
+                        None,
+                        &deleted_by,
+                        MemberUpdateAction::Remove,
+                    )
+                    .await;
+                }
+
                 let event = Event::MemberRemoved {
                     entity_type,
                     entity_id,
@@ -935,10 +1110,15 @@ impl CommunitasApp {
             }
 
             Command::RemoveOrganizationMember { org_id, member_id } => {
-                let ctx = self.context.read().await;
-                let deleted_by = ctx.four_words.clone();
-                let result = ctx
-                    .entity_service
+                let (entity_service, gossip, deleted_by) = {
+                    let ctx = self.context.read().await;
+                    (
+                        ctx.entity_service.clone(),
+                        ctx.gossip.clone(),
+                        ctx.four_words.clone(),
+                    )
+                };
+                let result = entity_service
                     .remove_organization_member(&org_id, &member_id, &deleted_by)
                     .await
                     .map_err(|e| CommandError {
@@ -946,6 +1126,21 @@ impl CommunitasApp {
                         message: format!("{}", e),
                         code: "REMOVE_ORG_MEMBER_FAILED".to_string(),
                     })?;
+
+                if let Some(gossip) = gossip.as_ref() {
+                    for (entity_type, entity_id) in &result.removed_in {
+                        Self::publish_member_update(
+                            gossip.clone(),
+                            *entity_type,
+                            entity_id,
+                            &member_id,
+                            None,
+                            &deleted_by,
+                            MemberUpdateAction::Remove,
+                        )
+                        .await;
+                    }
+                }
 
                 let removed_from: Vec<(EntityType, String)> =
                     result.removed_in.into_iter().collect();
@@ -965,9 +1160,15 @@ impl CommunitasApp {
                 member_id,
                 new_role,
             } => {
-                let ctx = self.context.read().await;
-                let old_role = ctx
-                    .entity_service
+                let (entity_service, gossip, updated_by) = {
+                    let ctx = self.context.read().await;
+                    (
+                        ctx.entity_service.clone(),
+                        ctx.gossip.clone(),
+                        ctx.four_words.clone(),
+                    )
+                };
+                let old_role = entity_service
                     .get_member_role(entity_type, &entity_id, &member_id)
                     .await
                     .map_err(|e| CommandError {
@@ -976,7 +1177,7 @@ impl CommunitasApp {
                         code: "GET_ROLE_FAILED".to_string(),
                     })?;
 
-                ctx.entity_service
+                entity_service
                     .set_member_role(entity_type, &entity_id, &member_id, &new_role)
                     .await
                     .map_err(|e| CommandError {
@@ -984,6 +1185,19 @@ impl CommunitasApp {
                         message: format!("{}", e),
                         code: "SET_ROLE_FAILED".to_string(),
                     })?;
+
+                if let Some(gossip) = gossip.as_ref() {
+                    Self::publish_member_update(
+                        gossip.clone(),
+                        entity_type,
+                        &entity_id,
+                        &member_id,
+                        Some(&new_role),
+                        &updated_by,
+                        MemberUpdateAction::Add,
+                    )
+                    .await;
+                }
 
                 let event = Event::MemberRoleChanged {
                     entity_type,
@@ -3046,18 +3260,44 @@ impl CommunitasApp {
                 };
 
                 if let Some(gossip) = gossip {
-                    if let Err(e) = gossip.join_entity(&entity_id, entity_type.as_str()).await {
-                        warn!(
-                            "Failed to join entity topic {} for member list: {}",
-                            entity_id, e
-                        );
+                    let join_timeout_secs = std::env::var("COMMUNITAS_JOIN_TIMEOUT_SECS")
+                        .ok()
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .unwrap_or(10);
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(join_timeout_secs),
+                        gossip.join_entity(&entity_id, entity_type.as_str()),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(err)) => {
+                            warn!(
+                                "Failed to join entity topic {} for member list: {}",
+                                entity_id, err
+                            );
+                        }
+                        Err(_) => {
+                            warn!(
+                                "Timed out joining entity topic {} for member list",
+                                entity_id
+                            );
+                        }
                     }
 
-                    if let Err(e) = gossip
-                        .request_member_sync(&entity_id, entity_type.as_str())
-                        .await
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(12),
+                        gossip.request_member_sync(&entity_id, entity_type.as_str()),
+                    )
+                    .await
                     {
-                        warn!("Failed to request member sync for {}: {}", entity_id, e);
+                        Ok(Ok(())) => {}
+                        Ok(Err(err)) => {
+                            warn!("Failed to request member sync for {}: {}", entity_id, err);
+                        }
+                        Err(_) => {
+                            warn!("Timed out requesting member sync for {}", entity_id);
+                        }
                     }
                 }
 
@@ -3171,6 +3411,18 @@ impl CommunitasApp {
 
             Query::GetEntityMessages { entity_id } => {
                 let ctx = self.context.read().await;
+                let sync_wait_ms = std::env::var("COMMUNITAS_MESSAGE_SYNC_ON_READ_MS")
+                    .ok()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(0);
+
+                if sync_wait_ms > 0 && ctx.gossip.is_some() {
+                    if let Err(err) = ctx.request_entity_message_sync(&entity_id).await {
+                        warn!("Message sync request for {} failed: {}", entity_id, err);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(sync_wait_ms)).await;
+                }
+
                 let sync_response = ctx
                     .message_service
                     .get_entity_messages(entity_id.clone())
@@ -4535,6 +4787,315 @@ impl CommunitasApp {
             warn!("No event receivers: {}", e);
         } else {
             info!("Broadcast event: {:?}", std::mem::discriminant(&event));
+        }
+    }
+
+    async fn publish_member_update(
+        gossip: Arc<crate::gossip::GossipContext>,
+        entity_type: EntityType,
+        entity_id: &str,
+        member_id: &str,
+        role: Option<&str>,
+        updated_by: &str,
+        action: MemberUpdateAction,
+    ) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let update = MemberUpdate {
+            entity_id: entity_id.to_string(),
+            entity_type,
+            member_id: member_id.to_string(),
+            role: role.map(|value| value.to_string()),
+            updated_by: updated_by.to_string(),
+            action,
+            timestamp,
+        };
+        let gossip_msg = GossipMessageType::MemberUpdate(update);
+        let Ok(bytes) = serde_json::to_vec(&gossip_msg) else {
+            warn!("Failed to serialize member update for {}", entity_id);
+            return;
+        };
+
+        if let Err(err) = gossip.join_entity(entity_id, entity_type.as_str()).await {
+            warn!(
+                "Failed to join entity {} before member update: {}",
+                entity_id, err
+            );
+        }
+
+        if let Err(err) = gossip.publish_to_entity(entity_id, bytes.clone()).await {
+            warn!("Failed to publish member update for {}: {}", entity_id, err);
+        }
+
+        let direct_enabled = matches!(
+            std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        );
+        if direct_enabled {
+            if let Err(err) = gossip
+                .direct_publish_member_update(entity_id, bytes.clone())
+                .await
+            {
+                warn!("Direct member update for {} failed: {}", entity_id, err);
+            }
+        }
+
+        let direct_gossip = gossip.clone();
+        let direct_entity_id = entity_id.to_string();
+        let direct_member_id = member_id.to_string();
+        let direct_bytes = bytes.clone();
+        tokio::spawn(async move {
+            let discovery = match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                direct_gossip.find_contact_with_hints(&direct_member_id),
+            )
+            .await
+            {
+                Ok(Ok(result)) => Some(result),
+                Ok(Err(err)) => {
+                    warn!(
+                        "Failed to resolve member {} for direct update on {}: {}",
+                        direct_member_id, direct_entity_id, err
+                    );
+                    None
+                }
+                Err(_) => {
+                    warn!(
+                        "Timed out resolving member {} for direct update on {}",
+                        direct_member_id, direct_entity_id
+                    );
+                    None
+                }
+            };
+
+            if let Some(result) = discovery {
+                for hint in &result.addr_hints {
+                    let addr = hint
+                        .parse::<std::net::SocketAddr>()
+                        .ok()
+                        .or_else(|| crate::identity::conn_from_words(hint).ok());
+                    if let Some(addr) = addr {
+                        if let Err(err) = direct_gossip.dial_address(addr).await {
+                            debug!(
+                                "Dial to member {} at {} before direct update failed: {}",
+                                direct_member_id, addr, err
+                            );
+                        }
+                    }
+                }
+
+                if let Err(err) = direct_gossip
+                    .direct_send_membership_to_peer(&direct_entity_id, result.peer_id, direct_bytes)
+                    .await
+                {
+                    warn!(
+                        "Direct member update to {} for {} failed: {}",
+                        direct_member_id, direct_entity_id, err
+                    );
+                }
+            }
+        });
+
+        let retry_gossip = gossip.clone();
+        let retry_entity_id = entity_id.to_string();
+        let retry_bytes = bytes.clone();
+        let retry_entity_type = entity_type;
+        let retry_direct_enabled = direct_enabled;
+        tokio::spawn(async move {
+            let delays = [2u64, 5, 10];
+            for delay in delays {
+                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                if let Err(err) = retry_gossip
+                    .join_entity(&retry_entity_id, retry_entity_type.as_str())
+                    .await
+                {
+                    warn!(
+                        "Retry join_entity failed for {} (member update): {}",
+                        retry_entity_id, err
+                    );
+                }
+                if let Err(err) = retry_gossip
+                    .publish_to_entity(&retry_entity_id, retry_bytes.clone())
+                    .await
+                {
+                    warn!(
+                        "Retry publish member update failed for {}: {}",
+                        retry_entity_id, err
+                    );
+                }
+                if retry_direct_enabled {
+                    if let Err(err) = retry_gossip
+                        .direct_publish_member_update(&retry_entity_id, retry_bytes.clone())
+                        .await
+                    {
+                        warn!(
+                            "Retry direct member update failed for {}: {}",
+                            retry_entity_id, err
+                        );
+                    }
+                }
+            }
+        });
+    }
+
+    async fn publish_member_snapshot(
+        gossip: Arc<crate::gossip::GossipContext>,
+        entity_service: Arc<crate::EntityService>,
+        entity_type: EntityType,
+        entity_id: &str,
+        responder_id: &str,
+        target_member: Option<&str>,
+    ) {
+        let updates = match entity_service
+            .get_member_updates(entity_type, entity_id, responder_id)
+            .await
+        {
+            Ok(updates) => updates,
+            Err(err) => {
+                warn!("Failed to build member snapshot for {}: {}", entity_id, err);
+                return;
+            }
+        };
+
+        let response = crate::crdt::MemberSyncResponse {
+            entity_id: entity_id.to_string(),
+            entity_type,
+            responder_peer_id: responder_id.to_string(),
+            updates,
+        };
+        let gossip_msg = crate::crdt::GossipMessageType::MemberSyncResponse(response);
+        let Ok(bytes) = serde_json::to_vec(&gossip_msg) else {
+            warn!("Failed to serialize member snapshot for {}", entity_id);
+            return;
+        };
+
+        if let Err(err) = gossip.publish_to_entity(entity_id, bytes.clone()).await {
+            warn!(
+                "Failed to publish member snapshot for {}: {}",
+                entity_id, err
+            );
+        }
+
+        let direct_enabled = matches!(
+            std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        );
+        if direct_enabled {
+            if let Err(err) = gossip
+                .direct_publish_membership_message(entity_id, bytes.clone())
+                .await
+            {
+                warn!("Direct member snapshot for {} failed: {}", entity_id, err);
+            }
+        }
+
+        let retry_gossip = gossip.clone();
+        let retry_entity_id = entity_id.to_string();
+        let retry_bytes = bytes.clone();
+        let retry_entity_type = entity_type;
+        let retry_direct_enabled = direct_enabled;
+        tokio::spawn(async move {
+            let delays = [2u64, 5, 10];
+            for delay in delays {
+                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                if let Err(err) = retry_gossip
+                    .join_entity(&retry_entity_id, retry_entity_type.as_str())
+                    .await
+                {
+                    warn!(
+                        "Retry join_entity failed for {} (member snapshot): {}",
+                        retry_entity_id, err
+                    );
+                }
+                if let Err(err) = retry_gossip
+                    .publish_to_entity(&retry_entity_id, retry_bytes.clone())
+                    .await
+                {
+                    warn!(
+                        "Retry publish member snapshot failed for {}: {}",
+                        retry_entity_id, err
+                    );
+                }
+                if retry_direct_enabled {
+                    if let Err(err) = retry_gossip
+                        .direct_publish_membership_message(&retry_entity_id, retry_bytes.clone())
+                        .await
+                    {
+                        warn!(
+                            "Retry direct member snapshot failed for {}: {}",
+                            retry_entity_id, err
+                        );
+                    }
+                }
+            }
+        });
+
+        if let Some(member_id) = target_member {
+            let gossip = gossip.clone();
+            let entity_id = entity_id.to_string();
+            let member_id = member_id.to_string();
+            let bytes = bytes.clone();
+            tokio::spawn(async move {
+                let discovery = match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    gossip.find_contact_with_hints(&member_id),
+                )
+                .await
+                {
+                    Ok(Ok(result)) => Some(result),
+                    Ok(Err(err)) => {
+                        warn!(
+                            "Failed to resolve member {} for snapshot on {}: {}",
+                            member_id, entity_id, err
+                        );
+                        None
+                    }
+                    Err(_) => {
+                        warn!(
+                            "Timed out resolving member {} for snapshot on {}",
+                            member_id, entity_id
+                        );
+                        None
+                    }
+                };
+
+                if let Some(result) = discovery {
+                    for hint in &result.addr_hints {
+                        let addr = hint
+                            .parse::<std::net::SocketAddr>()
+                            .ok()
+                            .or_else(|| crate::identity::conn_from_words(hint).ok());
+                        if let Some(addr) = addr {
+                            if let Err(err) = gossip.dial_address(addr).await {
+                                debug!(
+                                    "Dial to member {} at {} before snapshot failed: {}",
+                                    member_id, addr, err
+                                );
+                            }
+                        }
+                    }
+
+                    if let Err(err) = gossip
+                        .direct_send_membership_to_peer(&entity_id, result.peer_id, bytes)
+                        .await
+                    {
+                        warn!(
+                            "Direct member snapshot to {} for {} failed: {}",
+                            member_id, entity_id, err
+                        );
+                    }
+                }
+            });
         }
     }
 }

@@ -195,8 +195,10 @@ pub fn conn_words(addr: &SocketAddr) -> IdentityResult<String> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn conn_from_words(words: &str) -> IdentityResult<SocketAddr> {
-    // Validate format (should contain spaces, not dashes, for FourWordAdaptiveEncoder)
-    if !words.contains(' ') && !words.contains('-') {
+    let normalized = words.replace('.', "-");
+
+    // Validate format (should contain separators for FourWordAdaptiveEncoder)
+    if !normalized.contains(' ') && !normalized.contains('-') {
         return Err(IdentityError::InvalidFormat(
             "Connection identity must contain word separators".to_string(),
         ));
@@ -208,7 +210,7 @@ pub fn conn_from_words(words: &str) -> IdentityResult<SocketAddr> {
     })?;
 
     // Decode the words back to address string
-    let addr_str = encoder.decode(words).map_err(|e| {
+    let addr_str = encoder.decode(&normalized).map_err(|e| {
         IdentityError::DecodingFailed(format!("Failed to decode connection address: {}", e))
     })?;
 

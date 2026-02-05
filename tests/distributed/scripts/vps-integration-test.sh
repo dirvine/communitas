@@ -192,7 +192,7 @@ test_list_vaults() {
     fi
 }
 
-# Test: Create vault and authenticate
+# Test: Create vault and authenticate (password-less)
 test_auth_flow() {
     local url=$1
     local name=$2
@@ -205,7 +205,6 @@ test_auth_flow() {
     create_args=$(cat <<EOF
 {
     "four_words": "$four_words",
-    "password": "test-password-123",
     "display_name": "Test User $name"
 }
 EOF
@@ -227,8 +226,7 @@ EOF
     local auth_args
     auth_args=$(cat <<EOF
 {
-    "four_words": "$four_words",
-    "password": "test-password-123"
+    "four_words": "$four_words"
 }
 EOF
 )

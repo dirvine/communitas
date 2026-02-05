@@ -29,7 +29,7 @@ use crate::retry_utils::{RetryConfig, retry_dial};
 
 /// Boot sequence orchestrator
 pub struct GossipBootSequence {
-    context: GossipContext,
+    context: Arc<GossipContext>,
     boot_data: BootData,
 }
 
@@ -44,7 +44,7 @@ impl GossipBootSequence {
     /// Create a new boot sequence
     pub fn new(context: GossipContext) -> Self {
         Self {
-            context,
+            context: Arc::new(context),
             boot_data: BootData::default(),
         }
     }
@@ -181,7 +181,22 @@ impl GossipBootSequence {
         let transport_ref = self.context.transport.as_ref();
         match super::discovery::cold_start_discovery(config, transport_ref).await {
             Ok(introducers) => {
-                info!("Connected to {} introducer(s)", introducers.len());
+                let mut connected = 0usize;
+                for introducer in introducers {
+                    match introducer.parse::<std::net::SocketAddr>() {
+                        Ok(addr) => {
+                            if let Err(e) = self.context.dial_address(addr).await {
+                                warn!("Failed to dial introducer {}: {}", addr, e);
+                            } else {
+                                connected += 1;
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Introducer address parse failed for {}: {}", introducer, e);
+                        }
+                    }
+                }
+                info!("Connected to {} introducer(s)", connected);
                 Ok(())
             }
             Err(e) => {
@@ -410,7 +425,22 @@ impl GossipBootSequence {
 
         // Add favourite contacts
         let favourites = self.context.get_favourite_contacts().await;
-        seeds.extend(favourites);
+        for favourite in favourites {
+            if let Ok(addr) = favourite.parse::<SocketAddr>() {
+                seeds.push(addr.to_string());
+                continue;
+            }
+            if let Ok(addr) = crate::identity::conn_from_words(&favourite) {
+                seeds.push(addr.to_string());
+                continue;
+            }
+            let normalized = favourite.replace('-', " ");
+            if normalized != favourite {
+                if let Ok(addr) = crate::identity::conn_from_words(&normalized) {
+                    seeds.push(addr.to_string());
+                }
+            }
+        }
 
         // If no seeds, use introducer nodes
         if seeds.is_empty() {
@@ -453,14 +483,21 @@ impl GossipBootSequence {
 
     /// Step 5: Start presence beacons and CRDT anti-entropy
     async fn start_presence_and_sync(&mut self) -> Result<()> {
-        // Start presence beacons (5 minute interval)
+        // Start presence beacons (default 5 minute interval, configurable)
         {
+            let interval_secs = std::env::var("COMMUNITAS_PRESENCE_INTERVAL_SECS")
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(300);
             let presence = self.context.presence.write().await;
             presence
-                .start_beacons(300)
+                .start_beacons(interval_secs)
                 .await
                 .context("Failed to start presence beacons")?;
-            info!("Presence beacons active (5min interval, TTL: 15min, MLS-encrypted)");
+            info!(
+                "Presence beacons active ({}s interval, TTL: 15min, MLS-encrypted)",
+                interval_secs
+            );
         }
 
         // Start CRDT anti-entropy (60 second interval)
@@ -507,11 +544,14 @@ impl GossipBootSequence {
             let anti_entropy = Arc::clone(&self.context.anti_entropy);
             let pubsub = Arc::clone(&self.context.pubsub);
             let topics = Arc::clone(&self.context.topics);
+            let presence = Arc::clone(&self.context.presence);
+            let gossip = Arc::clone(&self.context);
             let self_peer_id = self.context.peer_id;
 
             tokio::spawn(async move {
                 info!("Starting transport peer sync task (5s interval)");
                 let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+                let mut last_peers: HashSet<saorsa_gossip_types::PeerId> = HashSet::new();
 
                 loop {
                     interval.tick().await;
@@ -533,6 +573,9 @@ impl GossipBootSequence {
 
                     // Extract peer IDs for reuse
                     let peer_ids: Vec<_> = connected.iter().map(|(pid, _)| *pid).collect();
+                    let current_peers: HashSet<_> = peer_ids.iter().copied().collect();
+                    let has_new_peers = !current_peers.is_subset(&last_peers);
+                    last_peers = current_peers;
 
                     // Register all connected peers for CRDT anti-entropy sync
                     let mut registered = 0;
@@ -552,6 +595,14 @@ impl GossipBootSequence {
                         );
                     }
 
+                    // Register connected peers for presence beacons
+                    if !peer_ids.is_empty() {
+                        let presence_guard = presence.read().await;
+                        for peer_id in &peer_ids {
+                            presence_guard.add_broadcast_peer(*peer_id).await;
+                        }
+                    }
+
                     // Also sync peers to all subscribed pubsub topics
                     // This ensures topics get peer updates when new connections are made
                     let topic_ids: Vec<_> = {
@@ -568,6 +619,12 @@ impl GossipBootSequence {
                         }
                         debug!("Synced {} transport peers to pubsub topics", peer_ids.len());
                     }
+
+                    if has_new_peers {
+                        gossip.request_entity_syncs_for_all().await;
+                    } else {
+                        gossip.request_pending_entity_syncs().await;
+                    }
                 }
             });
             info!("Transport peer sync task active (5s interval)");
@@ -579,6 +636,7 @@ impl GossipBootSequence {
             let transport = Arc::clone(&self.context.transport);
             let pubsub = Arc::clone(&self.context.pubsub);
             let entity_handler = self.context.entity_message_handler();
+            let presence = self.context.presence.clone();
             let direct_enabled = matches!(
                 std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
                     .unwrap_or_default()
@@ -612,17 +670,18 @@ impl GossipBootSequence {
                             }
                             // Only process PubSub messages in this loop
                             if stream_type != GossipStreamType::PubSub {
-                                if direct_enabled
-                                    && matches!(
-                                        stream_type,
-                                        GossipStreamType::Bulk | GossipStreamType::Membership
-                                    )
-                                {
+                                let handle_direct =
+                                    matches!(stream_type, GossipStreamType::Membership)
+                                        || (direct_enabled
+                                            && matches!(stream_type, GossipStreamType::Bulk));
+                                let mut handled_direct = false;
+                                if handle_direct {
                                     if let Ok(envelope) = serde_json::from_slice::<
                                         super::context::DirectEntityEnvelope,
                                     >(
                                         &data
                                     ) {
+                                        handled_direct = true;
                                         if log_transport {
                                             info!(
                                                 "Received direct entity envelope for {} ({} bytes) from {:?}",
@@ -637,6 +696,27 @@ impl GossipBootSequence {
                                                 envelope.entity_id,
                                                 peer_id,
                                                 Bytes::from(envelope.payload),
+                                            );
+                                        }
+                                    }
+                                }
+                                if !handled_direct && matches!(stream_type, GossipStreamType::Bulk)
+                                {
+                                    let presence_guard = presence.read().await;
+                                    match presence_guard.handle_presence_message(&data).await {
+                                        Ok(Some(sender)) => {
+                                            if log_transport {
+                                                info!(
+                                                    "Processed presence beacon from {:?}",
+                                                    sender
+                                                );
+                                            }
+                                        }
+                                        Ok(None) => {}
+                                        Err(err) => {
+                                            debug!(
+                                                "Ignoring non-presence bulk message from {:?}: {}",
+                                                peer_id, err
                                             );
                                         }
                                     }
@@ -753,7 +833,7 @@ impl GossipBootSequence {
     }
 
     /// Get the context (consumes self)
-    pub fn into_context(self) -> GossipContext {
+    pub fn into_context(self) -> Arc<GossipContext> {
         self.context
     }
 }

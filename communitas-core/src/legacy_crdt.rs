@@ -248,6 +248,8 @@ pub struct SyncRequest {
     pub vector_clock: VectorClock,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missing_message_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub request_id: u64,
 }
 
 /// Sync response - reply with messages

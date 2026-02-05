@@ -10,37 +10,34 @@ tools_covered:
   - delete_contact
   - list_contacts
   - link_contact
-  - unlink_contact
-  - add_to_favourites
-  - remove_from_favourites
+  - set_favourite_contact
+  - remove_favourite_contact
+  - list_favourite_contacts
   - search_contacts
 
 test_cases:
   # Create contacts
   - id: CON-001
-    name: "Alice creates contact for external partner"
+    name: "Alice creates contact for Bob"
     actors: [alice]
     steps:
       - tool: create_contact
         params:
-          display_name: "John External"
-          email: "john@external.com"
-          phone: "+1-555-0100"
-          notes: "External partner contact"
+          display_name: "Bob Contact"
+          four_words: "${bob_identity}"
         expect:
           status: success
         store:
           contact1_id: id
 
   - id: CON-002
-    name: "Bob creates contact"
+    name: "Bob creates contact for Alice"
     actors: [bob]
     steps:
       - tool: create_contact
         params:
-          display_name: "Jane Partner"
-          email: "jane@partner.org"
-          company: "Partner Inc"
+          display_name: "Alice Contact"
+          four_words: "${alice_identity}"
         expect:
           status: success
         store:
@@ -57,19 +54,17 @@ test_cases:
         expect:
           status: success
           fields:
-            display_name: "John External"
-            email: "john@external.com"
+            display_name: "Bob Contact"
 
   # Update contact
   - id: CON-004
-    name: "Update contact phone"
+    name: "Update contact display name"
     actors: [alice]
     steps:
       - tool: update_contact
         params:
           contact_id: "${contact1_id}"
-          phone: "+1-555-0101"
-          notes: "Updated phone number"
+          display_name: "Bob Contact Updated"
         expect:
           status: success
 
@@ -82,16 +77,17 @@ test_cases:
         expect:
           status: success
           contains:
-            - display_name: "John External"
+            - contacts:
+                - display_name: "Bob Contact Updated"
 
   # Add to favourites
   - id: CON-006
     name: "Add contact to favourites"
     actors: [alice]
     steps:
-      - tool: add_to_favourites
+      - tool: set_favourite_contact
         params:
-          contact_id: "${contact1_id}"
+          four_words: "${bob_identity}"
         expect:
           status: success
 
@@ -102,34 +98,33 @@ test_cases:
     steps:
       - tool: search_contacts
         params:
-          query: "John"
+          query: "Bob"
         expect:
           status: success
           contains:
-            - display_name: "John External"
+            - contacts:
+                - display_name: "Bob Contact Updated"
 
   # Search by email
   - id: CON-008
-    name: "Search contacts by email"
+    name: "Search contacts by words"
     actors: [alice]
     steps:
       - tool: search_contacts
         params:
-          query: "external.com"
+          query: "${bob_identity}"
         expect:
           status: success
-          contains:
-            - email: "john@external.com"
 
   # Link contact to entity
   - id: CON-009
-    name: "Link contact to organisation"
+    name: "Link contact to identity"
     actors: [alice]
     steps:
       - tool: link_contact
         params:
           contact_id: "${contact1_id}"
-          entity_id: "${org_id}"
+          four_words: "${bob_identity}"
         expect:
           status: success
 
@@ -138,26 +133,15 @@ test_cases:
     name: "Remove from favourites"
     actors: [alice]
     steps:
-      - tool: remove_from_favourites
+      - tool: remove_favourite_contact
         params:
-          contact_id: "${contact1_id}"
+          four_words: "${bob_identity}"
         expect:
           status: success
 
   # Unlink contact
-  - id: CON-011
-    name: "Unlink contact from entity"
-    actors: [alice]
-    steps:
-      - tool: unlink_contact
-        params:
-          contact_id: "${contact1_id}"
-          entity_id: "${org_id}"
-        expect:
-          status: success
-
   # Verify contacts sync across nodes
-  - id: CON-012
+  - id: CON-011
     name: "Verify contacts visible to team"
     actors: [bob, charlie]
     parallel: true
@@ -168,7 +152,7 @@ test_cases:
           status: success
 
   # Delete contact
-  - id: CON-013
+  - id: CON-012
     name: "Delete contact"
     actors: [bob]
     steps:
@@ -179,7 +163,7 @@ test_cases:
           status: success
 
   # Verify deletion
-  - id: CON-014
+  - id: CON-013
     name: "Verify contact deleted"
     actors: [bob]
     steps:

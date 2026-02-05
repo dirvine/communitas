@@ -31,9 +31,9 @@ use saorsa_gossip_transport::{
 };
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
@@ -85,6 +85,10 @@ pub struct GossipContext {
     pub groups: Arc<RwLock<HashMap<String, GroupContext>>>, // entity_id → group
     pub groups_by_topic: Arc<RwLock<HashMap<TopicId, GroupContext>>>, // topic_id → group (for PresenceManager)
     pub topics: Arc<RwLock<HashMap<String, TopicId>>>,                // entity_id → topic_id
+    /// Entity types for joined entities (entity_id → entity_type)
+    entity_types: Arc<RwLock<HashMap<String, String>>>,
+    /// Entities that joined before peers connected and still need initial sync
+    pending_sync_entities: Arc<RwLock<HashSet<String>>>,
 
     /// Presence → MLS-encrypted beacons
     pub presence: Arc<RwLock<PresenceManager>>,
@@ -161,6 +165,13 @@ pub struct GossipContext {
 }
 
 impl GossipContext {
+    fn join_timeout() -> std::time::Duration {
+        std::env::var("COMMUNITAS_JOIN_TIMEOUT_SECS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(std::time::Duration::from_secs)
+            .unwrap_or_else(|| std::time::Duration::from_secs(10))
+    }
     /// Initialize a new GossipContext
     ///
     /// This follows SPEC.md §2 boot sequence:
@@ -185,10 +196,15 @@ impl GossipContext {
         );
 
         // 1. Load or create ML-DSA identity
-        // Use system data directory to avoid triggering file watchers in dev mode
-        let data_root = dirs::data_local_dir()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
-            .join("communitas");
+        // Prefer COMMUNITAS_DATA_DIR when provided (e.g., local cluster isolation),
+        // otherwise fall back to the system data directory.
+        let data_root = if let Ok(dir) = std::env::var("COMMUNITAS_DATA_DIR") {
+            std::path::PathBuf::from(dir)
+        } else {
+            dirs::data_local_dir()
+                .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
+                .join("communitas")
+        };
         std::fs::create_dir_all(&data_root).context("Failed to create data directory")?;
 
         let keystore_path = data_root.join("keystore");
@@ -217,18 +233,32 @@ impl GossipContext {
         // Use listen_port if provided, otherwise bind to port 0 (OS-assigned)
         // Use Bootstrap role to allow starting without upstream bootstrap nodes
         let bind_port = listen_port.unwrap_or(0);
-        let bind_addr = std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            bind_port,
-        );
+        let bind_ip = std::env::var("COMMUNITAS_LOCAL_IP")
+            .ok()
+            .and_then(|ip| ip.parse::<std::net::IpAddr>().ok())
+            .unwrap_or_else(|| std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)));
+        let bind_addr = std::net::SocketAddr::new(bind_ip, bind_port);
 
         // Extract keypair bytes from identity to ensure transport uses the same peer ID
         let keypair = identity.key_pair();
         let pub_key_bytes = keypair.public_key().to_vec();
         let sec_key_bytes = keypair.secret_key().to_vec();
 
-        let transport_config = UdpTransportAdapterConfig::new(bind_addr, vec![])
-            .with_keypair(pub_key_bytes, sec_key_bytes);
+        let mut transport_config = UdpTransportAdapterConfig::new(bind_addr, vec![])
+            .with_keypair(pub_key_bytes.clone(), sec_key_bytes.clone());
+
+        let max_inflight = std::env::var("COMMUNITAS_TRANSPORT_MAX_INFLIGHT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(16);
+        transport_config = transport_config.with_max_inflight_sends(max_inflight);
+
+        let send_timeout_secs = std::env::var("COMMUNITAS_TRANSPORT_SEND_TIMEOUT_SECS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(30);
+        transport_config =
+            transport_config.with_send_timeout(Duration::from_secs(send_timeout_secs));
 
         let transport =
             UdpTransportAdapter::with_config(transport_config, Some(peer_cache.bootstrap_cache()))
@@ -265,14 +295,26 @@ impl GossipContext {
         let groups_by_topic = Arc::new(RwLock::new(HashMap::new()));
 
         // 7. Create presence manager
-        let presence = Arc::new(RwLock::new(PresenceManager::new(
+        let presence = Arc::new(RwLock::new(PresenceManager::new_with_four_words(
             peer_id,
             transport.clone(),
             groups_by_topic.clone(),
+            Some(four_words.clone()),
         )));
+        {
+            let presence_guard = presence.write().await;
+            presence_guard
+                .set_addr_hints(vec![bind_addr.to_string()])
+                .await;
+        }
 
-        // 7b. Create FOAF discovery manager
-        let discovery = Arc::new(super::discovery::FoafDiscovery::new());
+        // 7b. Create FOAF discovery manager with presence integration
+        let discovery = Arc::new(super::discovery::FoafDiscovery::with_config(
+            Some(presence.clone()),
+            None,
+            peer_id,
+            2,
+        ));
 
         // 8. Create CRDT message set
         let crdt_message_set = Arc::new(RwLock::new(OrSet::new()));
@@ -287,9 +329,27 @@ impl GossipContext {
         let topics = Arc::new(RwLock::new(HashMap::new()));
 
         // 12. Initialize coordinator client (SPEC2.md §2, §8, §9)
-        // Coordinator client reuses the main transport
+        // Coordinator gets a dedicated transport to avoid competing with the main gossip receiver.
+        let coordinator_transport = {
+            let coord_bind = std::net::SocketAddr::new(bind_ip, 0);
+            let coord_config = UdpTransportAdapterConfig::new(coord_bind, vec![]);
+
+            match UdpTransportAdapter::with_config(coord_config, Some(peer_cache.bootstrap_cache()))
+                .await
+            {
+                Ok(adapter) => Arc::new(SelfFilteringTransport::new(Arc::new(adapter))),
+                Err(err) => {
+                    warn!(
+                        "Failed to create dedicated coordinator transport ({}). Falling back to main transport.",
+                        err
+                    );
+                    transport.clone()
+                }
+            }
+        };
+
         let coordinator_transport: Arc<RwLock<Box<dyn GossipTransport>>> =
-            Arc::new(RwLock::new(Box::new(transport.clone())));
+            Arc::new(RwLock::new(Box::new(coordinator_transport)));
 
         let coordinator =
             super::CoordinatorClient::new(peer_id, coordinator_transport, membership.clone());
@@ -327,10 +387,7 @@ impl GossipContext {
         let (sites_listener, site_fetcher, sites_dispatcher) = {
             let sites_bind = if let Some(main_port) = listen_port {
                 let sites_port = main_port + 1;
-                std::net::SocketAddr::new(
-                    std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
-                    sites_port,
-                )
+                std::net::SocketAddr::new(bind_ip, sites_port)
             } else {
                 "0.0.0.0:0"
                     .parse()
@@ -402,6 +459,8 @@ impl GossipContext {
             groups,
             groups_by_topic,
             topics,
+            entity_types: Arc::new(RwLock::new(HashMap::new())),
+            pending_sync_entities: Arc::new(RwLock::new(HashSet::new())),
             presence,
             discovery,
             crdt_message_set,
@@ -484,13 +543,24 @@ impl GossipContext {
             )
         })?;
 
-        // Get local IP address
-        let local_ip = local_ip_address::local_ip().map_err(|e| {
-            crate::identity::IdentityError::EncodingFailed(format!(
-                "Failed to get local IP address: {}",
-                e
-            ))
-        })?;
+        // Get local IP address (prefer explicit COMMUNITAS_LOCAL_IP when set)
+        let local_ip = match std::env::var("COMMUNITAS_LOCAL_IP") {
+            Ok(value) => match value.parse::<std::net::IpAddr>() {
+                Ok(ip) if !ip.is_unspecified() => ip,
+                _ => local_ip_address::local_ip().map_err(|e| {
+                    crate::identity::IdentityError::EncodingFailed(format!(
+                        "Failed to get local IP address: {}",
+                        e
+                    ))
+                })?,
+            },
+            Err(_) => local_ip_address::local_ip().map_err(|e| {
+                crate::identity::IdentityError::EncodingFailed(format!(
+                    "Failed to get local IP address: {}",
+                    e
+                ))
+            })?,
+        };
 
         // Construct SocketAddr
         let addr = std::net::SocketAddr::new(local_ip, port);
@@ -668,6 +738,23 @@ impl GossipContext {
                 .as_str(),
             "1" | "true" | "yes"
         );
+        {
+            let topics = self.topics.read().await;
+            let tasks = self.entity_receiver_tasks.read().await;
+            if topics.contains_key(entity_id) && tasks.contains_key(entity_id) {
+                if log_transport {
+                    info!(
+                        "Join entity {} ({}): already joined, skipping rejoin",
+                        entity_id, entity_type
+                    );
+                }
+                return Ok(());
+            }
+        }
+        {
+            let mut entity_types = self.entity_types.write().await;
+            entity_types.insert(entity_id.to_string(), entity_type.to_string());
+        }
         // 1. Get or create topic ID
         let topic_id = self.map_entity_to_topic(entity_id, entity_type).await?;
         if log_transport {
@@ -728,45 +815,20 @@ impl GossipContext {
                 connected_peers.len()
             );
 
-            // 3.6. Send sync request to get historical messages
-            // This ensures new joiners catch up on messages sent before they joined
-            // Note: publish_to_entity needs a write lock, so we must release
-            // the read lock above before calling it
-            let sync_request = crate::crdt::SyncRequest {
-                entity_id: entity_id.to_string(),
-                entity_type: Self::parse_entity_type(entity_type),
-                requester_peer_id: self.four_words.clone(),
-                vector_clock: crate::crdt::VectorClock::new(), // Empty = request all messages
-                missing_message_ids: None,
-            };
-
-            let gossip_msg = crate::crdt::GossipMessageType::SyncRequest(sync_request);
-            match serde_json::to_vec(&gossip_msg) {
-                Ok(bytes) => {
-                    if let Err(e) = self.publish_to_entity(entity_id, bytes).await {
-                        warn!("Failed to send sync request for {}: {}", entity_id, e);
-                    } else {
-                        info!(
-                            "Sent sync request for entity {} to {} peers",
-                            entity_id,
-                            connected_peers.len()
-                        );
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to serialize sync request: {}", e);
-                }
-            }
-
-            // 3.7. Request membership snapshot to hydrate roles on join.
-            if let Err(e) = self.request_member_sync(entity_id, entity_type).await {
-                warn!("Failed to request member sync for {}: {}", entity_id, e);
+            let sync_sent = self.send_sync_requests(entity_id, entity_type).await;
+            let mut pending = self.pending_sync_entities.write().await;
+            if sync_sent {
+                pending.remove(entity_id);
+            } else {
+                pending.insert(entity_id.to_string());
             }
         } else {
             debug!(
                 "No connected peers yet for topic {:?}, messages will buffer",
                 topic_id
             );
+            let mut pending = self.pending_sync_entities.write().await;
+            pending.insert(entity_id.to_string());
         }
 
         // 4. Spawn background task to process incoming messages
@@ -809,6 +871,142 @@ impl GossipContext {
         Ok(())
     }
 
+    async fn send_sync_requests(&self, entity_id: &str, entity_type: &str) -> bool {
+        let sync_request = crate::crdt::SyncRequest {
+            entity_id: entity_id.to_string(),
+            entity_type: Self::parse_entity_type(entity_type),
+            requester_peer_id: self.four_words.clone(),
+            vector_clock: crate::crdt::VectorClock::new(), // Empty = request all messages
+            missing_message_ids: None,
+            request_id: chrono::Utc::now().timestamp_millis() as u64,
+        };
+
+        let gossip_msg = crate::crdt::GossipMessageType::SyncRequest(sync_request);
+        let mut sync_sent = false;
+        match serde_json::to_vec(&gossip_msg) {
+            Ok(bytes) => {
+                let publish_result = tokio::time::timeout(
+                    Self::join_timeout(),
+                    self.publish_to_entity(entity_id, bytes.clone()),
+                )
+                .await;
+                let direct_result = tokio::time::timeout(
+                    Self::join_timeout(),
+                    self.direct_publish_membership_message(entity_id, bytes),
+                )
+                .await;
+
+                match publish_result {
+                    Ok(Ok(())) => {
+                        sync_sent = true;
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Failed to send sync request for {}: {}", entity_id, e);
+                    }
+                    Err(_) => {
+                        warn!("Timed out sending sync request for {}", entity_id);
+                    }
+                }
+
+                match direct_result {
+                    Ok(Ok(())) => {
+                        sync_sent = true;
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Direct sync request failed for {}: {}", entity_id, e);
+                    }
+                    Err(_) => {
+                        warn!("Timed out direct sync request for {}", entity_id);
+                    }
+                }
+
+                if sync_sent {
+                    info!("Sent sync request for entity {}", entity_id);
+                }
+            }
+            Err(e) => {
+                warn!("Failed to serialize sync request: {}", e);
+            }
+        }
+
+        // Request membership snapshot to hydrate roles on join.
+        match tokio::time::timeout(
+            Self::join_timeout(),
+            self.request_member_sync(entity_id, entity_type),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                warn!("Failed to request member sync for {}: {}", entity_id, e);
+            }
+            Err(_) => {
+                warn!("Timed out requesting member sync for {}", entity_id);
+            }
+        }
+
+        sync_sent
+    }
+
+    pub async fn request_pending_entity_syncs(&self) {
+        let pending: Vec<String> = {
+            let pending_guard = self.pending_sync_entities.read().await;
+            pending_guard.iter().cloned().collect()
+        };
+
+        if pending.is_empty() {
+            return;
+        }
+
+        let entity_types = { self.entity_types.read().await.clone() };
+        let mut completed = Vec::new();
+
+        for entity_id in pending {
+            match entity_types.get(&entity_id) {
+                Some(entity_type) => {
+                    if self.send_sync_requests(&entity_id, entity_type).await {
+                        completed.push(entity_id);
+                    }
+                }
+                None => {
+                    warn!(
+                        "Missing entity type for pending sync on {}, clearing pending flag",
+                        entity_id
+                    );
+                    completed.push(entity_id);
+                }
+            }
+        }
+
+        if !completed.is_empty() {
+            let mut pending_guard = self.pending_sync_entities.write().await;
+            for entity_id in completed {
+                pending_guard.remove(&entity_id);
+            }
+        }
+    }
+
+    pub async fn request_entity_syncs_for_all(&self) {
+        let entity_types = { self.entity_types.read().await.clone() };
+        if entity_types.is_empty() {
+            return;
+        }
+
+        let mut completed = Vec::new();
+        for (entity_id, entity_type) in &entity_types {
+            if self.send_sync_requests(entity_id, entity_type).await {
+                completed.push(entity_id.clone());
+            }
+        }
+
+        if !completed.is_empty() {
+            let mut pending_guard = self.pending_sync_entities.write().await;
+            for entity_id in completed {
+                pending_guard.remove(&entity_id);
+            }
+        }
+    }
+
     /// Leave an entity (unsubscribe and leave MLS group)
     pub async fn leave_entity(&self, entity_id: &str) -> Result<()> {
         // 1. Get topic ID
@@ -838,6 +1036,14 @@ impl GossipContext {
         {
             let mut topics = self.topics.write().await;
             topics.remove(entity_id);
+        }
+        {
+            let mut entity_types = self.entity_types.write().await;
+            entity_types.remove(entity_id);
+        }
+        {
+            let mut pending = self.pending_sync_entities.write().await;
+            pending.remove(entity_id);
         }
 
         info!("Left entity {}, unsubscribed from topic", entity_id);
@@ -870,24 +1076,34 @@ impl GossipContext {
             .connected_peers()
             .await
             .into_iter()
-            .map(|(peer_id, _addr)| peer_id)
-            .filter(|peer_id| *peer_id != self.peer_id)
+            .filter(|(peer_id, _addr)| *peer_id != self.peer_id)
             .collect();
+        let connected_peer_ids_raw: Vec<_> = connected_peers
+            .iter()
+            .map(|(peer_id, _)| *peer_id)
+            .collect();
+        let mut connected_peer_ids = self
+            .prime_peer_connections(&connected_peers, Duration::from_secs(2))
+            .await;
+        if connected_peer_ids.is_empty() && !connected_peer_ids_raw.is_empty() {
+            connected_peer_ids = connected_peer_ids_raw.clone();
+        }
 
         if log_transport {
             info!(
                 "Publish entity {} on topic {:?}: {} connected peers {:?}",
                 entity_id,
                 topic_id,
-                connected_peers.len(),
-                connected_peers
+                connected_peer_ids.len(),
+                connected_peer_ids
             );
         }
 
-        if !connected_peers.is_empty() {
+        let had_peers = !connected_peer_ids.is_empty();
+        if had_peers {
             let pubsub = self.pubsub.read().await;
             (**pubsub)
-                .initialize_topic_peers(topic_id, connected_peers)
+                .initialize_topic_peers(topic_id, connected_peer_ids)
                 .await;
         }
 
@@ -902,16 +1118,60 @@ impl GossipContext {
         let payload = message.clone();
 
         // 3. Publish via gossip
-        let pubsub = self.pubsub.write().await;
-        pubsub.publish(topic_id, payload.into()).await?;
+        let pubsub = self.pubsub.read().await;
+        pubsub.publish(topic_id, payload.clone().into()).await?;
 
         if direct_entity_broadcast_enabled() {
-            if let Err(err) = self
-                .direct_publish_to_peers(entity_id, message, GossipStreamType::Bulk)
+            let transport = self.transport.clone();
+            let local_peer = self.peer_id;
+            let entity_id = entity_id.to_string();
+            let entity_id_for_log = entity_id.clone();
+            let payload = message;
+            tokio::spawn(async move {
+                if let Err(err) = Self::direct_publish_to_peers_inner(
+                    transport,
+                    local_peer,
+                    entity_id,
+                    payload,
+                    GossipStreamType::Bulk,
+                    log_transport,
+                )
                 .await
-            {
-                warn!("Direct entity broadcast failed for {}: {}", entity_id, err);
-            }
+                {
+                    warn!(
+                        "Direct entity broadcast failed for {}: {}",
+                        entity_id_for_log, err
+                    );
+                }
+            });
+        }
+
+        if !had_peers {
+            let transport = self.transport.clone();
+            let pubsub = self.pubsub.clone();
+            let local_peer = self.peer_id;
+            let entity_id = entity_id.to_string();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(2000)).await;
+                let connected_peers: Vec<_> = transport
+                    .connected_peers()
+                    .await
+                    .into_iter()
+                    .filter(|(peer_id, _addr)| *peer_id != local_peer)
+                    .collect();
+                if connected_peers.is_empty() {
+                    return;
+                }
+                let peer_ids: Vec<_> = connected_peers
+                    .iter()
+                    .map(|(peer_id, _addr)| *peer_id)
+                    .collect();
+                let pubsub = pubsub.read().await;
+                (**pubsub).initialize_topic_peers(topic_id, peer_ids).await;
+                if let Err(err) = pubsub.publish(topic_id, payload.into()).await {
+                    warn!("Deferred publish for {} failed: {}", entity_id, err);
+                }
+            });
         }
 
         debug!("Published message to entity {}", entity_id);
@@ -928,7 +1188,59 @@ impl GossipContext {
         let gossip_msg = crate::crdt::GossipMessageType::MemberSyncRequest(request);
         let bytes =
             serde_json::to_vec(&gossip_msg).context("Failed to serialize member sync request")?;
-        self.publish_to_entity(entity_id, bytes).await
+        let direct_enabled = direct_entity_broadcast_enabled();
+        let mut direct_ok = false;
+        if direct_enabled {
+            match tokio::time::timeout(
+                Self::join_timeout(),
+                self.direct_publish_membership_message(entity_id, bytes.clone()),
+            )
+            .await
+            {
+                Ok(Ok(())) => {
+                    direct_ok = true;
+                }
+                Ok(Err(err)) => {
+                    warn!(
+                        "Direct member sync request failed for {}: {}",
+                        entity_id, err
+                    );
+                }
+                Err(_) => {
+                    warn!("Direct member sync request timed out for {}", entity_id);
+                }
+            }
+        }
+
+        match self.publish_member_sync_request(entity_id, bytes).await {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                if direct_ok {
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    async fn publish_member_sync_request(&self, entity_id: &str, message: Vec<u8>) -> Result<()> {
+        let topic_id = {
+            let topics = self.topics.read().await;
+            topics
+                .get(entity_id)
+                .copied()
+                .context("Entity not found, must join first")?
+        };
+
+        let groups = self.groups.read().await;
+        let _group_ctx = groups
+            .get(entity_id)
+            .context("MLS group not found, must join first")?;
+
+        let pubsub = self.pubsub.read().await;
+        pubsub.publish(topic_id, message.into()).await?;
+        Ok(())
     }
 
     async fn direct_publish_to_peers(
@@ -945,39 +1257,195 @@ impl GossipContext {
                 .as_str(),
             "1" | "true" | "yes"
         );
-        let peers = self.transport.connected_peers().await;
+        Self::direct_publish_to_peers_inner(
+            self.transport.clone(),
+            self.peer_id,
+            entity_id.to_string(),
+            payload,
+            stream_type,
+            log_transport,
+        )
+        .await
+    }
+
+    async fn direct_publish_to_peers_inner(
+        transport: Arc<SelfFilteringTransport<UdpTransportAdapter>>,
+        local_peer: PeerId,
+        entity_id: String,
+        payload: Vec<u8>,
+        stream_type: GossipStreamType,
+        log_transport: bool,
+    ) -> Result<()> {
+        let peers: Vec<(PeerId, std::net::SocketAddr)> = transport
+            .connected_peers()
+            .await
+            .into_iter()
+            .filter(|(peer_id, _addr)| *peer_id != local_peer)
+            .collect();
         if peers.is_empty() {
+            return Ok(());
+        }
+
+        let resolved_peers: HashSet<PeerId> = peers.iter().map(|(peer_id, _)| *peer_id).collect();
+
+        if resolved_peers.is_empty() {
             return Ok(());
         }
 
         info!(
             "Direct entity broadcast for {} to {} peers",
             entity_id,
-            peers.len()
+            resolved_peers.len()
         );
 
+        let envelope = DirectEntityEnvelope {
+            entity_id: entity_id.clone(),
+            payload,
+        };
+        let bytes =
+            serde_json::to_vec(&envelope).context("Failed to serialize direct entity envelope")?;
+
+        let mut send_set = tokio::task::JoinSet::new();
+        for peer_id in resolved_peers {
+            let transport = transport.clone();
+            let entity_id = entity_id.clone();
+            let bytes = bytes.clone();
+            send_set.spawn(async move {
+                if log_transport {
+                    info!(
+                        "Direct entity broadcast for {} to peer {:?} ({} bytes)",
+                        entity_id,
+                        peer_id,
+                        bytes.len()
+                    );
+                }
+                match transport
+                    .send_to_peer(peer_id, stream_type, Bytes::from(bytes))
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(err) => {
+                        warn!(
+                            "Direct entity broadcast for {} to peer {:?} failed: {}",
+                            entity_id, peer_id, err
+                        );
+                    }
+                }
+            });
+        }
+        while let Some(result) = send_set.join_next().await {
+            if let Err(err) = result {
+                warn!("Direct entity broadcast task join failed: {err}");
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn direct_publish_entity_to_peer(
+        &self,
+        entity_id: &str,
+        peer_id: PeerId,
+        payload: Vec<u8>,
+        stream_type: GossipStreamType,
+    ) -> Result<()> {
+        let log_transport = matches!(
+            std::env::var("COMMUNITAS_LOG_TRANSPORT_RECEIVE")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        );
         let envelope = DirectEntityEnvelope {
             entity_id: entity_id.to_string(),
             payload,
         };
         let bytes =
             serde_json::to_vec(&envelope).context("Failed to serialize direct entity envelope")?;
+        if log_transport {
+            info!(
+                "Direct entity send for {} to peer {:?} ({} bytes)",
+                entity_id,
+                peer_id,
+                bytes.len()
+            );
+        }
+        self.transport
+            .send_to_peer(peer_id, stream_type, Bytes::from(bytes))
+            .await?;
+        Ok(())
+    }
 
-        for (peer_id, _) in peers {
-            if log_transport {
-                info!(
-                    "Direct entity broadcast for {} to peer {:?} ({} bytes)",
-                    entity_id,
-                    peer_id,
-                    bytes.len()
-                );
-            }
-            self.transport
-                .send_to_peer(peer_id, stream_type, Bytes::from(bytes.clone()))
-                .await?;
+    async fn prime_peer_connections(
+        &self,
+        peers: &[(PeerId, std::net::SocketAddr)],
+        timeout: Duration,
+    ) -> Vec<PeerId> {
+        if peers.is_empty() {
+            return Vec::new();
         }
 
-        Ok(())
+        let mut dial_set = tokio::task::JoinSet::new();
+        for (_peer_id, addr) in peers {
+            let transport = self.transport.clone();
+            let addr = *addr;
+            dial_set.spawn(async move {
+                match tokio::time::timeout(timeout, TransportAdapter::dial(&transport, addr)).await
+                {
+                    Ok(Ok(peer_id)) => Some(peer_id),
+                    Ok(Err(err)) => {
+                        warn!("Dial to {} failed while priming: {}", addr, err);
+                        None
+                    }
+                    Err(_) => {
+                        warn!("Dial to {} timed out while priming", addr);
+                        None
+                    }
+                }
+            });
+        }
+
+        let mut resolved = HashSet::new();
+        while let Some(result) = dial_set.join_next().await {
+            match result {
+                Ok(Some(peer_id)) => {
+                    resolved.insert(peer_id);
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    warn!("Dial task join failed: {err}");
+                }
+            }
+        }
+
+        resolved.into_iter().collect()
+    }
+
+    /// Fallback path for membership messages when PubSub delivery is unreliable.
+    pub async fn direct_publish_membership_message(
+        &self,
+        entity_id: &str,
+        payload: Vec<u8>,
+    ) -> Result<()> {
+        let mut last_err: Option<anyhow::Error> = None;
+        let mut success = false;
+
+        for stream_type in [GossipStreamType::Membership, GossipStreamType::Bulk] {
+            match self
+                .direct_publish_to_peers(entity_id, payload.clone(), stream_type)
+                .await
+            {
+                Ok(()) => success = true,
+                Err(err) => last_err = Some(err),
+            }
+        }
+
+        if success {
+            Ok(())
+        } else {
+            Err(last_err.unwrap_or_else(|| anyhow::anyhow!("direct publish failed")))
+        }
     }
 
     /// Fallback path for member updates when PubSub delivery is unreliable.
@@ -986,8 +1454,42 @@ impl GossipContext {
         entity_id: &str,
         payload: Vec<u8>,
     ) -> Result<()> {
-        self.direct_publish_to_peers(entity_id, payload, GossipStreamType::Bulk)
+        self.direct_publish_membership_message(entity_id, payload)
             .await
+    }
+
+    /// Send a membership message directly to a specific peer.
+    pub async fn direct_send_membership_to_peer(
+        &self,
+        entity_id: &str,
+        peer_id: PeerId,
+        payload: Vec<u8>,
+    ) -> Result<()> {
+        let envelope = DirectEntityEnvelope {
+            entity_id: entity_id.to_string(),
+            payload,
+        };
+        let bytes =
+            serde_json::to_vec(&envelope).context("Failed to serialize direct entity envelope")?;
+        let mut last_err: Option<anyhow::Error> = None;
+        let mut success = false;
+
+        for stream_type in [GossipStreamType::Membership, GossipStreamType::Bulk] {
+            match self
+                .transport
+                .send_to_peer(peer_id, stream_type, Bytes::from(bytes.clone()))
+                .await
+            {
+                Ok(()) => success = true,
+                Err(err) => last_err = Some(err),
+            }
+        }
+
+        if success {
+            Ok(())
+        } else {
+            Err(last_err.unwrap_or_else(|| anyhow::anyhow!("direct send failed")))
+        }
     }
 
     // ========================================================================
@@ -1058,10 +1560,19 @@ impl GossipContext {
         &self,
         four_words: &str,
     ) -> Result<crate::gossip::discovery::ContactDiscoveryResult> {
-        self.discovery
+        let mut result = self
+            .discovery
             .find_contact_with_hints(four_words)
             .await
-            .context("Contact not found via FOAF or presence")
+            .context("Contact not found via FOAF or presence")?;
+
+        if result.addr_hints.is_empty() {
+            if let Some(addr) = self.get_contact_endpoint(four_words).await {
+                result.addr_hints.push(addr.to_string());
+            }
+        }
+
+        Ok(result)
     }
 
     /// Add a known contact to local cache
@@ -1471,7 +1982,7 @@ impl GossipContext {
         let topic_id = TopicId::from_entity(&dm_topic_str);
 
         // Publish via pubsub
-        let pubsub = self.pubsub.write().await;
+        let pubsub = self.pubsub.read().await;
         pubsub.publish(topic_id, message.into()).await?;
 
         debug!("Published DM to {}", recipient_four_words);

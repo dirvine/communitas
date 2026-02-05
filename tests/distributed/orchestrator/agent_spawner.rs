@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::config::{ExpectedResult, NodeConfig, TestContext, TestStep};
@@ -94,7 +94,7 @@ impl AgentSpawner {
 
             if step.tool == "unlock_actor" {
                 info!(
-                    "  Step {}: unlock_actor to refresh lease for {} on {}",
+                    "  Step {}: unlock_actor skipped (vaults no longer locked) for {} on {}",
                     i + 1,
                     actor,
                     node.name
@@ -112,10 +112,12 @@ impl AgentSpawner {
                 );
                 self.ensure_network_started(actor, node, &mcp_client)
                     .await
-                    .with_context(|| {
-                        format!(
-                            "Failed to start networking for actor {} on {}",
-                            actor, node.name
+                    .map_err(|e| {
+                        anyhow!(
+                            "Failed to start networking for actor {} on {}: {}",
+                            actor,
+                            node.name,
+                            e
                         )
                     })?;
                 continue;
@@ -138,10 +140,6 @@ impl AgentSpawner {
                 continue;
             }
 
-            if Self::requires_unlock(&step.tool) {
-                self.ensure_unlocked(actor, node, &mcp_client).await?;
-            }
-
             // Substitute variables in params (lock briefly to read)
             let params: HashMap<String, serde_json::Value> = {
                 let ctx = context.lock().await;
@@ -155,25 +153,29 @@ impl AgentSpawner {
             let result = match mcp_client.call_tool(&step.tool, &params).await {
                 Ok(result) => result,
                 Err(err) => {
-                    if err.to_string().contains("unlock required") {
-                        self.log_unlock_event(
-                            actor,
-                            &node.name,
-                            "unlock_retry",
-                            format!("lease expired while calling {}", step.tool),
-                            None,
-                        )
-                        .await;
-                        self.ensure_unlocked(actor, node, &mcp_client).await?;
-                        mcp_client.call_tool(&step.tool, &params).await?
-                    } else {
-                        return Err(err);
-                    }
+                    error!(
+                        "  Step {} failed for {} on {}: tool={} params={} error={}",
+                        i + 1,
+                        actor,
+                        node.name,
+                        step.tool,
+                        serde_json::Value::Object(
+                            params.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+                        ),
+                        err
+                    );
+                    return Err(err);
                 }
             };
 
             // Verify expectations
-            self.verify_expectations(&step.expect, &result)?;
+            self.verify_expectations(&step.expect, &result)
+                .with_context(|| {
+                    format!(
+                        "Expectation failed for {} on {} (tool: {})",
+                        actor, node.name, step.tool
+                    )
+                })?;
 
             // Store variables if specified
             if let Some(store) = &step.store {
@@ -188,53 +190,26 @@ impl AgentSpawner {
             }
 
             debug!("  Step {} completed successfully", i + 1);
-
-            if Self::tool_resets_unlock(&step.tool) {
-                self.invalidate_unlock(actor, &node.name).await;
-            }
         }
 
         info!("All steps completed for {} on {}", actor, node.name);
         Ok(())
     }
 
-    fn requires_unlock(tool: &str) -> bool {
-        // Align with server-side UNLOCK_EXEMPT_TOOLS in communitas-mcp/src/auth.rs
-        !matches!(
-            tool,
-            "health_check"
-                | "create_vault"
-                | "import_vault"
-                | "list_vaults"
-                | "authenticate"
-                | "authenticate_token"
-                | "get_session"
-                | "logout"
-                | "create_delegate_token"
-                | "create_unlock_grant"
-                | "get_unlock_status"
-                | "core_status"
-                | "network_status"
-        )
-    }
-
-    fn tool_resets_unlock(tool: &str) -> bool {
-        matches!(
-            tool,
-            "logout" | "authenticate" | "authenticate_token" | "create_vault" | "import_vault"
-        )
-    }
-
-    async fn invalidate_unlock(&self, actor: &str, node: &str) {
-        let mut cache = self.unlock_cache.lock().await;
-        if cache.remove(actor).is_some() {
-            info!("Cleared unlock lease cache for {}", actor);
-            self.log_unlock_event(actor, node, "cache_invalidated", "lease reset", None)
-                .await;
-        }
-    }
-
     async fn ensure_unlocked(
+        &self,
+        actor: &str,
+        node: &NodeConfig,
+        client: &McpClient,
+    ) -> Result<()> {
+        let _ = (actor, node, client);
+        // Vaults are now unencrypted/unlocked by default.
+        // Keep this as a no-op to preserve scenario compatibility.
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    async fn ensure_unlocked_with_lease(
         &self,
         actor: &str,
         node: &NodeConfig,
@@ -355,38 +330,77 @@ impl AgentSpawner {
             }
         }
 
-        let mut params = HashMap::new();
-        params.insert("preferred_port".to_string(), serde_json::json!(0));
+        let params = HashMap::new();
         let result = client
             .call_tool("network_start", &params)
             .await
             .context("network_start RPC failed")?;
 
-        if let Some(parsed) =
-            extract_from_mcp_response(&result, "success").and_then(|v| v.as_bool())
-        {
-            if parsed {
-                self.log_unlock_event(
-                    actor,
-                    &node.name,
-                    "network_started",
-                    "network_start succeeded",
-                    None,
-                )
-                .await;
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                return Ok(());
+        let raw_text = extract_mcp_text(&result).unwrap_or_default();
+        let mut start_ok = extract_from_mcp_response(&result, "success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        if !start_ok {
+            if let Some(status) = extract_from_mcp_response(&result, "status")
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+            {
+                if status.eq_ignore_ascii_case("success") {
+                    start_ok = true;
+                }
             }
         }
 
-        let err_msg = result
-            .get("content")
-            .and_then(|c| c.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|item| item.get("text"))
-            .and_then(|t| t.as_str())
-            .unwrap_or("unknown error");
+        if !start_ok && !raw_text.is_empty() {
+            let lower = raw_text.to_lowercase();
+            if lower.contains("networking started")
+                || lower.contains("already started")
+                || lower.contains("already running")
+            {
+                start_ok = true;
+            }
+        }
 
+        if start_ok {
+            self.log_unlock_event(
+                actor,
+                &node.name,
+                "network_started",
+                "network_start succeeded",
+                None,
+            )
+            .await;
+        }
+
+        // Poll for active state regardless; networking may take a moment to come up.
+        let mut active = false;
+        for _ in 0..10 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if let Ok(status) = client.call_tool("network_status", &HashMap::new()).await {
+                active = extract_from_mcp_response(&status, "is_active")
+                    .or_else(|| extract_from_mcp_response(&status, "active"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if active {
+                    break;
+                }
+            }
+        }
+
+        if active {
+            return Ok(());
+        }
+
+        let err_msg = if raw_text.is_empty() {
+            "unknown error".to_string()
+        } else {
+            raw_text
+        };
+
+        warn!(
+            "network_start failed for {} on {}: {}",
+            actor, node.name, err_msg
+        );
         Err(anyhow!("network_start failed: {}", err_msg))
     }
 
@@ -550,10 +564,14 @@ impl AgentSpawner {
             };
 
             if actual_status != expected_status {
+                let payload = Self::parse_payload(result)
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| result.to_string());
                 anyhow::bail!(
-                    "Expected status '{}', got '{}'",
+                    "Expected status '{}', got '{}'. payload={}",
                     expected_status,
-                    actual_status
+                    actual_status,
+                    payload
                 );
             }
         }
@@ -808,6 +826,16 @@ fn parse_mcp_content(result: &serde_json::Value) -> Option<serde_json::Value> {
         .and_then(|t| t.as_str())?;
 
     serde_json::from_str(text).ok()
+}
+
+fn extract_mcp_text(result: &serde_json::Value) -> Option<String> {
+    result
+        .get("content")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|item| item.get("text"))
+        .and_then(|t| t.as_str())
+        .map(|t| t.to_string())
 }
 
 /// Check if a JSON value contains another (for array/object containment checks)

@@ -27,18 +27,18 @@ saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.4.0"
 
-# Saorsa Gossip ecosystem - updated to 0.4.0
-saorsa-gossip-types = "0.4.0"
-saorsa-gossip-identity = "0.4.0"
-saorsa-gossip-crdt-sync = "0.4.0"
-saorsa-gossip-groups = "0.4.0"
-saorsa-gossip-presence = "0.4.0"
-saorsa-gossip-transport = "0.4.0"
-saorsa-gossip-membership = "0.4.0"
-saorsa-gossip-pubsub = "0.4.0"
-saorsa-gossip-coordinator = "0.4.0"
-saorsa-gossip-rendezvous = "0.4.0"
-saorsa-gossip-runtime = "0.4.0"
+# Saorsa Gossip ecosystem - updated to 0.4.5
+saorsa-gossip-types = "0.4.7"
+saorsa-gossip-identity = "0.4.7"
+saorsa-gossip-crdt-sync = "0.4.7"
+saorsa-gossip-groups = "0.4.7"
+saorsa-gossip-presence = "0.4.7"
+saorsa-gossip-transport = "0.4.7"
+saorsa-gossip-membership = "0.4.7"
+saorsa-gossip-pubsub = "0.4.7"
+saorsa-gossip-coordinator = "0.4.7"
+saorsa-gossip-rendezvous = "0.4.7"
+saorsa-gossip-runtime = "0.4.7"
 # Security: openh264-sys2 0.9.x requires rustc 1.88+, using 0.8.0 until CI upgrades
 openh264-sys2 = "0.8.0"
 
@@ -96,8 +96,8 @@ clap = "4"
 yrs = { version = "0.19", features = ["sync"] }
 
 # Canvas (Saorsa Canvas integration - ADR-021)
-# canvas-core: use git dependency for CI compatibility (local override in .cargo/config.toml for dev)
-canvas-core = { git = "https://github.com/saorsa-labs/saorsa-canvas.git", default-features = false, features = ["std"] }
+# Using crates.io version for publishing compatibility
+canvas-core = { version = "0.1.2", default-features = false, features = ["std"] }
 
 # Security patches for transitive dependencies
 
@@ -109,3 +109,17 @@ strip = true
 
 [profile.dev]
 opt-level = 0
+
+[patch.crates-io]
+saorsa-gossip-types = { path = "../saorsa-gossip/crates/types" }
+saorsa-gossip-identity = { path = "../saorsa-gossip/crates/identity" }
+saorsa-gossip-crdt-sync = { path = "../saorsa-gossip/crates/crdt-sync" }
+saorsa-gossip-groups = { path = "../saorsa-gossip/crates/groups" }
+saorsa-gossip-presence = { path = "../saorsa-gossip/crates/presence" }
+saorsa-gossip-transport = { path = "../saorsa-gossip/crates/transport" }
+saorsa-gossip-membership = { path = "../saorsa-gossip/crates/membership" }
+saorsa-gossip-pubsub = { path = "../saorsa-gossip/crates/pubsub" }
+saorsa-gossip-coordinator = { path = "../saorsa-gossip/crates/coordinator" }
+saorsa-gossip-rendezvous = { path = "../saorsa-gossip/crates/rendezvous" }
+saorsa-gossip-runtime = { path = "../saorsa-gossip/crates/runtime" }
+ant-quic = { path = "../ant-quic" }

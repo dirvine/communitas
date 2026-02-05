@@ -762,9 +762,7 @@ async fn handle_authenticate(state: &HttpServerState, args: Value) -> Result<Val
     let four_words_raw = args["four_words"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?;
-    let _password = args["password"]
-        .as_str()
-        .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?;
+    let _password = args["password"].as_str();
     let device_name = args["device_name"]
         .as_str()
         .unwrap_or("mcp-http-client")
@@ -821,9 +819,7 @@ async fn handle_create_vault(state: &HttpServerState, args: Value) -> Result<Val
     let four_words_raw = args["four_words"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?;
-    let _password = args["password"]
-        .as_str()
-        .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?;
+    let _password = args["password"].as_str();
     let display_name = args["display_name"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing display_name"))?

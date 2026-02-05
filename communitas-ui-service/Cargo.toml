@@ -6,15 +6,16 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+description = "UI service layer for Communitas - bridges core logic to GUI stacks"
 
 [dependencies]
 async-trait = { workspace = true }
 blake3 = { workspace = true }
 canvas-core = { workspace = true }
 chrono = { workspace = true }
-communitas-core = { package = "communitas-core", path = "../communitas-core" }
-communitas-kanban = { path = "../communitas-kanban" }
-communitas-ui-api = { path = "../communitas-ui-api" }
+communitas-core = { version = "0.8.4", package = "communitas-core", path = "../communitas-core" }
+communitas-kanban = { version = "0.8.4", path = "../communitas-kanban" }
+communitas-ui-api = { version = "0.8.4", path = "../communitas-ui-api" }
 dirs = "5.0"
 hex = { workspace = true }
 saorsa-webrtc-core = { workspace = true }

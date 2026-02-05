@@ -8,8 +8,6 @@ tools_covered:
   - health_check
   - core_status
   - create_vault
-  - authenticate
-  - authenticate_token
   - get_profile
   - create_entity
   - get_entity
@@ -112,7 +110,6 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "ocean-forest-moon-star"
-          password: "test-pass-alice"
           display_name: "Alice Anderson"
         expect:
           status: success
@@ -124,7 +121,6 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "river-mountain-sun-cloud"
-          password: "test-pass-bob"
           display_name: "Bob Builder"
         expect:
           status: success
@@ -136,23 +132,10 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "field-hill-fire-snow"
-          password: "test-pass-dave"
           display_name: "Dave Davis"
         expect:
           status: success
-
   - id: AUTH-006
-    name: "Re-authenticate Alice"
-    actors: [alice]
-    steps:
-      - tool: authenticate
-        params:
-          four_words: "ocean-forest-moon-star"
-          password: "test-pass-alice"
-        expect:
-          status: success
-
-  - id: AUTH-007
     name: "Get profile for Alice"
     actors: [alice]
     steps:

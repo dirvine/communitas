@@ -214,6 +214,7 @@ impl MessageSyncService {
             requester_peer_id: self.peer_id.clone(),
             vector_clock: local_clock,
             missing_message_ids: missing_ids,
+            request_id: chrono::Utc::now().timestamp_millis() as u64,
         })
     }
 

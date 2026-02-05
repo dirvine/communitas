@@ -27,9 +27,5 @@ behaviors:
   invites_members: true
   manages_permissions: true
 
-# Vault credentials (for test scenarios)
-vault:
-  password: "test-pass-alice"
-
 # Color for reports
 color: "#3B82F6"  # Blue

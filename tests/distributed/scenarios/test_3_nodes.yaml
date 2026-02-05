@@ -3,7 +3,7 @@
 
 name: "3-Node Basic Test"
 description: "Basic functionality test with 3 nodes (alice, bob, dave)"
-tools_covered: [health_check, core_status, create_vault, authenticate]
+tools_covered: [health_check, core_status, create_vault, get_profile]
 
 test_cases:
   - id: TEST-001
@@ -30,8 +30,10 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "ocean.forest.moon.star"
-          password: "test-pass-alice"
           display_name: "Alice Test"
+        expect:
+          status: success
+      - tool: get_profile
         expect:
           status: success
 
@@ -42,8 +44,10 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "river.mountain.sun.cloud"
-          password: "test-pass-bob"
           display_name: "Bob Test"
+        expect:
+          status: success
+      - tool: get_profile
         expect:
           status: success
 
@@ -54,8 +58,10 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "field.hill.fire.snow"
-          password: "test-pass-dave"
           display_name: "Dave Test"
+        expect:
+          status: success
+      - tool: get_profile
         expect:
           status: success
 
@@ -68,26 +74,9 @@ test_cases:
           status: success
 
   - id: TEST-007
-    name: "Re-authenticate Alice"
+    name: "Verify Alice is initialized"
     actors: [alice]
     steps:
-      - tool: authenticate
-        params:
-          four_words: "ocean.forest.moon.star"
-          password: "test-pass-alice"
+      - tool: core_status
         expect:
           status: success
-
-  # NOTE: Password validation not yet implemented - MCP accepts any password
-  # This test is skipped until vault-based authentication is complete
-  # - id: TEST-008
-  #   name: "Reject wrong password"
-  #   actors: [alice]
-  #   steps:
-  #     - tool: authenticate
-  #       params:
-  #         four_words: "ocean.forest.moon.star"
-  #         password: "wrong-password"
-  #       expect:
-  #         status: error
-  #         error_contains: "authentication failed"

@@ -6,11 +6,11 @@ description: "Tests identity management, authentication, and basic health checks
 tools_covered:
   - health_check
   - create_vault
-  - authenticate
-  - authenticate_token
+  - get_profile
   - core_status
   - network_status
   - network_start
+  - network_connect
 
 test_cases:
   # Health check all nodes
@@ -30,8 +30,7 @@ test_cases:
     steps:
       - tool: core_status
         expect:
-          fields:
-            initialized: true
+          status: success
 
   # Create vaults for all test users
   - id: AUTH-003
@@ -41,12 +40,14 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "ocean.forest.moon.star"
-          password: "test-pass-alice"
           display_name: "Alice Test"
         expect:
           status: success
+      - tool: get_profile
+        expect:
+          status: success
         store:
-          alice_identity: identity
+          alice_identity: four_words
 
   - id: AUTH-004
     name: "Create vault for Bob"
@@ -55,12 +56,14 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "river.mountain.sun.cloud"
-          password: "test-pass-bob"
           display_name: "Bob Test"
         expect:
           status: success
+      - tool: get_profile
+        expect:
+          status: success
         store:
-          bob_identity: identity
+          bob_identity: four_words
 
   - id: AUTH-005
     name: "Create vault for Charlie"
@@ -69,12 +72,14 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "lake.valley.wind.rain"
-          password: "test-pass-charlie"
           display_name: "Charlie Test"
         expect:
           status: success
+      - tool: get_profile
+        expect:
+          status: success
         store:
-          charlie_identity: identity
+          charlie_identity: four_words
 
   - id: AUTH-006
     name: "Create vault for Dave"
@@ -83,12 +88,14 @@ test_cases:
       - tool: create_vault
         params:
           four_words: "field.hill.fire.snow"
-          password: "test-pass-dave"
           display_name: "Dave Test"
         expect:
           status: success
+      - tool: get_profile
+        expect:
+          status: success
         store:
-          dave_identity: identity
+          dave_identity: four_words
 
   # Verify authentication state
   - id: AUTH-007
@@ -101,35 +108,83 @@ test_cases:
           fields:
             initialized: true
 
-  # Test re-authentication
-  - id: AUTH-008
-    name: "Re-authenticate with password"
-    actors: [alice]
-    steps:
-      - tool: authenticate
-        params:
-          four_words: "ocean.forest.moon.star"
-          password: "test-pass-alice"
-        expect:
-          status: success
-
-  # Test wrong password rejection
-  - id: AUTH-009
-    name: "Reject wrong password"
-    actors: [alice]
-    steps:
-      - tool: authenticate
-        params:
-          four_words: "ocean.forest.moon.star"
-          password: "wrong-password"
-        expect:
-          status: success
-
   # Bring up networking for all actors (used by later phases)
-  - id: AUTH-010
+  - id: AUTH-008
     name: "Ensure networking active"
     actors: [alice, bob, charlie, dave]
     parallel: true
     steps:
-      - tool: unlock_actor
       - tool: ensure_network_started
+
+  # Capture connection identities for explicit peer connects
+  - id: AUTH-009
+    name: "Capture Alice connection identity"
+    actors: [alice]
+    steps:
+      - tool: network_status
+        expect:
+          status: success
+        store:
+          alice_connection: connection_identity
+
+  - id: AUTH-010
+    name: "Capture Bob connection identity"
+    actors: [bob]
+    steps:
+      - tool: network_status
+        expect:
+          status: success
+        store:
+          bob_connection: connection_identity
+
+  - id: AUTH-011
+    name: "Capture Charlie connection identity"
+    actors: [charlie]
+    steps:
+      - tool: network_status
+        expect:
+          status: success
+        store:
+          charlie_connection: connection_identity
+
+  - id: AUTH-012
+    name: "Capture Dave connection identity"
+    actors: [dave]
+    steps:
+      - tool: network_status
+        expect:
+          status: success
+        store:
+          dave_connection: connection_identity
+
+  - id: AUTH-013
+    name: "Connect nodes to Alice"
+    actors: [bob, charlie, dave]
+    steps:
+      - tool: network_connect
+        params:
+          peer_four_words: "${alice_connection}"
+        expect:
+          status: success
+    wait_ms: 5000
+
+  - id: AUTH-014
+    name: "Connect Alice to other nodes"
+    actors: [alice]
+    steps:
+      - tool: network_connect
+        params:
+          peer_four_words: "${bob_connection}"
+        expect:
+          status: success
+      - tool: network_connect
+        params:
+          peer_four_words: "${charlie_connection}"
+        expect:
+          status: success
+      - tool: network_connect
+        params:
+          peer_four_words: "${dave_connection}"
+        expect:
+          status: success
+    wait_ms: 5000

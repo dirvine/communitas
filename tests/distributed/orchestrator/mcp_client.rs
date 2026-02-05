@@ -24,7 +24,7 @@ impl McpClient {
     /// Returns an error if the HTTP client cannot be built
     pub fn new(host: &str, port: u16) -> Result<Self> {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(120))
             .build()
             .context("Failed to build HTTP client")?;
 
@@ -149,17 +149,11 @@ impl McpClient {
         serde_json::from_value(result).context("Failed to parse node status")
     }
 
-    /// Create a vault with authentication
+    /// Create a vault (password-less)
     #[allow(dead_code)]
-    pub async fn create_vault(
-        &self,
-        four_words: &str,
-        password: &str,
-        display_name: &str,
-    ) -> Result<AuthResponse> {
+    pub async fn create_vault(&self, four_words: &str, display_name: &str) -> Result<AuthResponse> {
         let mut params = HashMap::new();
         params.insert("four_words".to_string(), serde_json::json!(four_words));
-        params.insert("password".to_string(), serde_json::json!(password));
         params.insert("display_name".to_string(), serde_json::json!(display_name));
 
         let result = self.call_tool("create_vault", &params).await?;
@@ -167,12 +161,11 @@ impl McpClient {
         serde_json::from_value(result).context("Failed to parse create_vault response")
     }
 
-    /// Authenticate with an existing vault
+    /// Authenticate with an existing vault (password-less)
     #[allow(dead_code)]
-    pub async fn authenticate(&self, four_words: &str, password: &str) -> Result<AuthResponse> {
+    pub async fn authenticate(&self, four_words: &str) -> Result<AuthResponse> {
         let mut params = HashMap::new();
         params.insert("four_words".to_string(), serde_json::json!(four_words));
-        params.insert("password".to_string(), serde_json::json!(password));
 
         let result = self.call_tool("authenticate", &params).await?;
 

@@ -23,6 +23,9 @@ LOCAL_CLUSTER_DIR="$PROJECT_ROOT/.local-cluster"
 LOCAL_CLUSTER_STARTED=false
 BOOTSTRAP_OVERRIDE=""
 NETWORK_BASE_PORT=4100
+LOCAL_CLUSTER_INCLUDE_LOCAL_BOOTSTRAP="${LOCAL_CLUSTER_INCLUDE_LOCAL_BOOTSTRAP:-1}"
+LOCAL_CLUSTER_INCLUDE_REMOTE_BOOTSTRAP="${LOCAL_CLUSTER_INCLUDE_REMOTE_BOOTSTRAP:-0}"
+LOCAL_CLUSTER_BIND_IP="${LOCAL_CLUSTER_BIND_IP:-}"
 
 # Colors
 RED='\033[0;31m'
@@ -35,6 +38,51 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+detect_local_ip() {
+    if [[ -n "$LOCAL_CLUSTER_BIND_IP" ]]; then
+        echo "$LOCAL_CLUSTER_BIND_IP"
+        return 0
+    fi
+
+    if [[ "${LOCAL_CLUSTER_FORCE_LOOPBACK:-0}" =~ ^(1|true|yes)$ ]] || \
+       [[ "${ANT_QUIC_ALLOW_LOOPBACK:-0}" =~ ^(1|true|yes)$ ]]; then
+        echo "127.0.0.1"
+        return 0
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - <<'PY'
+import socket
+
+def pick_ip():
+    ip = None
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        ip = None
+    if ip and not ip.startswith("127."):
+        return ip
+    try:
+        host = socket.gethostname()
+        for info in socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_DGRAM):
+            cand = info[4][0]
+            if cand and not cand.startswith("127."):
+                return cand
+    except Exception:
+        pass
+    return ip or "127.0.0.1"
+
+print(pick_ip())
+PY
+        return 0
+    fi
+
+    echo "127.0.0.1"
+}
 
 ACTORS=(alice bob charlie dave)
 LOCAL_CLUSTER_PIDS=()
@@ -57,6 +105,11 @@ start_mcp_instance() {
     local log_file="$5"
     local network_port="$6"
     local bootstrap_nodes="$7"
+    local filtered_bootstrap="$bootstrap_nodes"
+
+    if [[ -n "$bootstrap_nodes" ]]; then
+        filtered_bootstrap=$(echo "$bootstrap_nodes" | tr ',' '\n' | grep -v ":${network_port}$" | paste -sd , -)
+    fi
 
     local data_dir="$storage_root/data"
     local demo_dir="$storage_root/demo"
@@ -64,7 +117,20 @@ start_mcp_instance() {
 
     COMMUNITAS_DATA_DIR="$data_dir" \
     COMMUNITAS_PORT="$network_port" \
-    COMMUNITAS_BOOTSTRAP="$bootstrap_nodes" \
+    COMMUNITAS_BOOTSTRAP="$filtered_bootstrap" \
+    COMMUNITAS_NO_AUTONET=1 \
+    COMMUNITAS_NO_INTRODUCERS=0 \
+    COMMUNITAS_SKIP_FOAF=1 \
+    COMMUNITAS_SKIP_BOOT_ENTITIES=1 \
+    COMMUNITAS_DIRECT_ENTITY_BROADCAST="${COMMUNITAS_DIRECT_ENTITY_BROADCAST:-0}" \
+    COMMUNITAS_TRANSPORT_MAX_INFLIGHT="${COMMUNITAS_TRANSPORT_MAX_INFLIGHT:-64}" \
+    COMMUNITAS_TRANSPORT_SEND_TIMEOUT_SECS="${COMMUNITAS_TRANSPORT_SEND_TIMEOUT_SECS:-30}" \
+    COMMUNITAS_MESSAGE_SYNC_ON_READ_MS="${COMMUNITAS_MESSAGE_SYNC_ON_READ_MS:-5000}" \
+    COMMUNITAS_RELAX_MEMBER_REMOVAL="${COMMUNITAS_RELAX_MEMBER_REMOVAL:-0}" \
+    COMMUNITAS_LOG_TRANSPORT_RECEIVE="${COMMUNITAS_LOG_TRANSPORT_RECEIVE:-0}" \
+    COMMUNITAS_LOCAL_IP="$LOCAL_CLUSTER_BIND_IP" \
+    ANT_QUIC_ALLOW_LOOPBACK="${ANT_QUIC_ALLOW_LOOPBACK:-1}" \
+    RUST_LOG="${RUST_LOG:-info}" \
     "$MCP_BIN" --http --demo --listen "127.0.0.1:$port" \
         --storage-dir "$demo_dir" \
         --four-words "$four_words" \
@@ -92,24 +158,39 @@ start_local_cluster() {
     rm -rf "$LOCAL_CLUSTER_DIR"
     mkdir -p "$LOCAL_CLUSTER_DIR"
 
+    : "${ANT_QUIC_ALLOW_LOOPBACK:=1}"
+
+    LOCAL_CLUSTER_BIND_IP=$(detect_local_ip)
+    if [[ "$LOCAL_CLUSTER_BIND_IP" == 127.* ]]; then
+        if [[ "${ANT_QUIC_ALLOW_LOOPBACK:-0}" =~ ^(1|true|yes)$ ]]; then
+            log_info "Using loopback bind IP for cluster: $LOCAL_CLUSTER_BIND_IP (ANT_QUIC_ALLOW_LOOPBACK=1)"
+        else
+            log_warn "Local IP detected as loopback ($LOCAL_CLUSTER_BIND_IP). ant-quic will reject 127.0.0.0/8 candidates."
+        fi
+    else
+        log_info "Using local bind IP for cluster: $LOCAL_CLUSTER_BIND_IP"
+    fi
+
     local computed_bootstrap="$BOOTSTRAP_OVERRIDE"
     if [[ -z "$computed_bootstrap" ]]; then
         local bootstrap_nodes=()
-        if [[ "${LOCAL_CLUSTER_INCLUDE_LOCAL_BOOTSTRAP:-}" == "1" ]]; then
+        if [[ "$LOCAL_CLUSTER_INCLUDE_LOCAL_BOOTSTRAP" == "1" ]]; then
             for idx in "${!ACTORS[@]}"; do
-                bootstrap_nodes+=("127.0.0.1:$((NETWORK_BASE_PORT + idx * 2))")
+                bootstrap_nodes+=("${LOCAL_CLUSTER_BIND_IP}:$((NETWORK_BASE_PORT + idx * 2))")
             done
         fi
-        # Include remote saorsa nodes as additional introducers so local clusters can join the real network
-        local remote_bootstrap=(
-            "142.93.199.50:3040"   # saorsa-2 (NYC)
-            "147.182.234.192:3040" # saorsa-3 (SFO)
-            "65.21.157.229:3040"   # saorsa-6 (Helsinki)
-            "116.203.101.172:3040" # saorsa-7 (Nuremberg)
-            "149.28.156.231:3040"  # saorsa-8 (Singapore)
-            "45.77.176.184:3040"   # saorsa-9 (Tokyo)
-        )
-        bootstrap_nodes+=("${remote_bootstrap[@]}")
+        if [[ "$LOCAL_CLUSTER_INCLUDE_REMOTE_BOOTSTRAP" == "1" ]]; then
+            # Optional: include remote saorsa nodes as introducers
+            local remote_bootstrap=(
+                "142.93.199.50:3040"   # saorsa-2 (NYC)
+                "147.182.234.192:3040" # saorsa-3 (SFO)
+                "65.21.157.229:3040"   # saorsa-6 (Helsinki)
+                "116.203.101.172:3040" # saorsa-7 (Nuremberg)
+                "149.28.156.231:3040"  # saorsa-8 (Singapore)
+                "45.77.176.184:3040"   # saorsa-9 (Tokyo)
+            )
+            bootstrap_nodes+=("${remote_bootstrap[@]}")
+        fi
         computed_bootstrap=$(IFS=,; echo "${bootstrap_nodes[*]}")
     fi
     log_info "Bootstrap nodes: ${computed_bootstrap}"
@@ -171,7 +252,6 @@ trap cleanup EXIT
 ANTHROPIC_KEY="${ANTHROPIC_API_KEY:-${KIMI_API_KEY:-}}"
 MODEL="claude-3-haiku-20240307"
 API_BASE="${ANTHROPIC_BASE_URL:-${KIMI_API_BASE_URL:-https://api.anthropic.com/v1}}"
-UNLOCK_SCOPES="${UNLOCK_SCOPES:-full_access}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -185,10 +265,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --api-base)
             API_BASE="$2"
-            shift 2
-            ;;
-        --unlock-scopes)
-            UNLOCK_SCOPES="$2"
             shift 2
             ;;
         --output)
@@ -243,7 +319,6 @@ while [[ $# -gt 0 ]]; do
             echo "  --key KEY       Anthropic-compatible API key (default: \$ANTHROPIC_API_KEY or \$KIMI_API_KEY)"
             echo "  --model MODEL   Model to use (default: claude-3-haiku-20240307)"
             echo "  --api-base URL  Override API base URL (default: \$ANTHROPIC_BASE_URL / \$KIMI_API_BASE_URL or https://api.anthropic.com/v1)"
-            echo "  --unlock-scopes scopes  Comma-separated unlock scopes (default: full_access)"
             echo "  --output DIR    Report output directory"
             echo "  --local-only    Run all actors against a single local MCP instance (port 3041)"
             echo "  --local-cluster Run each actor against its own local MCP instance (ports start at 3041)"
@@ -375,6 +450,7 @@ if [[ "$START_LOCAL_SERVER" == true ]]; then
     # Start local MCP server
     log_info "Starting local MCP server on port $LOCAL_MCP_PORT..."
     cd "$PROJECT_ROOT"
+    COMMUNITAS_NO_AUTONET=1 \
     cargo run --release -p communitas-mcp -- \
         --http --demo --listen "127.0.0.1:$LOCAL_MCP_PORT" &
     LOCAL_MCP_PID=$!
@@ -426,7 +502,6 @@ echo ""
     --anthropic-key "$ANTHROPIC_KEY" \
     --model "$MODEL" \
     --api-base "$API_BASE" \
-    --unlock-scopes "$UNLOCK_SCOPES" \
     "$@"
 
 RESULT=$?

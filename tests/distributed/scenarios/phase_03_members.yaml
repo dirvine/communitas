@@ -13,9 +13,11 @@ test_cases:
   - id: MEM-001
     name: "Alice adds Bob as admin"
     actors: [alice]
+    wait_ms: 8000
     steps:
       - tool: add_member
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
           member_id: "${bob_identity}"
           role: "admin"
@@ -29,6 +31,7 @@ test_cases:
     steps:
       - tool: add_member
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
           member_id: "${charlie_identity}"
           role: "member"
@@ -42,6 +45,7 @@ test_cases:
     steps:
       - tool: add_member
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
           member_id: "${dave_identity}"
           role: "member"
@@ -55,13 +59,17 @@ test_cases:
     steps:
       - tool: list_members
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
         expect:
           status: success
           contains:
-            - role: "owner"
-            - role: "admin"
-            - role: "member"
+            - members:
+                - role: "owner"
+            - members:
+                - role: "admin"
+            - members:
+                - role: "member"
 
   # Bob (admin) can add members
   - id: MEM-005
@@ -70,6 +78,7 @@ test_cases:
     steps:
       - tool: list_members
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
         expect:
           status: success
@@ -81,6 +90,7 @@ test_cases:
     steps:
       - tool: remove_member
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
           member_id: "${bob_identity}"
         expect:
@@ -94,6 +104,7 @@ test_cases:
     steps:
       - tool: remove_member
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
           member_id: "${alice_identity}"
         expect:
@@ -107,6 +118,7 @@ test_cases:
     steps:
       - tool: remove_member
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
           member_id: "${charlie_identity}"
         expect:
@@ -119,6 +131,7 @@ test_cases:
     steps:
       - tool: add_member
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
           member_id: "${charlie_identity}"
           role: "member"
@@ -134,6 +147,7 @@ test_cases:
     steps:
       - tool: list_members
         params:
+          entity_type: "organisation"
           entity_id: "${org_id}"
         expect:
           status: success

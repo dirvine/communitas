@@ -31,6 +31,7 @@ test_cases:
       - tool: create_invite
         params:
           entity_id: "${secret_project_id}"
+          entity_type: "project"
           recipient_id: "${bob_identity}"
           role: "admin"
           message: "Join our secret project!"
@@ -47,6 +48,7 @@ test_cases:
       - tool: create_invite
         params:
           entity_id: "${secret_project_id}"
+          entity_type: "project"
           recipient_id: "${charlie_identity}"
           role: "member"
         expect:
@@ -62,6 +64,7 @@ test_cases:
       - tool: create_invite
         params:
           entity_id: "${secret_project_id}"
+          entity_type: "project"
           recipient_id: "${dave_identity}"
           role: "member"
         expect:
@@ -122,6 +125,7 @@ test_cases:
     steps:
       - tool: list_members
         params:
+          entity_type: "project"
           entity_id: "${secret_project_id}"
         expect:
           status: success
@@ -133,6 +137,7 @@ test_cases:
     steps:
       - tool: list_members
         params:
+          entity_type: "project"
           entity_id: "${secret_project_id}"
         expect:
           status: success

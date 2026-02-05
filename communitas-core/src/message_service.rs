@@ -20,7 +20,8 @@
 //! - Automatic conflict resolution
 
 use crate::crdt::{
-    CRDTMessage, EntityType, MessageContent, MissingRange, SyncResponse, sort_messages_causally,
+    CRDTMessage, EntityType, MessageContent, MissingRange, SyncRequest, SyncResponse,
+    sort_messages_causally,
 };
 use crate::message_sync::MessageSyncService;
 use serde::{Deserialize, Serialize};
@@ -109,6 +110,25 @@ impl MessageService {
             out_of_order: result.out_of_order,
             missing_ranges: result.missing_ranges.unwrap_or_default(),
         })
+    }
+
+    /// Build a sync request for an entity based on our local clock.
+    pub async fn request_sync(&self, entity_id: &str) -> MessageServiceResult<SyncRequest> {
+        self.message_sync
+            .request_sync(entity_id, "peer")
+            .await
+            .map_err(|e| MessageServiceError::SyncError(e.to_string()))
+    }
+
+    /// Handle a sync response by merging received messages and clocks.
+    pub async fn handle_sync_response(
+        &self,
+        response: SyncResponse,
+    ) -> MessageServiceResult<crate::message_sync::SyncResult> {
+        self.message_sync
+            .handle_sync_response(response)
+            .await
+            .map_err(|e| MessageServiceError::SyncError(e.to_string()))
     }
 
     /// Get all messages for an entity

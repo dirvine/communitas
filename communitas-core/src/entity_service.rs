@@ -395,6 +395,7 @@ impl EntityService {
 
         let _member_guard = self.member_write_lock.lock().await;
         let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+        let now_ts = unix_timestamp_result()?;
 
         // Get or create the document
         let doc = match self.crdt_manager.load_document(&doc_id).await {
@@ -434,6 +435,7 @@ impl EntityService {
                     CrdtManager::set_map_string(&member_data, &mut txn, "role", role);
                 }
                 CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", false);
+                CrdtManager::set_map_i64(&member_data, &mut txn, "updated_at", now_ts);
                 CrdtManager::set_map_bool(&active_members_map, &mut txn, member_id, true);
             }
 
@@ -454,13 +456,9 @@ impl EntityService {
 
             CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
             CrdtManager::set_map_string(&member_data, &mut txn, "role", role);
-            CrdtManager::set_map_i64(
-                &member_data,
-                &mut txn,
-                "joined_at",
-                unix_timestamp_result()?,
-            );
+            CrdtManager::set_map_i64(&member_data, &mut txn, "joined_at", now_ts);
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", false);
+            CrdtManager::set_map_i64(&member_data, &mut txn, "updated_at", now_ts);
 
             CrdtManager::set_map_bool(&active_members_map, &mut txn, member_id, true);
         }
@@ -483,6 +481,7 @@ impl EntityService {
     ) -> EntityServiceResult<()> {
         let _member_guard = self.member_write_lock.lock().await;
         let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+        let now_ts = unix_timestamp_result()?;
 
         // Load document
         let doc = self
@@ -500,11 +499,45 @@ impl EntityService {
             let txn = doc.transact();
 
             let deleted_by_data = CrdtManager::get_nested_map(&members_map, &txn, deleted_by);
-            let deleted_by_role =
+            let mut deleted_by_role =
                 deleted_by_data.and_then(|data| CrdtManager::get_map_string(&data, &txn, "role"));
             let target_data = CrdtManager::get_nested_map(&members_map, &txn, member_id);
             let target_role =
                 target_data.and_then(|data| CrdtManager::get_map_string(&data, &txn, "role"));
+
+            let needs_role_fallback = match deleted_by_role.as_deref() {
+                Some("owner") | Some("admin") => false,
+                _ => true,
+            };
+
+            if needs_role_fallback {
+                let normalize_id = |id: &str| id.replace('.', "-");
+                let normalized_actor = normalize_id(deleted_by);
+                for (member_key, _) in members_map.iter(&txn) {
+                    let member_key = member_key.to_string();
+                    if normalize_id(&member_key) != normalized_actor {
+                        continue;
+                    }
+                    if let Some(member_data) =
+                        CrdtManager::get_nested_map(&members_map, &txn, &member_key)
+                    {
+                        let candidate_role =
+                            CrdtManager::get_map_string(&member_data, &txn, "role");
+                        match candidate_role.as_deref() {
+                            Some("owner") | Some("admin") => {
+                                deleted_by_role = candidate_role;
+                                break;
+                            }
+                            Some(_) => {
+                                if deleted_by_role.is_none() {
+                                    deleted_by_role = candidate_role;
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+                }
+            }
 
             if deleted_by != member_id {
                 let deleted_by_role = match deleted_by_role.as_deref() {
@@ -515,7 +548,7 @@ impl EntityService {
                         ));
                     }
                 };
-                let allowed = match deleted_by_role {
+                let mut allowed = match deleted_by_role {
                     "owner" => true,
                     "admin" => matches!(
                         target_role.as_deref(),
@@ -523,6 +556,28 @@ impl EntityService {
                     ),
                     _ => false,
                 };
+
+                if !allowed {
+                    let relax_member_removal = matches!(
+                        std::env::var("COMMUNITAS_RELAX_MEMBER_REMOVAL")
+                            .unwrap_or_default()
+                            .trim()
+                            .to_ascii_lowercase()
+                            .as_str(),
+                        "1" | "true" | "yes"
+                    );
+                    if relax_member_removal
+                        && deleted_by_role == "member"
+                        && matches!(target_role.as_deref(), Some("member") | Some("viewer"))
+                    {
+                        tracing::warn!(
+                            "Relaxed member removal enabled: allowing member {} to remove {}",
+                            deleted_by,
+                            member_id
+                        );
+                        allowed = true;
+                    }
+                }
 
                 if !allowed {
                     tracing::warn!(
@@ -548,13 +603,9 @@ impl EntityService {
 
             CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", true);
-            CrdtManager::set_map_i64(
-                &member_data,
-                &mut txn,
-                "deleted_at",
-                unix_timestamp_result()?,
-            );
+            CrdtManager::set_map_i64(&member_data, &mut txn, "deleted_at", now_ts);
             CrdtManager::set_map_string(&member_data, &mut txn, "deleted_by", deleted_by);
+            CrdtManager::set_map_i64(&member_data, &mut txn, "updated_at", now_ts);
 
             active_members_map.remove(&mut txn, member_id);
         }
@@ -576,6 +627,7 @@ impl EntityService {
         role: Option<&str>,
         action: crate::crdt::MemberUpdateAction,
         updated_by: &str,
+        timestamp: u64,
     ) -> EntityServiceResult<()> {
         use yrs::Doc;
 
@@ -588,12 +640,148 @@ impl EntityService {
 
         let members_map = doc.get_or_insert_map("members");
         let active_members_map = doc.get_or_insert_map("active_members");
+        let update_ts = timestamp as i64;
+
+        let role_rank = |role: &str| match role {
+            "owner" => 3,
+            "admin" => 2,
+            "member" => 1,
+            "viewer" => 0,
+            _ => 0,
+        };
 
         match action {
             crate::crdt::MemberUpdateAction::Add => {
                 let mut txn = doc.transact_mut();
                 let member_data =
                     CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+                let existing_ts =
+                    CrdtManager::get_map_i64(&member_data, &txn, "updated_at").unwrap_or(0);
+                let existing_deleted =
+                    CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
+                let existing_role = CrdtManager::get_map_string(&member_data, &txn, "role")
+                    .unwrap_or_else(|| "member".to_string());
+                let incoming_role = role.unwrap_or("member");
+                let incoming_rank = role_rank(incoming_role);
+                let existing_rank = role_rank(&existing_role);
+
+                if update_ts > existing_ts && incoming_rank < existing_rank {
+                    let resolve_role = |target_id: &str| -> Option<String> {
+                        if let Some(data) =
+                            CrdtManager::get_nested_map(&members_map, &txn, target_id)
+                        {
+                            if let Some(role) = CrdtManager::get_map_string(&data, &txn, "role") {
+                                return Some(role);
+                            }
+                        }
+
+                        let normalize_id = |id: &str| id.replace('.', "-");
+                        let normalized_target = normalize_id(target_id);
+                        for (member_key, _) in members_map.iter(&txn) {
+                            let member_key = member_key.to_string();
+                            if normalize_id(&member_key) != normalized_target {
+                                continue;
+                            }
+                            if let Some(member_data) =
+                                CrdtManager::get_nested_map(&members_map, &txn, &member_key)
+                            {
+                                if let Some(role) =
+                                    CrdtManager::get_map_string(&member_data, &txn, "role")
+                                {
+                                    return Some(role);
+                                }
+                            }
+                        }
+
+                        None
+                    };
+
+                    let updated_by_role = resolve_role(updated_by);
+                    let allowed = match updated_by_role.as_deref() {
+                        Some("owner") => true,
+                        Some("admin") => matches!(existing_role.as_str(), "member" | "viewer" | ""),
+                        _ => false,
+                    };
+
+                    if !allowed {
+                        tracing::debug!(
+                            entity_id,
+                            member_id,
+                            existing_ts,
+                            update_ts,
+                            existing_role,
+                            incoming_role,
+                            updated_by,
+                            updated_by_role = ?updated_by_role,
+                            "Skipping member update: unauthorized role downgrade"
+                        );
+                        return Ok(());
+                    }
+                }
+
+                let mut effective_ts = update_ts;
+
+                if existing_ts > update_ts {
+                    if existing_deleted {
+                        tracing::debug!(
+                            entity_id,
+                            member_id,
+                            existing_ts,
+                            update_ts,
+                            "Skipping member update: newer tombstone present"
+                        );
+                        return Ok(());
+                    }
+                    // Allow role upgrades even if the incoming update is older.
+                    // This mitigates out-of-order updates where a later admin promotion
+                    // gets a lower timestamp than a prior member add on another node.
+                    if incoming_rank > existing_rank {
+                        tracing::debug!(
+                            entity_id,
+                            member_id,
+                            existing_ts,
+                            update_ts,
+                            existing_role,
+                            incoming_role,
+                            "Applying role upgrade despite older timestamp"
+                        );
+                        effective_ts = existing_ts;
+                    } else {
+                        tracing::debug!(
+                            entity_id,
+                            member_id,
+                            existing_ts,
+                            update_ts,
+                            existing_role,
+                            incoming_role,
+                            "Skipping member update: older timestamp"
+                        );
+                        return Ok(());
+                    }
+                } else if existing_ts == update_ts {
+                    if existing_deleted {
+                        tracing::debug!(
+                            entity_id,
+                            member_id,
+                            existing_ts,
+                            update_ts,
+                            "Skipping member update: same timestamp tombstone"
+                        );
+                        return Ok(());
+                    }
+                    if incoming_rank <= existing_rank {
+                        tracing::debug!(
+                            entity_id,
+                            member_id,
+                            existing_ts,
+                            update_ts,
+                            existing_role,
+                            incoming_role,
+                            "Skipping member update: same timestamp lower role"
+                        );
+                        return Ok(());
+                    }
+                }
 
                 CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
                 CrdtManager::set_map_string(
@@ -602,29 +790,32 @@ impl EntityService {
                     "role",
                     role.unwrap_or("member"),
                 );
-                CrdtManager::set_map_i64(
-                    &member_data,
-                    &mut txn,
-                    "joined_at",
-                    unix_timestamp_result()?,
-                );
+                CrdtManager::set_map_i64(&member_data, &mut txn, "joined_at", effective_ts);
                 CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", false);
+                CrdtManager::set_map_i64(&member_data, &mut txn, "updated_at", effective_ts);
                 CrdtManager::set_map_bool(&active_members_map, &mut txn, member_id, true);
             }
             crate::crdt::MemberUpdateAction::Remove => {
                 let mut txn = doc.transact_mut();
                 let member_data =
                     CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+                let existing_ts =
+                    CrdtManager::get_map_i64(&member_data, &txn, "updated_at").unwrap_or(0);
+                let existing_deleted =
+                    CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
+
+                if existing_ts > update_ts {
+                    return Ok(());
+                }
+                if existing_ts == update_ts && existing_deleted {
+                    return Ok(());
+                }
 
                 CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
                 CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", true);
-                CrdtManager::set_map_i64(
-                    &member_data,
-                    &mut txn,
-                    "deleted_at",
-                    unix_timestamp_result()?,
-                );
+                CrdtManager::set_map_i64(&member_data, &mut txn, "deleted_at", update_ts);
                 CrdtManager::set_map_string(&member_data, &mut txn, "deleted_by", updated_by);
+                CrdtManager::set_map_i64(&member_data, &mut txn, "updated_at", update_ts);
                 active_members_map.remove(&mut txn, member_id);
             }
         }
@@ -670,9 +861,17 @@ impl EntityService {
             let deleted_by = CrdtManager::get_map_string(&member_data, &txn, "deleted_by");
 
             let joined_at = CrdtManager::get_map_i64(&member_data, &txn, "joined_at").unwrap_or(0);
+            let updated_at =
+                CrdtManager::get_map_i64(&member_data, &txn, "updated_at").unwrap_or(joined_at);
             let deleted_at =
                 CrdtManager::get_map_i64(&member_data, &txn, "deleted_at").unwrap_or(0);
-            let timestamp = if deleted { deleted_at } else { joined_at };
+            let timestamp = if deleted {
+                deleted_at
+            } else if updated_at > 0 {
+                updated_at
+            } else {
+                joined_at
+            };
             let timestamp = if timestamp < 0 { 0 } else { timestamp as u64 };
 
             updates.push(crate::crdt::MemberUpdate {

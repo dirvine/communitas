@@ -27,9 +27,5 @@ behaviors:
   invites_members: false
   manages_permissions: false
 
-# Vault credentials (for test scenarios)
-vault:
-  password: "test-pass-dave"
-
 # Color for reports
 color: "#8B5CF6"  # Purple

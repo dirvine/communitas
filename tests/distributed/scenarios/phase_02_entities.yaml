@@ -167,3 +167,34 @@ test_cases:
           created_by: "${org_creator}"
         expect:
           status: success
+
+  # Members join group/channel/project to subscribe to their topics
+  - id: ENT-012
+    name: "Members join group, channel, and project"
+    actors: [bob, charlie, dave]
+    parallel: true
+    steps:
+      - tool: join_entity
+        params:
+          id: "${group_id}"
+          name: "Engineering Team"
+          entity_type: "group"
+          created_by: "${org_creator}"
+        expect:
+          status: success
+      - tool: join_entity
+        params:
+          id: "${channel_id}"
+          name: "general"
+          entity_type: "channel"
+          created_by: "${org_creator}"
+        expect:
+          status: success
+      - tool: join_entity
+        params:
+          id: "${project_id}"
+          name: "Q1 Sprint"
+          entity_type: "project"
+          created_by: "${org_creator}"
+        expect:
+          status: success

@@ -139,6 +139,13 @@ impl std::fmt::Debug for CoreContext {
 }
 
 impl CoreContext {
+    fn join_timeout() -> std::time::Duration {
+        std::env::var("COMMUNITAS_JOIN_TIMEOUT_SECS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(std::time::Duration::from_secs)
+            .unwrap_or_else(|| std::time::Duration::from_secs(10))
+    }
     /// Initialize a new CoreContext from a four-word identity
     ///
     /// This creates a new profile with:
@@ -512,7 +519,7 @@ impl CoreContext {
             .map_err(|e| format!("Failed to execute boot sequence: {}", e))?;
 
         // Extract the gossip context after boot
-        let gossip = boot_sequence.into_context();
+        let gossip_arc = boot_sequence.into_context();
         info!("Gossip boot sequence completed successfully");
 
         // Build listen address
@@ -542,7 +549,6 @@ impl CoreContext {
 
         self.listen_address = Some(listen_addr);
         self.connection_identity = Some(connection_identity.clone());
-        let gossip_arc = Arc::new(gossip);
         self.gossip = Some(gossip_arc.clone());
 
         // Set up entity message handler for incoming gossip messages
@@ -612,7 +618,13 @@ impl CoreContext {
                             "Received chat message for entity {} from peer {:?}: {}",
                             entity_id, sender_peer_id, crdt_message.metadata.id
                         );
-                        Self::handle_chat_message(message_service, entity_id_clone, crdt_message);
+                        Self::handle_chat_message(
+                            message_service,
+                            gossip_clone,
+                            entity_id_clone,
+                            sender_peer_id,
+                            crdt_message,
+                        );
                     }
                     Ok(crate::crdt::GossipMessageType::SyncRequest(sync_request)) => {
                         info!(
@@ -647,6 +659,66 @@ impl CoreContext {
                                 crate::crdt::MemberUpdateAction::Remove => "remove",
                             }
                         );
+                        if update.member_id == update.updated_by {
+                            let gossip_for_contact = gossip_clone.clone();
+                            let member_id = update.member_id.clone();
+                            tokio::spawn(async move {
+                                let mut presence_hint: Option<String> = None;
+                                {
+                                    let presence_guard = gossip_for_contact.presence.read().await;
+                                    let groups = presence_guard.get_groups().await;
+                                    'groups: for topic_id in groups {
+                                        let presence_records =
+                                            presence_guard.get_group_presence(topic_id).await;
+                                        if let Some(record) = presence_records.get(&sender_peer_id)
+                                        {
+                                            if record.four_words.as_deref()
+                                                == Some(member_id.as_str())
+                                            {
+                                                presence_hint = record.addr_hints.first().cloned();
+                                                break 'groups;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if presence_hint.is_none() {
+                                    debug!(
+                                        "Skipping contact cache for {} (peer {:?}): presence did not confirm identity",
+                                        member_id, sender_peer_id
+                                    );
+                                    return;
+                                }
+
+                                if let Err(err) = gossip_for_contact
+                                    .add_contact(member_id.clone(), sender_peer_id)
+                                    .await
+                                {
+                                    warn!(
+                                        "Failed to cache contact {} for peer {:?}: {}",
+                                        member_id, sender_peer_id, err
+                                    );
+                                }
+
+                                if let Some(hint) = presence_hint {
+                                    let addr = hint
+                                        .parse::<SocketAddr>()
+                                        .ok()
+                                        .or_else(|| crate::identity::conn_from_words(&hint).ok());
+                                    if let Some(addr) = addr {
+                                        if let Err(err) = gossip_for_contact
+                                            .update_contact_endpoint(&member_id, &addr)
+                                            .await
+                                        {
+                                            warn!(
+                                                "Failed to update endpoint for contact {} (peer {:?}): {}",
+                                                member_id, sender_peer_id, err
+                                            );
+                                        }
+                                    }
+                                }
+                            });
+                        }
                         Self::handle_member_update(entity_service, update);
                     }
                     Ok(crate::crdt::GossipMessageType::MemberSyncRequest(request)) => {
@@ -654,7 +726,12 @@ impl CoreContext {
                             "Received member sync request for entity {} from peer {:?}",
                             entity_id, sender_peer_id
                         );
-                        Self::handle_member_sync_request(entity_service, gossip_clone, request);
+                        Self::handle_member_sync_request(
+                            entity_service,
+                            gossip_clone,
+                            sender_peer_id,
+                            request,
+                        );
                     }
                     Ok(crate::crdt::GossipMessageType::MemberSyncResponse(response)) => {
                         info!(
@@ -725,7 +802,9 @@ impl CoreContext {
                                 );
                                 Self::handle_chat_message(
                                     message_service,
+                                    gossip_clone,
                                     entity_id_clone,
+                                    sender_peer_id,
                                     crdt_message,
                                 );
                             }
@@ -751,7 +830,9 @@ impl CoreContext {
     /// Handle incoming chat message
     fn handle_chat_message(
         message_service: Arc<crate::MessageService>,
+        gossip: Arc<crate::gossip::GossipContext>,
         entity_id: String,
+        sender_peer_id: saorsa_gossip_types::PeerId,
         crdt_message: crate::crdt::CRDTMessage,
     ) {
         tokio::spawn(async move {
@@ -764,6 +845,14 @@ impl CoreContext {
                             "Message for entity {} was out of order, queued for later",
                             entity_id
                         );
+                        if let Err(err) =
+                            Self::publish_sync_request(message_service, gossip, &entity_id).await
+                        {
+                            warn!(
+                                "Failed to request sync for {} after out-of-order message from {:?}: {}",
+                                entity_id, sender_peer_id, err
+                            );
+                        }
                     }
                 }
                 Err(e) => {
@@ -776,6 +865,95 @@ impl CoreContext {
         });
     }
 
+    async fn publish_sync_request(
+        message_service: Arc<crate::MessageService>,
+        gossip: Arc<crate::gossip::GossipContext>,
+        entity_id: &str,
+    ) -> Result<(), String> {
+        let sync_request = message_service
+            .request_sync(entity_id)
+            .await
+            .map_err(|e| format!("Failed to build sync request for {}: {}", entity_id, e))?;
+
+        let entity_type = sync_request.entity_type.as_str();
+        match tokio::time::timeout(
+            Self::join_timeout(),
+            gossip.join_entity(entity_id, entity_type),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                warn!(
+                    "Failed to join entity {} before sync request: {}",
+                    entity_id, err
+                );
+            }
+            Err(_) => {
+                warn!("Timed out joining entity {} before sync request", entity_id);
+            }
+        }
+
+        let gossip_msg = crate::crdt::GossipMessageType::SyncRequest(sync_request);
+        let bytes = serde_json::to_vec(&gossip_msg)
+            .map_err(|e| format!("Failed to serialize sync request for {}: {}", entity_id, e))?;
+
+        let mut pubsub_ok = false;
+        let mut pubsub_err: Option<String> = None;
+        match tokio::time::timeout(
+            Self::join_timeout(),
+            gossip.publish_to_entity(entity_id, bytes.clone()),
+        )
+        .await
+        {
+            Ok(Ok(())) => {
+                pubsub_ok = true;
+            }
+            Ok(Err(err)) => {
+                pubsub_err = Some(format!(
+                    "Failed to publish sync request for {}: {}",
+                    entity_id, err
+                ));
+            }
+            Err(_) => {
+                pubsub_err = Some(format!(
+                    "Timed out publishing sync request for {}",
+                    entity_id
+                ));
+            }
+        }
+
+        let mut direct_ok = false;
+        let mut direct_err: Option<String> = None;
+        match tokio::time::timeout(
+            Self::join_timeout(),
+            gossip.direct_publish_membership_message(entity_id, bytes),
+        )
+        .await
+        {
+            Ok(Ok(())) => {
+                direct_ok = true;
+            }
+            Ok(Err(err)) => {
+                direct_err = Some(format!(
+                    "Direct sync request failed for {}: {}",
+                    entity_id, err
+                ));
+            }
+            Err(_) => {
+                direct_err = Some(format!("Timed out direct sync request for {}", entity_id));
+            }
+        }
+
+        if pubsub_ok || direct_ok {
+            Ok(())
+        } else if let Some(err) = pubsub_err.or(direct_err) {
+            Err(err)
+        } else {
+            Err(format!("Sync request failed for {}", entity_id))
+        }
+    }
+
     /// Handle sync request - respond with historical messages
     ///
     /// Also adds the requesting peer to our eager_peers for this entity's topic,
@@ -785,9 +963,30 @@ impl CoreContext {
         gossip: Arc<crate::gossip::GossipContext>,
         entity_id: String,
         sender_peer_id: saorsa_gossip_types::PeerId,
-        _sync_request: crate::crdt::SyncRequest,
+        sync_request: crate::crdt::SyncRequest,
     ) {
         tokio::spawn(async move {
+            match tokio::time::timeout(
+                Self::join_timeout(),
+                gossip.join_entity(&entity_id, sync_request.entity_type.as_str()),
+            )
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => {
+                    warn!(
+                        "Failed to join entity {} before sync response: {}",
+                        entity_id, err
+                    );
+                }
+                Err(_) => {
+                    warn!(
+                        "Timed out joining entity {} before sync response",
+                        entity_id
+                    );
+                }
+            }
+
             // Add the requesting peer to our eager_peers for this entity's topic
             // This ensures they receive any new messages we publish
             if let Err(e) = gossip
@@ -815,8 +1014,22 @@ impl CoreContext {
                     // Serialize and publish
                     match serde_json::to_vec(&gossip_msg) {
                         Ok(bytes) => {
-                            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
-                                warn!("Failed to send sync response for {}: {}", entity_id, e);
+                            if let Err(err) = gossip
+                                .direct_publish_entity_to_peer(
+                                    &entity_id,
+                                    sender_peer_id,
+                                    bytes.clone(),
+                                    saorsa_gossip_transport::GossipStreamType::Membership,
+                                )
+                                .await
+                            {
+                                warn!(
+                                    "Direct sync response for {} to peer {:?} failed: {}",
+                                    entity_id, sender_peer_id, err
+                                );
+                                if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
+                                    warn!("Failed to send sync response for {}: {}", entity_id, e);
+                                }
                             }
                         }
                         Err(e) => {
@@ -838,29 +1051,17 @@ impl CoreContext {
         sync_response: crate::crdt::SyncResponse,
     ) {
         tokio::spawn(async move {
-            let mut accepted = 0;
-            let mut rejected = 0;
-
-            for message in sync_response.messages {
-                match message_service.receive_message(message).await {
-                    Ok(result) => {
-                        if result.accepted {
-                            accepted += 1;
-                        } else {
-                            rejected += 1;
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Failed to process sync message for {}: {}", entity_id, e);
-                        rejected += 1;
-                    }
+            match message_service.handle_sync_response(sync_response).await {
+                Ok(result) => {
+                    info!(
+                        "Sync response processed for {}: {} accepted, {} rejected",
+                        entity_id, result.messages_added, result.messages_rejected
+                    );
+                }
+                Err(e) => {
+                    warn!("Failed to process sync response for {}: {}", entity_id, e);
                 }
             }
-
-            info!(
-                "Sync response processed for {}: {} accepted, {} rejected",
-                entity_id, accepted, rejected
-            );
         });
     }
 
@@ -883,6 +1084,7 @@ impl CoreContext {
                     update.role.as_deref(),
                     action.clone(),
                     &update.updated_by,
+                    update.timestamp,
                 )
                 .await;
 
@@ -904,9 +1106,20 @@ impl CoreContext {
     fn handle_member_sync_request(
         entity_service: Arc<crate::EntityService>,
         gossip: Arc<crate::gossip::GossipContext>,
+        sender_peer_id: saorsa_gossip_types::PeerId,
         request: crate::crdt::MemberSyncRequest,
     ) {
         tokio::spawn(async move {
+            if let Err(e) = gossip
+                .add_peer_to_entity_topic(&request.entity_id, sender_peer_id)
+                .await
+            {
+                warn!(
+                    "Failed to add peer {:?} to entity {} topic for member sync: {}",
+                    sender_peer_id, request.entity_id, e
+                );
+            }
+
             let updates = match entity_service
                 .get_member_updates(request.entity_type, &request.entity_id, &gossip.four_words)
                 .await
@@ -936,11 +1149,43 @@ impl CoreContext {
                 return;
             };
 
-            if let Err(e) = gossip.publish_to_entity(&request.entity_id, bytes).await {
+            let publish_result = gossip
+                .publish_to_entity(&request.entity_id, bytes.clone())
+                .await;
+            if let Err(e) = publish_result.as_ref() {
                 warn!(
                     "Failed to publish member sync response for {}: {}",
                     request.entity_id, e
                 );
+            }
+
+            let direct_enabled = matches!(
+                std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "1" | "true" | "yes"
+            );
+            if let Err(e) = gossip
+                .direct_send_membership_to_peer(&request.entity_id, sender_peer_id, bytes.clone())
+                .await
+            {
+                warn!(
+                    "Direct member sync response to peer {:?} failed for {}: {}",
+                    sender_peer_id, request.entity_id, e
+                );
+            }
+            if direct_enabled {
+                if let Err(e) = gossip
+                    .direct_publish_membership_message(&request.entity_id, bytes)
+                    .await
+                {
+                    warn!(
+                        "Direct member sync response failed for {}: {}",
+                        request.entity_id, e
+                    );
+                }
             }
         });
     }
@@ -952,6 +1197,15 @@ impl CoreContext {
     ) {
         tokio::spawn(async move {
             for update in response.updates {
+                tracing::debug!(
+                    entity_id = %update.entity_id,
+                    member_id = %update.member_id,
+                    role = ?update.role,
+                    action = ?update.action,
+                    updated_by = %update.updated_by,
+                    timestamp = update.timestamp,
+                    "Applying member sync update"
+                );
                 if let Err(e) = entity_service
                     .apply_member_update(
                         update.entity_type,
@@ -960,6 +1214,7 @@ impl CoreContext {
                         update.role.as_deref(),
                         update.action.clone(),
                         &update.updated_by,
+                        update.timestamp,
                     )
                     .await
                 {
@@ -1246,18 +1501,41 @@ impl CoreContext {
 
         if let Some(addr) = maybe_addr {
             info!("Dialing peer at {} ({})", addr, peer_four_words);
-            if let Err(e) = gossip.dial_address(addr).await {
-                warn!("Failed to dial peer {}: {}", addr, e);
-            } else {
-                info!("Successfully dialed peer {}", addr);
+            let mut last_err: Option<String> = None;
+            for attempt in 1..=3 {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    gossip.dial_address(addr),
+                )
+                .await
+                {
+                    Ok(Ok(())) => {
+                        info!("Successfully dialed peer {} on attempt {}", addr, attempt);
+                        return Ok(());
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Failed to dial peer {} (attempt {}): {}", addr, attempt, e);
+                        last_err = Some(e.to_string());
+                    }
+                    Err(_) => {
+                        warn!("Timed out dialing peer {} (attempt {})", addr, attempt);
+                        last_err = Some("dial timeout".to_string());
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(250 * attempt)).await;
             }
+
+            return Err(format!(
+                "Failed to dial peer {} after 3 attempts: {}",
+                addr,
+                last_err.unwrap_or_else(|| "unknown error".to_string())
+            ));
         } else {
             info!(
                 "Peer {} is not a direct address; relying on FOAF discovery",
                 peer_four_words
             );
         }
-
         // The gossip overlay will automatically discover and connect via FOAF
         info!(
             "Peer {} added. FOAF discovery will locate and connect automatically",
@@ -1330,8 +1608,10 @@ impl CoreContext {
             let message_bytes = serde_json::to_vec(&message)
                 .map_err(|e| format!("Failed to serialize message: {}", e))?;
 
-            // Publish to gossip
-            if let Err(e) = gossip.publish_to_entity(&channel_id, message_bytes).await {
+            let publish_result = gossip
+                .publish_to_entity(&channel_id, message_bytes.clone())
+                .await;
+            if let Err(e) = publish_result {
                 warn!("Failed to publish message to gossip: {}", e);
                 // Don't fail - message is stored locally, sync will catch up
             } else {
@@ -1339,6 +1619,13 @@ impl CoreContext {
                     "Message {} published to gossip for channel {}",
                     message_id, channel_id
                 );
+            }
+
+            if let Err(e) = gossip
+                .direct_publish_membership_message(&channel_id, message_bytes)
+                .await
+            {
+                warn!("Direct publish fallback failed for {}: {}", channel_id, e);
             }
         } else {
             info!(
@@ -1348,6 +1635,16 @@ impl CoreContext {
         }
 
         Ok(message_id)
+    }
+
+    /// Request a message sync for an entity if gossip is active.
+    pub async fn request_entity_message_sync(&self, entity_id: &str) -> Result<(), String> {
+        let gossip = match self.gossip.as_ref() {
+            Some(gossip) => gossip.clone(),
+            None => return Ok(()),
+        };
+
+        Self::publish_sync_request(self.message_service.clone(), gossip, entity_id).await
     }
 
     /// Get the ML-DSA-87 public key for this identity

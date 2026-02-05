@@ -113,8 +113,24 @@ impl SitesDispatcher {
         stream_type: GossipStreamType,
         data: Bytes,
     ) -> Result<()> {
+        let log_transport = matches!(
+            std::env::var("COMMUNITAS_LOG_TRANSPORT_RECEIVE")
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        );
         // Only handle Bulk stream
         if stream_type != GossipStreamType::Bulk {
+            if log_transport {
+                debug!(
+                    "Sites dispatcher ignored non-Bulk message: stream_type={:?} bytes={} from {:?}",
+                    stream_type,
+                    data.len(),
+                    peer_id
+                );
+            }
             return Ok(());
         }
 
@@ -123,6 +139,13 @@ impl SitesDispatcher {
             Ok(msg) => msg,
             Err(_) => {
                 // Not a Sites message - ignore
+                if log_transport {
+                    debug!(
+                        "Sites dispatcher ignored non-Sites Bulk message ({} bytes) from {:?}",
+                        data.len(),
+                        peer_id
+                    );
+                }
                 return Ok(());
             }
         };

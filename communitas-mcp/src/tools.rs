@@ -21,6 +21,7 @@ use communitas_ui_api::drive::DiskType as UiDiskType;
 use communitas_ui_service::UiServices;
 use communitas_ui_service::messaging::MessagingError;
 use serde_json::{Value, json};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
 /// Get list of all available tools
@@ -3010,9 +3011,9 @@ async fn execute_add_member(app: &CommunitasApp, args: Value) -> ToolCallResult 
 
     let cmd = Command::AddMember {
         entity_type,
-        entity_id,
-        member_id,
-        role,
+        entity_id: entity_id.clone(),
+        member_id: member_id.clone(),
+        role: role.clone(),
     };
 
     match app.execute(cmd).await {
@@ -3028,14 +3029,81 @@ async fn execute_remove_member(app: &CommunitasApp, args: Value) -> ToolCallResu
 
     let cmd = Command::RemoveMember {
         entity_type,
-        entity_id,
-        member_id,
+        entity_id: entity_id.clone(),
+        member_id: member_id.clone(),
     };
 
     match app.execute(cmd).await {
         Ok(_) => success_result("Member removed successfully"),
         Err(e) => error_result(&format!("Failed to remove member: {}", e.message)),
     }
+}
+
+async fn broadcast_member_update(
+    app: &CommunitasApp,
+    entity_id: &str,
+    entity_type: EntityType,
+    action: communitas_core::crdt::MemberUpdateAction,
+    member_id: &str,
+    role: Option<&str>,
+) -> Result<(), String> {
+    let ctx_lock = app.context();
+    let ctx = ctx_lock.read().await;
+
+    let Some(gossip) = ctx.gossip.as_ref() else {
+        return Ok(());
+    };
+
+    let updated_by = ctx.four_words.clone();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    tracing::info!(entity_id, member_id, role=?role, action=?action, "Broadcasting member update");
+
+    let update = communitas_core::crdt::MemberUpdate {
+        entity_id: entity_id.to_string(),
+        entity_type,
+        member_id: member_id.to_string(),
+        role: role.map(str::to_string),
+        updated_by,
+        action,
+        timestamp,
+    };
+
+    let gossip_msg = communitas_core::crdt::GossipMessageType::MemberUpdate(update);
+    let bytes = serde_json::to_vec(&gossip_msg).map_err(|e| format!("serialize update: {e}"))?;
+    let direct_bytes = bytes.clone();
+    {
+        let gossip = gossip.clone();
+        let entity_id = entity_id.to_string();
+        tokio::spawn(async move {
+            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
+                tracing::warn!(entity_id, "Publish member update failed (async): {e}");
+            }
+        });
+    }
+
+    {
+        let gossip = gossip.clone();
+        let entity_id = entity_id.to_string();
+        let member_id = member_id.to_string();
+        tokio::spawn(async move {
+            if let Err(err) = gossip
+                .direct_publish_member_update(&entity_id, direct_bytes)
+                .await
+            {
+                tracing::warn!(
+                    entity_id,
+                    member_id,
+                    "Direct member update fallback failed: {err}"
+                );
+            }
+        });
+    }
+
+    Ok(())
 }
 
 /// Send a message via UiServices MessagingService for MCP-Dioxus parity.
@@ -3204,38 +3272,56 @@ async fn execute_get_available_reactions(_app: &CommunitasApp, args: Value) -> T
 async fn execute_create_board(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = str_or_default(&args, "entity_id");
     let board_name = str_or_default(&args, "board_name");
-    let template = opt_str(&args, "description"); // Use description as template for now
+    let description = opt_str(&args, "description");
 
-    match services
-        .kanban()
-        .create_board(&entity_id, &board_name, template.as_deref())
-        .await
-    {
-        Ok(board) => json_result(&json!({
-            "success": true,
-            "message": "Kanban board created successfully",
-            "id": board.id
-        })),
-        Err(e) => error_result(&format!("Failed to create board: {e}")),
+    let cmd = Command::CreateKanbanBoard {
+        entity_id,
+        board_name,
+        description: description.map(|s| s.to_string()),
+    };
+
+    match services.kanban().app().execute(cmd).await {
+        Ok(events) => {
+            let board_id = events.iter().find_map(|e| match e {
+                Event::KanbanBoardCreated { board_id, .. } => Some(board_id.clone()),
+                _ => None,
+            });
+
+            json_result(&json!({
+                "success": true,
+                "message": "Kanban board created successfully",
+                "id": board_id
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to create board: {}", e.message)),
     }
 }
 
 async fn execute_create_column(services: &UiServices, args: Value) -> ToolCallResult {
     let board_id = str_or_default(&args, "board_id");
     let column_name = str_or_default(&args, "column_name");
-    let position = opt_u32(&args, "position").unwrap_or(0);
+    let position = opt_u32(&args, "position");
 
-    match services
-        .kanban()
-        .create_column(&board_id, &column_name, position)
-        .await
-    {
-        Ok(col) => json_result(&json!({
-            "success": true,
-            "message": "Kanban column created successfully",
-            "id": col.id
-        })),
-        Err(e) => error_result(&format!("Failed to create column: {e}")),
+    let cmd = Command::CreateKanbanColumn {
+        board_id,
+        column_name,
+        position,
+    };
+
+    match services.kanban().app().execute(cmd).await {
+        Ok(events) => {
+            let column_id = events.iter().find_map(|e| match e {
+                Event::KanbanColumnCreated { column_id, .. } => Some(column_id.clone()),
+                _ => None,
+            });
+
+            json_result(&json!({
+                "success": true,
+                "message": "Kanban column created successfully",
+                "id": column_id
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to create column: {}", e.message)),
     }
 }
 
@@ -3243,18 +3329,31 @@ async fn execute_create_card(services: &UiServices, args: Value) -> ToolCallResu
     let board_id = str_or_default(&args, "board_id");
     let column_id = str_or_default(&args, "column_id");
     let title = str_or_default(&args, "title");
+    let description = opt_str(&args, "description");
+    let assignee = opt_str(&args, "assignee");
 
-    match services
-        .kanban()
-        .create_card(&board_id, &column_id, &title)
-        .await
-    {
-        Ok(card) => json_result(&json!({
-            "success": true,
-            "message": "Card created successfully",
-            "id": card.id
-        })),
-        Err(e) => error_result(&format!("Failed to create card: {e}")),
+    let cmd = Command::CreateKanbanCard {
+        board_id,
+        column_id,
+        title,
+        description: description.map(|s| s.to_string()),
+        assignee: assignee.map(|s| s.to_string()),
+    };
+
+    match services.kanban().app().execute(cmd).await {
+        Ok(events) => {
+            let card_id = events.iter().find_map(|e| match e {
+                Event::KanbanCardCreated { card_id, .. } => Some(card_id.clone()),
+                _ => None,
+            });
+
+            json_result(&json!({
+                "success": true,
+                "message": "Card created successfully",
+                "id": card_id
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to create card: {}", e.message)),
     }
 }
 
@@ -3262,15 +3361,18 @@ async fn execute_move_card(services: &UiServices, args: Value) -> ToolCallResult
     let board_id = str_or_default(&args, "board_id");
     let card_id = str_or_default(&args, "card_id");
     let target_column_id = str_or_default(&args, "target_column_id");
-    let position = opt_u32(&args, "position").unwrap_or(0);
+    let position = opt_u32(&args, "position");
 
-    match services
-        .kanban()
-        .move_card(&board_id, &card_id, &target_column_id, position)
-        .await
-    {
-        Ok(()) => success_result("Card moved successfully"),
-        Err(e) => error_result(&format!("Failed to move card: {e}")),
+    let cmd = Command::MoveKanbanCard {
+        board_id,
+        card_id,
+        target_column_id,
+        position,
+    };
+
+    match services.kanban().app().execute(cmd).await {
+        Ok(_) => success_result("Card moved successfully"),
+        Err(e) => error_result(&format!("Failed to move card: {}", e.message)),
     }
 }
 
@@ -3448,8 +3550,85 @@ async fn execute_list_members(app: &CommunitasApp, args: Value) -> ToolCallResul
 /// Get messages via UiServices MessagingService for MCP-Dioxus parity.
 async fn execute_get_messages(services: &UiServices, args: Value) -> ToolCallResult {
     let thread_id = str_or_default(&args, "entity_id");
+    let entity_type_str = args["entity_type"].as_str().unwrap_or("channel");
     let limit = args["limit"].as_u64().unwrap_or(50).min(100) as usize;
     let before = args["before"].as_u64();
+
+    let sync_wait_ms = std::env::var("COMMUNITAS_MESSAGE_SYNC_ON_READ_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(300);
+    let (gossip, requester_peer_id, sync_request) = {
+        let messaging = services.messaging();
+        let app = messaging.app().clone();
+        let ctx_lock = app.context();
+        let ctx = ctx_lock.read().await;
+        let mut sync_request = ctx.message_service.request_sync(&thread_id).await.ok();
+        if let Some(request) = sync_request.as_mut() {
+            request.entity_type = parse_entity_type(entity_type_str).unwrap_or(EntityType::Channel);
+        }
+        (ctx.gossip.clone(), ctx.four_words.clone(), sync_request)
+    };
+
+    if let Some(gossip) = gossip {
+        let entity_type = parse_entity_type(entity_type_str).unwrap_or(EntityType::Channel);
+        let sync_request = sync_request.unwrap_or(communitas_core::crdt::SyncRequest {
+            entity_id: thread_id.clone(),
+            entity_type,
+            requester_peer_id,
+            vector_clock: communitas_core::crdt::VectorClock::new(),
+            missing_message_ids: None,
+            request_id: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        });
+
+        if let Ok(bytes) = serde_json::to_vec(
+            &communitas_core::crdt::GossipMessageType::SyncRequest(sync_request),
+        ) {
+            let thread_id_clone = thread_id.clone();
+            let entity_type_str = entity_type_str.to_string();
+            let gossip_clone = gossip.clone();
+            tokio::spawn(async move {
+                if let Err(err) = gossip_clone
+                    .join_entity(&thread_id_clone, &entity_type_str)
+                    .await
+                {
+                    tracing::warn!(
+                        "Failed to join entity topic {} for get_messages: {}",
+                        thread_id_clone,
+                        err
+                    );
+                }
+                let publish_result = gossip_clone
+                    .publish_to_entity(&thread_id_clone, bytes.clone())
+                    .await;
+                let direct_result = gossip_clone
+                    .direct_publish_membership_message(&thread_id_clone, bytes)
+                    .await;
+
+                if let Err(err) = publish_result {
+                    tracing::warn!(
+                        "Failed to request message sync via pubsub for {}: {}",
+                        thread_id_clone,
+                        err
+                    );
+                }
+                if let Err(err) = direct_result {
+                    tracing::warn!(
+                        "Failed to request message sync via direct send for {}: {}",
+                        thread_id_clone,
+                        err
+                    );
+                }
+            });
+        }
+
+        if sync_wait_ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(sync_wait_ms)).await;
+        }
+    }
 
     // Use MessagingService for parity with Dioxus UI
     match services
@@ -4560,6 +4739,7 @@ async fn execute_create_contact(app: &CommunitasApp, args: Value) -> ToolCallRes
                     return json_result(&json!({
                         "success": true,
                         "message": "Contact created",
+                        "id": contact_id,
                         "contact_id": contact_id,
                         "display_name": display_name,
                         "four_words": four_words
@@ -4990,20 +5170,19 @@ async fn execute_update_kanban_card(services: &UiServices, args: Value) -> ToolC
     let card_id = require_str!(args, "card_id");
     let title = opt_str(&args, "title");
     let description = opt_str(&args, "description");
+    let assignee = opt_str(&args, "assignee");
 
-    let updates = communitas_ui_service::kanban::CardUpdate {
-        title,
-        description,
-        ..Default::default()
+    let cmd = Command::UpdateKanbanCard {
+        board_id,
+        card_id,
+        title: title.map(|t| t.to_string()),
+        description: description.map(|d| d.to_string()),
+        assignee: assignee.map(|a| a.to_string()),
     };
 
-    match services
-        .kanban()
-        .update_card(&board_id, &card_id, updates)
-        .await
-    {
+    match services.kanban().app().execute(cmd).await {
         Ok(_) => success_result("Kanban card updated"),
-        Err(e) => error_result(&format!("Failed to update Kanban card: {e}")),
+        Err(e) => error_result(&format!("Failed to update Kanban card: {}", e.message)),
     }
 }
 
@@ -5023,21 +5202,25 @@ async fn execute_delete_kanban_card(services: &UiServices, args: Value) -> ToolC
 async fn execute_list_kanban_boards(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
 
-    match services.kanban().list_boards(&entity_id).await {
-        Ok(boards) => {
+    let app = services.kanban().app();
+    match app.query(Query::ListKanbanBoards { entity_id }).await {
+        Ok(QueryResponse::KanbanBoardList(boards)) => {
             let list: Vec<Value> = boards
                 .iter()
                 .map(|b| {
                     json!({
                         "id": b.id,
                         "entity_id": b.entity_id,
-                        "name": b.name
+                        "name": b.name,
+                        "description": b.description,
+                        "column_count": b.column_count
                     })
                 })
                 .collect();
             json_result(&json!({"boards": list, "count": list.len()}))
         }
-        Err(e) => error_result(&format!("Failed to list Kanban boards: {e}")),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to list Kanban boards: {}", e.message)),
     }
 }
 
@@ -5045,31 +5228,35 @@ async fn execute_get_kanban_card(services: &UiServices, args: Value) -> ToolCall
     let board_id = require_str!(args, "board_id");
     let card_id = require_str!(args, "card_id");
 
-    match services.kanban().get_card(&board_id, &card_id).await {
-        Ok(card) => json_result(&json!({
+    let app = services.kanban().app();
+    match app.query(Query::GetKanbanCard { board_id, card_id }).await {
+        Ok(QueryResponse::KanbanCard(card)) => json_result(&json!({
             "id": card.id,
+            "column_id": card.column_id,
             "title": card.title,
             "description": card.description,
-            "state": format!("{:?}", card.state)
+            "assignee": card.assignee,
+            "position": card.position
         })),
-        Err(e) => error_result(&format!("Failed to get Kanban card: {e}")),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get Kanban card: {}", e.message)),
     }
 }
 
 async fn execute_get_kanban_board(services: &UiServices, args: Value) -> ToolCallResult {
     let board_id = require_str!(args, "board_id");
 
-    match services.kanban().get_board(&board_id).await {
-        Ok(board) => json_result(&json!({
+    let app = services.kanban().app();
+    match app.query(Query::GetKanbanBoard { board_id }).await {
+        Ok(QueryResponse::KanbanBoard(board)) => json_result(&json!({
             "id": board.id,
+            "entity_id": board.entity_id,
             "name": board.name,
-            "columns": board.columns.iter().map(|c| json!({
-                "id": c.id,
-                "name": c.name,
-                "card_count": c.cards.len()
-            })).collect::<Vec<_>>()
+            "description": board.description,
+            "column_count": board.column_count
         })),
-        Err(e) => error_result(&format!("Failed to get Kanban board: {e}")),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get Kanban board: {}", e.message)),
     }
 }
 
@@ -5078,23 +5265,25 @@ async fn execute_get_kanban_board(services: &UiServices, args: Value) -> ToolCal
 async fn execute_list_kanban_columns(services: &UiServices, args: Value) -> ToolCallResult {
     let board_id = require_str!(args, "board_id");
 
-    // Get board view and extract columns
-    match services.kanban().get_board(&board_id).await {
-        Ok(board) => {
-            let list: Vec<Value> = board
-                .columns
+    let app = services.kanban().app();
+    match app.query(Query::ListKanbanColumns { board_id }).await {
+        Ok(QueryResponse::KanbanColumns(columns)) => {
+            let list: Vec<Value> = columns
                 .iter()
                 .map(|c| {
                     json!({
                         "id": c.id,
                         "name": c.name,
-                        "card_count": c.cards.len()
+                        "position": c.position,
+                        "color": c.color,
+                        "wip_limit": c.wip_limit
                     })
                 })
                 .collect();
             json_result(&json!({"columns": list, "count": list.len()}))
         }
-        Err(e) => error_result(&format!("Failed to list columns: {e}")),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to list columns: {}", e.message)),
     }
 }
 
@@ -5525,15 +5714,51 @@ async fn execute_join_entity(app: &CommunitasApp, args: Value) -> ToolCallResult
     {
         Ok(_entity) => {
             // Subscribe to the entity's gossip topic if available
-            if let Some(gossip) = ctx.gossip.as_ref()
-                && let Err(e) = gossip.join_entity(&id, &entity_type_str).await
-            {
-                tracing::warn!(
-                    "Failed to join entity topic for {} (may already be joined): {}",
-                    id,
-                    e
-                );
+            if let Some(gossip) = ctx.gossip.as_ref() {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(30),
+                    gossip.join_entity(&id, &entity_type_str),
+                )
+                .await
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => {
+                        tracing::warn!(
+                            "Failed to join entity topic for {} (may already be joined): {}",
+                            id,
+                            e
+                        );
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            "Timed out joining entity topic for {} during join_entity; retrying in background",
+                            id
+                        );
+                        let gossip = gossip.clone();
+                        let id = id.clone();
+                        let entity_type = entity_type_str.to_string();
+                        tokio::spawn(async move {
+                            if let Err(e) = gossip.join_entity(&id, &entity_type).await {
+                                tracing::warn!(
+                                    "Background join_entity retry failed for {}: {}",
+                                    id,
+                                    e
+                                );
+                            }
+                        });
+                    }
+                }
             }
+
+            let _ = broadcast_member_update(
+                app,
+                &id,
+                entity_type,
+                communitas_core::crdt::MemberUpdateAction::Add,
+                &joiner_four_words,
+                Some(&role),
+            )
+            .await;
 
             json_result(&json!({
                 "success": true,
@@ -5640,18 +5865,19 @@ async fn execute_update_kanban_board(services: &UiServices, args: Value) -> Tool
     let name = opt_str(&args, "name");
     let description = opt_str(&args, "description").map(Some);
 
-    // KanbanService has update_board method
-    match services
-        .kanban()
-        .update_board(&board_id, name.clone(), description)
-        .await
-    {
+    let cmd = Command::UpdateKanbanBoard {
+        board_id: board_id.clone(),
+        name: name.clone().map(|s| s.to_string()),
+        description,
+    };
+
+    match services.kanban().app().execute(cmd).await {
         Ok(_) => json_result(&json!({
             "success": true,
             "board_id": board_id,
             "name": name
         })),
-        Err(e) => error_result(&format!("Failed to update board: {e}")),
+        Err(e) => error_result(&format!("Failed to update board: {}", e.message)),
     }
 }
 
@@ -5659,13 +5885,14 @@ async fn execute_update_kanban_board(services: &UiServices, args: Value) -> Tool
 async fn execute_delete_kanban_board(services: &UiServices, args: Value) -> ToolCallResult {
     let board_id = require_str!(args, "board_id");
 
-    // KanbanService has delete_board method
-    match services.kanban().delete_board(&board_id).await {
+    let cmd = Command::DeleteKanbanBoard { board_id };
+
+    match services.kanban().app().execute(cmd).await {
         Ok(_) => json_result(&json!({
             "success": true,
             "message": "Board deleted"
         })),
-        Err(e) => error_result(&format!("Failed to delete board: {e}")),
+        Err(e) => error_result(&format!("Failed to delete board: {}", e.message)),
     }
 }
 
@@ -5677,54 +5904,35 @@ async fn execute_list_kanban_cards(services: &UiServices, args: Value) -> ToolCa
     let assignee_filter = opt_str(&args, "assignee_id");
     let tag_filter = opt_str(&args, "tag_id");
 
-    // Get board view and extract cards from all columns
-    match services.kanban().get_board(&board_id).await {
-        Ok(board_view) => {
-            let mut cards_json: Vec<Value> = Vec::new();
-
-            for column in &board_view.columns {
-                // Filter by column_id if specified
-                if let Some(ref cid) = column_id
-                    && &column.id != cid
-                {
-                    continue;
-                }
-
-                for card in &column.cards {
-                    // Apply optional filters
-                    if let Some(ref state) = state_filter {
-                        let card_state = format!("{:?}", card.state).to_lowercase();
-                        if !card_state.contains(&state.to_lowercase()) {
-                            continue;
-                        }
-                    }
-                    if let Some(ref assignee) = assignee_filter
-                        && !card.assignees.iter().any(|a| a == assignee)
-                    {
-                        continue;
-                    }
-                    if let Some(ref tag) = tag_filter
-                        && !card.tags.iter().any(|t| t.id == *tag || t.name == *tag)
-                    {
-                        continue;
-                    }
-
-                    cards_json.push(json!({
+    let app = services.kanban().app();
+    match app
+        .query(Query::ListKanbanCards {
+            board_id,
+            column_id,
+            state: state_filter,
+            assignee_id: assignee_filter,
+            tag_id: tag_filter,
+        })
+        .await
+    {
+        Ok(QueryResponse::KanbanCards(cards)) => {
+            let list: Vec<Value> = cards
+                .iter()
+                .map(|card| {
+                    json!({
                         "id": card.id,
-                        "column_id": column.id,
+                        "column_id": card.column_id,
                         "title": card.title,
                         "description": card.description,
-                        "position": card.position,
-                        "state": format!("{:?}", card.state),
-                        "assignees": card.assignees,
-                        "tags": card.tags
-                    }));
-                }
-            }
-
-            json_result(&json!({ "cards": cards_json }))
+                        "assignee": card.assignee,
+                        "position": card.position
+                    })
+                })
+                .collect();
+            json_result(&json!({ "cards": list, "count": list.len() }))
         }
-        Err(e) => error_result(&format!("Failed to list cards: {e}")),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to list cards: {}", e.message)),
     }
 }
 

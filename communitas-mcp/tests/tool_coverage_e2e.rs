@@ -68,7 +68,6 @@ mod pre_auth_tools {
                 "create_vault",
                 json!({
                     "four_words": "test.vault.word.one",
-                    "password": "test-password-123",
                     "display_name": "Test User"
                 }),
             )
@@ -88,8 +87,7 @@ mod pre_auth_tools {
             .call_tool(
                 "authenticate",
                 json!({
-                    "four_words": "test.auth.word.one",
-                    "password": "test-password"
+                    "four_words": "test.auth.word.one"
                 }),
             )
             .await;
@@ -124,8 +122,7 @@ mod pre_auth_tools {
             .call_tool(
                 "delete_vault",
                 json!({
-                    "four_words": "nonexistent.vault.word.one",
-                    "password": "test-password"
+                    "four_words": "nonexistent.vault.word.one"
                 }),
             )
             .await;
@@ -142,8 +139,7 @@ mod pre_auth_tools {
             .call_tool(
                 "import_vault",
                 json!({
-                    "backup_data": "dGVzdC1kYXRh",
-                    "password": "test-password"
+                    "backup_data": "dGVzdC1kYXRh"
                 }),
             )
             .await;
@@ -3938,33 +3934,7 @@ mod query_tools {
         result.assert_success();
     }
 
-    #[tokio::test]
-    async fn test_create_unlock_grant() {
-        let node = McpTestNode::start("test").await;
-        node.initialize().await;
-
-        let result = node
-            .call_tool(
-                "create_unlock_grant",
-                json!({
-                    "request_hash": "sha256:test-request",
-                    "scopes": ["read_messages"],
-                    "max_total_seconds": 0
-                }),
-            )
-            .await;
-
-        result.assert_success();
-    }
-
-    #[tokio::test]
-    async fn test_get_unlock_status() {
-        let node = McpTestNode::start("test").await;
-        node.initialize().await;
-
-        let result = node.call_tool("get_unlock_status", json!({})).await;
-        result.assert_success();
-    }
+    // Unlock grant tools removed (vaults are always unlocked in current flow)
 
     #[tokio::test]
     async fn test_workspace_init() {
@@ -4581,8 +4551,6 @@ const TESTABLE_TOOLS: &[&str] = &[
     "update_profile",
     "list_pending_invites",
     "create_delegate_token",
-    "create_unlock_grant",
-    "get_unlock_status",
     "workspace_init",
     "export_vault",
     "create_invite",

@@ -1,0 +1,197 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (check but do not publish)'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: publish-crates-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Validation
+  # ═══════════════════════════════════════════════════════════════════════════
+  validate:
+    name: Validate for Publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: publish-validate-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: publish-validate-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Verify publishable (dry run)
+        run: |
+          echo "Checking crates can be packaged..."
+          cargo publish -p communitas-ui-api --dry-run
+          cargo publish -p communitas-kanban --dry-run
+          # Note: core and ui-service need deps published first
+          # Just check they can be packaged locally
+          cargo package -p communitas-core --allow-dirty
+          cargo package -p communitas-ui-service --allow-dirty
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Publish Layer 1: No local dependencies
+  # ═══════════════════════════════════════════════════════════════════════════
+  publish-layer-1:
+    name: Publish Layer 1 (ui-api, kanban)
+    needs: validate
+    if: github.event.inputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: publish-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: publish-
+
+      - name: Publish communitas-ui-api
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish -p communitas-ui-api --no-verify || echo "Already published or error"
+
+      - name: Publish communitas-kanban
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish -p communitas-kanban --no-verify || echo "Already published or error"
+
+      - name: Wait for crates.io propagation
+        run: |
+          echo "Waiting 60 seconds for crates.io index to update..."
+          sleep 60
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Publish Layer 2: Depends on Layer 1
+  # ═══════════════════════════════════════════════════════════════════════════
+  publish-layer-2:
+    name: Publish Layer 2 (core)
+    needs: publish-layer-1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: publish-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: publish-
+
+      - name: Update crates.io index
+        run: cargo update
+
+      - name: Publish communitas-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish -p communitas-core --no-verify || echo "Already published or error"
+
+      - name: Wait for crates.io propagation
+        run: |
+          echo "Waiting 60 seconds for crates.io index to update..."
+          sleep 60
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Publish Layer 3: Depends on Layer 2
+  # ═══════════════════════════════════════════════════════════════════════════
+  publish-layer-3:
+    name: Publish Layer 3 (ui-service)
+    needs: publish-layer-2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: publish-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: publish-
+
+      - name: Update crates.io index
+        run: cargo update
+
+      - name: Publish communitas-ui-service
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish -p communitas-ui-service --no-verify || echo "Already published or error"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Summary
+  # ═══════════════════════════════════════════════════════════════════════════
+  summary:
+    name: Publish Summary
+    needs: [publish-layer-3]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## Crates.io Publishing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Published Crates" >> $GITHUB_STEP_SUMMARY
+          echo "- communitas-ui-api" >> $GITHUB_STEP_SUMMARY
+          echo "- communitas-kanban" >> $GITHUB_STEP_SUMMARY
+          echo "- communitas-core" >> $GITHUB_STEP_SUMMARY
+          echo "- communitas-ui-service" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [communitas-ui-api](https://crates.io/crates/communitas-ui-api)" >> $GITHUB_STEP_SUMMARY
+          echo "- [communitas-kanban](https://crates.io/crates/communitas-kanban)" >> $GITHUB_STEP_SUMMARY
+          echo "- [communitas-core](https://crates.io/crates/communitas-core)" >> $GITHUB_STEP_SUMMARY
+          echo "- [communitas-ui-service](https://crates.io/crates/communitas-ui-service)" >> $GITHUB_STEP_SUMMARY

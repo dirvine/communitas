@@ -13,17 +13,19 @@ test_cases:
     parallel: true
     steps:
       - actor: alice
-        tool: kanban_create_comment
+        tool: add_comment
         params:
+          board_id: "${board_id}"
           card_id: "${card1_id}"
-          text: "Alice's concurrent comment"
+          content: "Alice's concurrent comment"
         expect:
           status: success
       - actor: bob
-        tool: kanban_create_comment
+        tool: add_comment
         params:
+          board_id: "${board_id}"
           card_id: "${card1_id}"
-          text: "Bob's concurrent comment"
+          content: "Bob's concurrent comment"
         expect:
           status: success
 
@@ -33,8 +35,9 @@ test_cases:
     actors: [charlie]
     wait_ms: 5000
     steps:
-      - tool: kanban_list_comments
+      - tool: list_comments
         params:
+          board_id: "${board_id}"
           card_id: "${card1_id}"
         expect:
           status: success
@@ -61,6 +64,7 @@ test_cases:
         tool: send_message
         params:
           entity_id: "${channel_id}"
+          entity_type: "channel"
           text: "Alice message while Charlie offline"
         expect:
           status: success
@@ -68,6 +72,7 @@ test_cases:
         tool: send_message
         params:
           entity_id: "${channel_id}"
+          entity_type: "channel"
           text: "Bob message while Charlie offline"
         expect:
           status: success
@@ -76,6 +81,7 @@ test_cases:
   - id: SYNC-005
     name: "Charlie reconnects"
     actors: [charlie]
+    wait_ms: 20000
     steps:
       - tool: network_start
         expect:
@@ -85,11 +91,11 @@ test_cases:
   - id: SYNC-006
     name: "Charlie syncs missed messages"
     actors: [charlie]
-    wait_ms: 10000
     steps:
       - tool: get_messages
         params:
           entity_id: "${channel_id}"
+          entity_type: "channel"
         expect:
           status: success
           contains:
@@ -155,8 +161,10 @@ test_cases:
         expect:
           status: success
           contains:
-            - name: "Acme Corp"
-            - name: "Secret Project"
+            - entities:
+                - name: "Acme Corp"
+            - entities:
+                - name: "Secret Project"
 
   # Final connectivity check
   - id: SYNC-012

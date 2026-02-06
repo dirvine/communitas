@@ -135,7 +135,11 @@ fn MessageSkeletonItem(
     #[props(default = false)]
     align_right: bool,
 ) -> Element {
-    let align = if align_right { "flex-end" } else { "flex-start" };
+    let align = if align_right {
+        "flex-end"
+    } else {
+        "flex-start"
+    };
     let width = if align_right { "60%" } else { "70%" };
     rsx! {
         div {

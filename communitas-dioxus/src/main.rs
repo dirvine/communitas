@@ -25,6 +25,7 @@ use communitas_ui_service::{
 use dioxus::prelude::*;
 use dioxus_logger::tracing::Level;
 use futures::StreamExt;
+use hooks::CategorizedEntities;
 use native_dialog::{MessageDialog, MessageType};
 use onboarding::{TOUR_STEPS, TourOverlay, TourState, use_tour_state};
 use std::{
@@ -173,57 +174,6 @@ impl PartialEq for AuthState {
         self.phase == other.phase
             && self.error == other.error
             && self.pending_mnemonic == other.pending_mnemonic
-    }
-}
-
-/// Entities categorized by type in a single pass.
-///
-/// Avoids O(n*k) filtering where k is the number of categories.
-/// Instead, categorizes all entities in O(n) time.
-#[derive(Default, Clone, PartialEq)]
-struct CategorizedEntities {
-    organizations: Vec<UnifiedEntity>,
-    communities: Vec<UnifiedEntity>,
-    projects: Vec<UnifiedEntity>,
-    groups: Vec<UnifiedEntity>,
-    channels: Vec<UnifiedEntity>,
-    /// Groups with no parent (personal groups)
-    personal_groups: Vec<UnifiedEntity>,
-}
-
-impl CategorizedEntities {
-    /// Categorize entities from a slice in a single pass.
-    fn from_entities(entities: &[UnifiedEntity]) -> Self {
-        let mut result = Self::default();
-
-        for entity in entities {
-            match entity.entity_type {
-                UnifiedEntityType::Organization => {
-                    if entity.category == Some(OrganizationCategory::Community) {
-                        result.communities.push(entity.clone());
-                    } else {
-                        result.organizations.push(entity.clone());
-                    }
-                }
-                UnifiedEntityType::Project => {
-                    result.projects.push(entity.clone());
-                }
-                UnifiedEntityType::Group => {
-                    result.groups.push(entity.clone());
-                    if entity.parent_id.is_none() {
-                        result.personal_groups.push(entity.clone());
-                    }
-                }
-                UnifiedEntityType::Channel => {
-                    result.channels.push(entity.clone());
-                }
-                UnifiedEntityType::Person => {
-                    // Persons are handled separately via contacts
-                }
-            }
-        }
-
-        result
     }
 }
 
@@ -1160,29 +1110,32 @@ fn HomeOverview() -> Element {
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "Explorer".to_string());
 
-    // Single-pass entity categorization (O(n) instead of O(n*6))
-    let categorized = CategorizedEntities::from_entities(&snapshot.entities);
+    // Single-pass entity categorization (O(n) instead of O(n*6)) - memoized
+    let categorized = use_memo(move || {
+        let snapshot = directory();
+        CategorizedEntities::from_entities(&snapshot.entities)
+    });
 
     let stats = vec![
         StatItem {
             label: "Organizations",
-            value: categorized.organizations.len(),
+            value: categorized().organizations.len(),
         },
         StatItem {
             label: "Communities",
-            value: categorized.communities.len(),
+            value: categorized().communities.len(),
         },
         StatItem {
             label: "Projects",
-            value: categorized.projects.len(),
+            value: categorized().projects.len(),
         },
         StatItem {
             label: "Groups",
-            value: categorized.groups.len(),
+            value: categorized().groups.len(),
         },
         StatItem {
             label: "Channels",
-            value: categorized.channels.len(),
+            value: categorized().channels.len(),
         },
         StatItem {
             label: "Contacts",
@@ -1195,10 +1148,10 @@ fn HomeOverview() -> Element {
             WelcomeCard { display_name }
             StatsGrid { stats }
             SpacesSection {
-                personal: categorized.personal_groups,
-                communities: categorized.communities,
-                organizations: categorized.organizations,
-                projects: categorized.projects,
+                personal: categorized().personal_groups,
+                communities: categorized().communities,
+                organizations: categorized().organizations,
+                projects: categorized().projects,
             }
         }
     }

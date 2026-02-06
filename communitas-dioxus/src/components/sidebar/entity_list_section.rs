@@ -3,7 +3,7 @@
 //! This component consolidates the repetitive entity list patterns in the sidebar,
 //! handling both expandable (organizations, communities) and simple (projects, groups) variants.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use communitas_ui_api::UnifiedEntity;
 use dioxus::prelude::*;
@@ -12,15 +12,6 @@ use crate::components::app_shell::{
     EntityNavItem, ExpandableEntityNavItem, QuickActionButton, SidebarSection,
 };
 use crate::design_tokens::{radius, semantic, spacing, typography};
-
-/// Get child entities for a parent entity.
-pub fn get_entity_children(entities: &[UnifiedEntity], parent_id: &str) -> Vec<UnifiedEntity> {
-    entities
-        .iter()
-        .filter(|e| e.parent_id.as_deref() == Some(parent_id))
-        .cloned()
-        .collect()
-}
 
 /// Filter entities by search query.
 pub fn filter_entities(entities: Vec<UnifiedEntity>, search_filter: &str) -> Vec<UnifiedEntity> {
@@ -33,6 +24,23 @@ pub fn filter_entities(entities: Vec<UnifiedEntity>, search_filter: &str) -> Vec
             .filter(|e| e.name.to_lowercase().contains(&query))
             .collect()
     }
+}
+
+/// Build a parent→children index from a list of entities.
+///
+/// This allows O(1) child lookup instead of O(n) filtering per parent,
+/// reducing complexity from O(n*m) to O(n) when rendering expandable entities.
+pub fn build_children_index(entities: &[UnifiedEntity]) -> HashMap<String, Vec<UnifiedEntity>> {
+    let mut index: HashMap<String, Vec<UnifiedEntity>> = HashMap::new();
+    for entity in entities {
+        if let Some(parent_id) = &entity.parent_id {
+            index
+                .entry(parent_id.clone())
+                .or_default()
+                .push(entity.clone());
+        }
+    }
+    index
 }
 
 /// Reusable sidebar section for displaying entity lists.
@@ -93,6 +101,14 @@ pub fn EntityListSection(
     // Filter entities by search
     let filtered_entities = filter_entities(entities.clone(), &search_filter);
 
+    // Build parent→children index once per render (O(n) instead of O(n*m))
+    // Only needed for expandable sections
+    let children_index = if expandable {
+        build_children_index(&all_entities)
+    } else {
+        HashMap::new()
+    };
+
     // Build action button if configured
     let action = add_button_label.map(|label| {
         rsx! {
@@ -118,7 +134,11 @@ pub fn EntityListSection(
             } else if expandable {
                 {filtered_entities.into_iter().map(|entity| {
                     let selected = is_selected.call(entity.clone());
-                    let children = get_entity_children(&all_entities, &entity.id);
+                    // Use index for O(1) child lookup instead of O(n) filtering
+                    let children = children_index
+                        .get(&entity.id)
+                        .cloned()
+                        .unwrap_or_default();
                     let has_children = !children.is_empty();
                     let is_expanded = expanded_ids().contains(&entity.id);
                     let entity_id = entity.id.clone();
@@ -318,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_entity_children() {
+    fn test_build_children_index() {
         let entities = vec![
             UnifiedEntity {
                 id: "org1".to_string(),
@@ -340,7 +360,16 @@ mod tests {
             },
             UnifiedEntity {
                 id: "channel2".to_string(),
-                name: "Other Channel".to_string(),
+                name: "Another Channel".to_string(),
+                entity_type: UnifiedEntityType::Channel,
+                description: String::new(),
+                member_count: 0,
+                parent_id: Some("org1".to_string()),
+                category: None,
+            },
+            UnifiedEntity {
+                id: "channel3".to_string(),
+                name: "Other Org Channel".to_string(),
                 entity_type: UnifiedEntityType::Channel,
                 description: String::new(),
                 member_count: 0,
@@ -349,8 +378,36 @@ mod tests {
             },
         ];
 
-        let children = get_entity_children(&entities, "org1");
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0].id, "channel1");
+        let index = build_children_index(&entities);
+
+        // org1 should have 2 children
+        let org1_children = index.get("org1").expect("org1 should have children");
+        assert_eq!(org1_children.len(), 2);
+        assert!(org1_children.iter().any(|e| e.id == "channel1"));
+        assert!(org1_children.iter().any(|e| e.id == "channel2"));
+
+        // org2 should have 1 child
+        let org2_children = index.get("org2").expect("org2 should have children");
+        assert_eq!(org2_children.len(), 1);
+        assert_eq!(org2_children[0].id, "channel3");
+
+        // Non-existent parent should not be in index
+        assert!(index.get("org3").is_none());
+    }
+
+    #[test]
+    fn test_build_children_index_empty() {
+        let entities = vec![UnifiedEntity {
+            id: "org1".to_string(),
+            name: "Parent Org".to_string(),
+            entity_type: UnifiedEntityType::Organization,
+            description: String::new(),
+            member_count: 0,
+            parent_id: None,
+            category: None,
+        }];
+
+        let index = build_children_index(&entities);
+        assert!(index.is_empty());
     }
 }

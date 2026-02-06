@@ -60,6 +60,7 @@ use crate::components::{
     SecondaryButton,
     SidebarSearch,
     TypingIndicatorV2,
+    VirtualList,
     use_announcer,
 };
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
@@ -235,11 +236,14 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
 
     let typing_users = services.messaging().get_typing_users(&thread_id);
 
-    let msgs = messages();
-    let display_messages: Vec<MessageDisplay> = msgs
-        .iter()
-        .map(|m| message_to_display_with_context(m, &current_user_id, &msgs))
-        .collect();
+    // Memoize display_messages to avoid recomputing on every render
+    let current_user_id_clone = current_user_id.clone();
+    let display_messages = use_memo(move || {
+        let msgs = messages();
+        msgs.iter()
+            .map(|m| message_to_display_with_context(m, &current_user_id_clone, &msgs))
+            .collect::<Vec<MessageDisplay>>()
+    });
 
     // Note: Reply and react handlers are created inline in the loop
     // to avoid closure move issues
@@ -333,34 +337,77 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                     "{err}"
                 }
             } else {
-                // Message list
+                // Message list with virtual scrolling for large lists
                 MessageListContainer {
-                    ChatView {
-                        for msg in display_messages.iter() {
-                            {
-                                // Clone current_user_id for each iteration to avoid move issues
-                                let user_id_for_reply = current_user_id.clone();
-                                rsx! {
-                                    ChatMessageItem {
-                                        key: "{msg.id}",
-                                        message: msg.clone(),
-                                        show_picker: show_emoji_picker() == Some(msg.id.clone()),
-                                        on_reply: move |msg_id: String| {
-                                            let msgs = messages();
-                                            if let Some(m) = msgs.iter().find(|m| m.id == msg_id) {
-                                                reply_to.set(Some(message_to_display(m, &user_id_for_reply)));
-                                            }
-                                        },
-                                        on_react: move |msg_id: String| {
-                                            let current = show_emoji_picker();
-                                            if current.as_ref() == Some(&msg_id) {
-                                                show_emoji_picker.set(None);
-                                            } else {
-                                                show_emoji_picker.set(Some(msg_id));
-                                            }
-                                        },
-                                        on_emoji_select: on_emoji_select.clone(),
-                                        on_picker_close: move |_| show_emoji_picker.set(None),
+                    if display_messages().len() > 100 {
+                        // Virtual scrolling for large message lists (>100 messages)
+                        VirtualList {
+                            total_count: display_messages().len(),
+                            item_height_px: 80.0,
+                            overscan: 10,
+                            container_height: "100%".to_string(),
+                            render_item: {
+                                let current_user_id = current_user_id.clone();
+                                move |idx: usize| {
+                                    let msgs = display_messages();
+                                    let Some(msg) = msgs.get(idx).cloned() else {
+                                        return rsx! {};
+                                    };
+                                    let user_id_for_reply = current_user_id.clone();
+                                    rsx! {
+                                        ChatMessageItem {
+                                            key: "{msg.id}",
+                                            message: msg.clone(),
+                                            show_picker: show_emoji_picker() == Some(msg.id.clone()),
+                                            on_reply: move |msg_id: String| {
+                                                let msgs = messages();
+                                                if let Some(m) = msgs.iter().find(|m| m.id == msg_id) {
+                                                    reply_to.set(Some(message_to_display(m, &user_id_for_reply)));
+                                                }
+                                            },
+                                            on_react: move |msg_id: String| {
+                                                let current = show_emoji_picker();
+                                                if current.as_ref() == Some(&msg_id) {
+                                                    show_emoji_picker.set(None);
+                                                } else {
+                                                    show_emoji_picker.set(Some(msg_id));
+                                                }
+                                            },
+                                            on_emoji_select: on_emoji_select.clone(),
+                                            on_picker_close: move |_| show_emoji_picker.set(None),
+                                        }
+                                    }
+                                }
+                            },
+                        }
+                    } else {
+                        // Direct rendering for small message lists
+                        ChatView {
+                            for msg in display_messages().iter() {
+                                {
+                                    let user_id_for_reply = current_user_id.clone();
+                                    rsx! {
+                                        ChatMessageItem {
+                                            key: "{msg.id}",
+                                            message: msg.clone(),
+                                            show_picker: show_emoji_picker() == Some(msg.id.clone()),
+                                            on_reply: move |msg_id: String| {
+                                                let msgs = messages();
+                                                if let Some(m) = msgs.iter().find(|m| m.id == msg_id) {
+                                                    reply_to.set(Some(message_to_display(m, &user_id_for_reply)));
+                                                }
+                                            },
+                                            on_react: move |msg_id: String| {
+                                                let current = show_emoji_picker();
+                                                if current.as_ref() == Some(&msg_id) {
+                                                    show_emoji_picker.set(None);
+                                                } else {
+                                                    show_emoji_picker.set(Some(msg_id));
+                                                }
+                                            },
+                                            on_emoji_select: on_emoji_select.clone(),
+                                            on_picker_close: move |_| show_emoji_picker.set(None),
+                                        }
                                     }
                                 }
                             }
@@ -1060,13 +1107,16 @@ pub fn MainAppV2(children: Element) -> Element {
         });
     });
 
-    // Categorize entities using efficient single-pass hook
-    let categorized = CategorizedEntities::from_snapshot(&dir_snapshot);
-    let organizations = categorized.organizations;
-    let communities = categorized.communities;
-    let projects = categorized.projects;
-    let personal_groups = categorized.personal_groups;
-    let contacts = categorized.contacts;
+    // Categorize entities using efficient single-pass hook (memoized)
+    let categorized = use_memo(move || {
+        let snapshot = services.directory().current_snapshot();
+        CategorizedEntities::from_snapshot(&snapshot)
+    });
+    let organizations = categorized().organizations;
+    let communities = categorized().communities;
+    let projects = categorized().projects;
+    let personal_groups = categorized().personal_groups;
+    let contacts = categorized().contacts;
 
     // Check if an entity is selected (current_route must be cloned for each use in callbacks)
     let check_entity_selected = |entity: &UnifiedEntity, route: &Route| -> bool {

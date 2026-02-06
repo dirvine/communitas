@@ -20,6 +20,7 @@ pub mod settings;
 pub mod sidebar;
 pub mod skeleton;
 mod thread_list;
+pub mod virtual_list;
 
 // Re-export call components (will be used when call UI is integrated into routes)
 #[allow(unused_imports)]
@@ -126,6 +127,8 @@ pub use messaging_v2::{
 
 // Re-export sidebar components for main app layout
 #[allow(unused_imports)]
-pub use sidebar::{
-    ContactListSection, EntityListSection, filter_contacts, filter_entities, get_entity_children,
-};
+pub use sidebar::{ContactListSection, EntityListSection, filter_contacts, filter_entities};
+
+// Re-export virtual list component for efficient large list rendering
+#[allow(unused_imports)]
+pub use virtual_list::VirtualList;

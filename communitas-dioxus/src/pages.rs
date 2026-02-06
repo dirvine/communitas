@@ -207,6 +207,8 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
     let mut error: Signal<Option<String>> = use_signal(|| None);
     let mut reply_to: Signal<Option<MessageDisplay>> = use_signal(|| None);
     let mut show_emoji_picker: Signal<Option<String>> = use_signal(|| None); // message_id to show picker for
+    let mut show_search = use_signal(|| false);
+    let mut message_limit = use_signal(|| 50_usize);
 
     let thread_id = entity.id.clone();
     let thread_id_for_load = thread_id.clone();
@@ -245,6 +247,14 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
         msgs.iter()
             .map(|m| message_to_display_with_context(m, &current_user_id_clone, &msgs))
             .collect::<Vec<MessageDisplay>>()
+    });
+
+    // Apply message limit for pagination
+    let visible_messages = use_memo(move || {
+        let all_msgs = display_messages();
+        let limit = message_limit();
+        let start_idx = all_msgs.len().saturating_sub(limit);
+        all_msgs[start_idx..].to_vec()
     });
 
     // Note: Reply and react handlers are created inline in the loop
@@ -314,6 +324,47 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                 spacing::BASE
             ),
 
+            // Search toggle and bar
+            div {
+                style: format!(
+                    "display: flex; \
+                     align-items: center; \
+                     gap: {}; \
+                     margin-bottom: {};",
+                    spacing::SM,
+                    spacing::SM
+                ),
+                button {
+                    style: format!(
+                        "padding: {} {}; \
+                         background: {}; \
+                         color: {}; \
+                         border: 1px solid {}; \
+                         border-radius: {}; \
+                         cursor: pointer; \
+                         transition: all 0.2s;",
+                        spacing::XS,
+                        spacing::SM,
+                        if show_search() { semantic::BG_SECONDARY } else { "transparent" },
+                        semantic::TEXT_PRIMARY,
+                        semantic::BORDER_DEFAULT,
+                        radius::SM
+                    ),
+                    onclick: move |_| show_search.set(!show_search()),
+                    "🔍 Search"
+                }
+                if show_search() {
+                    crate::components::SearchBar {
+                        thread_id: Some(thread_id.clone()),
+                        placeholder: "Search in this conversation...".to_string(),
+                        on_result_select: move |selection: crate::components::SearchResultSelection| {
+                            tracing::info!("Search result selected: {:?}", selection.message_id);
+                            show_search.set(false);
+                        },
+                    }
+                }
+            }
+
             if loading() {
                 div {
                     style: format!(
@@ -339,19 +390,58 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                     "{err}"
                 }
             } else {
+                // Load earlier messages button
+                {
+                    let total_msgs = display_messages().len();
+                    let visible_count = visible_messages().len();
+                    if visible_count < total_msgs {
+                        rsx! {
+                            div {
+                                style: format!(
+                                    "text-align: center; \
+                                     margin-bottom: {}; \
+                                     padding: {};",
+                                    spacing::SM,
+                                    spacing::XS
+                                ),
+                                button {
+                                    style: format!(
+                                        "padding: {} {}; \
+                                         background: transparent; \
+                                         color: {}; \
+                                         border: 1px solid {}; \
+                                         border-radius: {}; \
+                                         cursor: pointer; \
+                                         font-size: 0.875rem;",
+                                        spacing::XS,
+                                        spacing::SM,
+                                        semantic::TEXT_MUTED,
+                                        semantic::BORDER_DEFAULT,
+                                        radius::SM
+                                    ),
+                                    onclick: move |_| message_limit.set(message_limit() + 50),
+                                    "Load earlier messages ({total_msgs - visible_count} more)"
+                                }
+                            }
+                        }
+                    } else {
+                        rsx! {}
+                    }
+                }
+
                 // Message list with virtual scrolling for large lists
                 MessageListContainer {
-                    if display_messages().len() > 100 {
+                    if visible_messages().len() > 100 {
                         // Virtual scrolling for large message lists (>100 messages)
                         VirtualList {
-                            total_count: display_messages().len(),
+                            total_count: visible_messages().len(),
                             item_height_px: 80.0,
                             overscan: 10,
                             container_height: "100%".to_string(),
                             render_item: {
                                 let current_user_id = current_user_id.clone();
                                 move |idx: usize| {
-                                    let msgs = display_messages();
+                                    let msgs = visible_messages();
                                     let Some(msg) = msgs.get(idx).cloned() else {
                                         return rsx! {};
                                     };
@@ -385,7 +475,7 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                     } else {
                         // Direct rendering for small message lists
                         ChatView {
-                            for msg in display_messages().iter() {
+                            for msg in visible_messages().iter() {
                                 {
                                     let user_id_for_reply = current_user_id.clone();
                                     rsx! {
@@ -1052,6 +1142,7 @@ pub fn MainAppV2(children: Element) -> Element {
     let mut search_query = use_signal(String::new);
     let thread_panel_open = use_signal(|| false);
     let expanded_entities: Signal<HashSet<String>> = use_signal(HashSet::new);
+    let mut entity_type_filter: Signal<Option<String>> = use_signal(|| None);
 
     // Modal state for entity creation
     let mut show_create_modal: Signal<Option<CreateEntityType>> = use_signal(|| None);
@@ -1224,6 +1315,65 @@ pub fn MainAppV2(children: Element) -> Element {
                     oninput: move |evt: FormEvent| search_query.set(evt.value()),
                 }
 
+                // Entity type filter chips
+                div {
+                    style: format!(
+                        "display: flex; \
+                         flex-wrap: wrap; \
+                         gap: {}; \
+                         padding: {} {} {};",
+                        spacing::XS,
+                        spacing::SM,
+                        spacing::SM,
+                        spacing::SM
+                    ),
+
+                    // Filter chip helper
+                    {
+                        let cat = categorized();
+                        let filter_options = vec![
+                            ("org", "Orgs", cat.organizations.len()),
+                            ("project", "Projects", cat.projects.len()),
+                            ("group", "Groups", cat.personal_groups.len()),
+                            ("channel", "Channels", cat.channels.len()),
+                        ];
+
+                        filter_options.into_iter().map(|(key, label, count)| {
+                            let is_active = entity_type_filter().as_deref() == Some(key);
+                            let key_str = key.to_string();
+                            rsx! {
+                                button {
+                                    key: "{key}",
+                                    style: format!(
+                                        "padding: {} {}; \
+                                         background: {}; \
+                                         color: {}; \
+                                         border: 1px solid {}; \
+                                         border-radius: {}; \
+                                         cursor: pointer; \
+                                         font-size: 0.75rem; \
+                                         transition: all 0.2s;",
+                                        spacing::XXS,
+                                        spacing::XS,
+                                        if is_active { semantic::BG_SECONDARY } else { "transparent" },
+                                        if is_active { semantic::ACCENT } else { semantic::TEXT_MUTED },
+                                        if is_active { semantic::BORDER_STRONG } else { semantic::BORDER_DEFAULT },
+                                        radius::SM
+                                    ),
+                                    onclick: move |_| {
+                                        if is_active {
+                                            entity_type_filter.set(None);
+                                        } else {
+                                            entity_type_filter.set(Some(key_str.clone()));
+                                        }
+                                    },
+                                    "{label} ({count})"
+                                }
+                            }
+                        })
+                    }
+                }
+
                 // Navigation sections (scrollable)
                 div {
                     style: format!(
@@ -1238,33 +1388,37 @@ pub fn MainAppV2(children: Element) -> Element {
 
                     // My Organizations
                     {
-                        let route_for_orgs = current_route.clone();
-                        rsx! {
-                            EntityListSection {
-                                title: "My Organizations".to_string(),
-                                entities: organizations.clone(),
-                                all_entities: dir_snapshot.entities.clone(),
-                                search_filter: search_query(),
-                                expanded_ids: expanded_entities,
-                                expandable: true,
-                                add_button_label: Some("Create Organization".to_string()),
-                                is_selected: move |entity| check_entity_selected(&entity, &route_for_orgs),
-                                on_navigate: move |entity| {
-                                    navigator.push(entity_route(&entity));
-                                },
-                                on_add: move |_| {
-                                    create_modal_parent_id.set(None);
-                                    show_create_modal.set(Some(CreateEntityType::Organization));
-                                },
+                        let filter = entity_type_filter();
+                        if filter.is_none() || filter.as_deref() == Some("org") {
+                            let route_for_orgs = current_route.clone();
+                            rsx! {
+                                EntityListSection {
+                                    title: "My Organizations".to_string(),
+                                    entities: organizations.clone(),
+                                    all_entities: dir_snapshot.entities.clone(),
+                                    search_filter: search_query(),
+                                    expanded_ids: expanded_entities,
+                                    expandable: true,
+                                    add_button_label: Some("Create Organization".to_string()),
+                                    is_selected: move |entity| check_entity_selected(&entity, &route_for_orgs),
+                                    on_navigate: move |entity| {
+                                        navigator.push(entity_route(&entity));
+                                    },
+                                    on_add: move |_| {
+                                        create_modal_parent_id.set(None);
+                                        show_create_modal.set(Some(CreateEntityType::Organization));
+                                    },
+                                }
                             }
+                        } else {
+                            rsx! {}
                         }
                     }
 
                     // Communities
                     {
-                        if communities.is_empty() {
-                            rsx! {}
-                        } else {
+                        let filter = entity_type_filter();
+                        if (filter.is_none() || filter.as_deref() == Some("org")) && !communities.is_empty() {
                             let route_for_communities = current_route.clone();
                             rsx! {
                                 EntityListSection {
@@ -1280,14 +1434,15 @@ pub fn MainAppV2(children: Element) -> Element {
                                     },
                                 }
                             }
+                        } else {
+                            rsx! {}
                         }
                     }
 
                     // Projects
                     {
-                        if projects.is_empty() {
-                            rsx! {}
-                        } else {
+                        let filter = entity_type_filter();
+                        if (filter.is_none() || filter.as_deref() == Some("project")) && !projects.is_empty() {
                             let route_for_projects = current_route.clone();
                             rsx! {
                                 EntityListSection {
@@ -1305,14 +1460,15 @@ pub fn MainAppV2(children: Element) -> Element {
                                     },
                                 }
                             }
+                        } else {
+                            rsx! {}
                         }
                     }
 
                     // Personal Groups (groups without a parent org)
                     {
-                        if personal_groups.is_empty() {
-                            rsx! {}
-                        } else {
+                        let filter = entity_type_filter();
+                        if (filter.is_none() || filter.as_deref() == Some("group")) && !personal_groups.is_empty() {
                             let route_for_groups = current_route.clone();
                             rsx! {
                                 EntityListSection {
@@ -1330,6 +1486,8 @@ pub fn MainAppV2(children: Element) -> Element {
                                     },
                                 }
                             }
+                        } else {
+                            rsx! {}
                         }
                     }
 

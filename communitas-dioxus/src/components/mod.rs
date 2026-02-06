@@ -9,8 +9,10 @@ mod composer;
 pub mod drive;
 pub mod entity_view;
 pub mod error_boundary;
+pub mod filter_chips;
 pub mod kanban;
 pub mod layout;
+pub mod pagination;
 mod message_list;
 pub mod messaging_v2;
 pub mod offline;
@@ -132,3 +134,11 @@ pub use sidebar::{ContactListSection, EntityListSection, filter_contacts, filter
 // Re-export virtual list component for efficient large list rendering
 #[allow(unused_imports)]
 pub use virtual_list::VirtualList;
+
+// Re-export pagination components for list navigation
+#[allow(unused_imports)]
+pub use pagination::{LoadMore, Pagination};
+
+// Re-export filter chips for quick filtering
+#[allow(unused_imports)]
+pub use filter_chips::{FilterChips, FilterOption};

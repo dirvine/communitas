@@ -6,6 +6,7 @@ pub mod auth_v2;
 pub mod call;
 pub mod canvas;
 mod composer;
+pub mod confirm_dialog;
 pub mod drive;
 pub mod entity_view;
 pub mod error_boundary;
@@ -142,3 +143,7 @@ pub use pagination::{LoadMore, Pagination};
 // Re-export filter chips for quick filtering
 #[allow(unused_imports)]
 pub use filter_chips::{FilterChips, FilterOption};
+
+// Re-export confirm dialog for user confirmations
+#[allow(unused_imports)]
+pub use confirm_dialog::ConfirmDialog;

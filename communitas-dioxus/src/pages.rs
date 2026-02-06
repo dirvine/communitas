@@ -205,6 +205,7 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
     let mut messages: Signal<Vec<communitas_ui_api::Message>> = use_signal(Vec::new);
     let mut loading = use_signal(|| true);
     let mut error: Signal<Option<String>> = use_signal(|| None);
+    let mut send_error: Signal<Option<String>> = use_signal(|| None);
     let mut reply_to: Signal<Option<MessageDisplay>> = use_signal(|| None);
     let mut show_emoji_picker: Signal<Option<String>> = use_signal(|| None); // message_id to show picker for
     let mut show_search = use_signal(|| false);
@@ -305,9 +306,11 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                     let mut msgs = messages();
                     msgs.push(message);
                     messages.set(msgs);
+                    send_error.set(None);
                 }
                 Err(e) => {
                     tracing::error!("Failed to send message: {e}");
+                    send_error.set(Some("Failed to send message. Please try again.".to_string()));
                 }
             }
         });
@@ -522,6 +525,14 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                     }
                 }
 
+                // Send error banner
+                if let Some(err) = send_error() {
+                    crate::components::ErrorBanner {
+                        message: err,
+                        on_dismiss: Some(EventHandler::new(move |_| send_error.set(None))),
+                    }
+                }
+
                 // Composer
                 MessageComposerV2 {
                     value: message_input(),
@@ -730,6 +741,7 @@ fn EntityBoardContent(entity: UnifiedEntity) -> Element {
     let kanban = services.kanban();
 
     let mut kanban_snapshot = use_signal(|| kanban.current_snapshot());
+    let mut load_error: Signal<Option<String>> = use_signal(|| None);
     let entity_id = entity.id.clone();
     let entity_id_for_load = entity.id.clone();
 
@@ -750,8 +762,14 @@ fn EntityBoardContent(entity: UnifiedEntity) -> Element {
         let entity_id = entity_id_for_load.clone();
         let services = services_for_load.clone();
         spawn(async move {
-            if let Err(e) = services.kanban().load_boards(&entity_id).await {
-                tracing::error!("Failed to load boards: {e}");
+            match services.kanban().load_boards(&entity_id).await {
+                Ok(_) => {
+                    load_error.set(None);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load boards: {e}");
+                    load_error.set(Some("Failed to load boards. Please try again.".to_string()));
+                }
             }
         });
     });
@@ -767,7 +785,28 @@ fn EntityBoardContent(entity: UnifiedEntity) -> Element {
                 spacing::BASE
             ),
 
-            if snapshot.loading {
+            if let Some(err) = load_error() {
+                crate::components::ErrorCard {
+                    title: "Board Load Error".to_string(),
+                    message: err,
+                    on_retry: Some(EventHandler::new(move |_| {
+                        load_error.set(None);
+                        let entity_id = entity_id.clone();
+                        let services = services.clone();
+                        spawn(async move {
+                            match services.kanban().load_boards(&entity_id).await {
+                                Ok(_) => {
+                                    load_error.set(None);
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to load boards: {e}");
+                                    load_error.set(Some("Failed to load boards. Please try again.".to_string()));
+                                }
+                            }
+                        });
+                    })),
+                }
+            } else if snapshot.loading {
                 div {
                     style: format!(
                         "padding: {}; \
@@ -928,6 +967,11 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
 
     let is_admin = true;
 
+    // Confirmation dialog states
+    let mut show_leave_confirm = use_signal(|| false);
+    let mut show_archive_confirm = use_signal(|| false);
+    let mut show_delete_confirm = use_signal(|| false);
+
     let type_label = match entity.entity_type {
         UnifiedEntityType::Organization => "Organization",
         UnifiedEntityType::Project => "Project",
@@ -937,6 +981,10 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
     };
 
     let members: Vec<UnifiedContact> = dir_snapshot.contacts.clone();
+
+    // Store entity details for dialog closures
+    let entity_id_for_action = entity.id.clone();
+    let entity_name_for_action = entity.name.clone();
 
     // Handler for messaging a member
     let on_member_message = move |contact_id: String| {
@@ -1096,22 +1144,92 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
                             icon: "🚪".to_string(),
                             label: format!("Leave {type_label}"),
                             description: format!("Remove yourself from this {type_label}"),
-                            onclick: move |_| {},
+                            onclick: move |_| show_leave_confirm.set(true),
                         }
 
                         DangerAction {
                             icon: "🗄️".to_string(),
                             label: format!("Archive {type_label}"),
                             description: format!("Archive and hide this {type_label}"),
-                            onclick: move |_| {},
+                            onclick: move |_| show_archive_confirm.set(true),
                         }
 
                         DangerAction {
                             icon: "🗑️".to_string(),
                             label: format!("Delete {type_label}"),
                             description: format!("Permanently delete this {type_label} and all data"),
-                            onclick: move |_| {},
+                            onclick: move |_| show_delete_confirm.set(true),
                         }
+                    }
+                }
+            }
+        }
+
+        // Confirmation dialogs
+        if show_leave_confirm() {
+            {
+                let entity_id = entity_id_for_action.clone();
+                rsx! {
+                    crate::components::ConfirmDialog {
+                        title: format!("Leave {}", entity_name_for_action),
+                        message: format!(
+                            "Are you sure you want to leave \"{}\"? You will no longer have access to this {} and its content.",
+                            entity_name_for_action, type_label.to_lowercase()
+                        ),
+                        confirm_text: "Leave".to_string(),
+                        cancel_text: "Cancel".to_string(),
+                        destructive: true,
+                        on_confirm: move |_| {
+                            tracing::info!("Leave confirmed for entity: {}", entity_id);
+                            show_leave_confirm.set(false);
+                        },
+                        on_cancel: move |_| show_leave_confirm.set(false),
+                    }
+                }
+            }
+        }
+
+        if show_archive_confirm() {
+            {
+                let entity_id = entity_id_for_action.clone();
+                rsx! {
+                    crate::components::ConfirmDialog {
+                        title: format!("Archive {}", entity_name_for_action),
+                        message: format!(
+                            "Are you sure you want to archive \"{}\"? It will be hidden from your sidebar but can be restored later.",
+                            entity_name_for_action
+                        ),
+                        confirm_text: "Archive".to_string(),
+                        cancel_text: "Cancel".to_string(),
+                        destructive: false,
+                        on_confirm: move |_| {
+                            tracing::info!("Archive confirmed for entity: {}", entity_id);
+                            show_archive_confirm.set(false);
+                        },
+                        on_cancel: move |_| show_archive_confirm.set(false),
+                    }
+                }
+            }
+        }
+
+        if show_delete_confirm() {
+            {
+                let entity_id = entity_id_for_action.clone();
+                rsx! {
+                    crate::components::ConfirmDialog {
+                        title: format!("Delete {}", entity_name_for_action),
+                        message: format!(
+                            "Are you sure you want to permanently delete \"{}\"? This action cannot be undone. All messages, files, and data will be lost.",
+                            entity_name_for_action
+                        ),
+                        confirm_text: "Delete".to_string(),
+                        cancel_text: "Cancel".to_string(),
+                        destructive: true,
+                        on_confirm: move |_| {
+                            tracing::info!("Delete confirmed for entity: {}", entity_id);
+                            show_delete_confirm.set(false);
+                        },
+                        on_cancel: move |_| show_delete_confirm.set(false),
                     }
                 }
             }

@@ -945,25 +945,12 @@ async fn start_health_endpoint(
     let metrics = warp::path("metrics").and(warp::get()).then(move || {
         let gossip = gossip_for_metrics.clone();
         async move {
-            let (transport_peers, membership_peers) = if let Some(g) = gossip {
-                let transport_count = g.transport.connected_peers().await.len();
-                let membership_count = g.membership.read().await.active_view().len();
-                (transport_count, membership_count)
-            } else {
-                (0, 0)
-            };
-
-            let response = format!(
-                "# HELP communitas_peers_connected Number of connected peers (transport layer)\n\
-                 # TYPE communitas_peers_connected gauge\n\
-                 communitas_peers_connected {}\n\
-                 # HELP communitas_membership_peers Number of peers in membership active view\n\
-                 # TYPE communitas_membership_peers gauge\n\
-                 communitas_membership_peers {}\n",
-                transport_peers, membership_peers
-            );
-
-            warp::reply::html(response)
+            let response = collect_prometheus_metrics(&gossip).await;
+            warp::reply::with_header(
+                response,
+                "Content-Type",
+                "text/plain; version=0.0.4; charset=utf-8",
+            )
         }
     });
 
@@ -1060,6 +1047,161 @@ async fn start_health_endpoint(
     });
 
     Ok(())
+}
+
+/// Write a single gauge metric in Prometheus text exposition format.
+fn write_gauge(output: &mut String, name: &str, help: &str, value: usize) {
+    use std::fmt::Write;
+    let _ = writeln!(output, "# HELP {name} {help}");
+    let _ = writeln!(output, "# TYPE {name} gauge");
+    let _ = writeln!(output, "{name} {value}");
+}
+
+/// Collect all Prometheus metrics from a [`GossipContext`] into text exposition format.
+async fn collect_prometheus_metrics(
+    gossip: &Option<Arc<communitas_core::GossipContext>>,
+) -> String {
+    use std::fmt::Write;
+    let mut output = String::with_capacity(2048);
+
+    if let Some(g) = gossip {
+        // -- Peer metrics --
+        let transport_peers = g.transport.connected_peers().await.len();
+        let membership = g.membership.read().await;
+        let active_peers = membership.active_view().len();
+        let passive_peers = membership.passive_view().len();
+        drop(membership); // release lock early
+
+        // -- Entity metrics --
+        let groups_count = g.groups.read().await.len();
+        let topics_count = g.topics.read().await.len();
+
+        // -- Data metrics --
+        let crdt_messages = g.crdt_message_set.read().await.len();
+
+        // -- Presence metrics --
+        let presence = g.presence.read().await;
+        let presence_broadcast_peers = presence.broadcast_peer_count().await;
+        drop(presence); // release lock early
+
+        // Peer metrics
+        write_gauge(
+            &mut output,
+            "communitas_peers_connected",
+            "Number of connected peers (transport layer)",
+            transport_peers,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_membership_active",
+            "Number of peers in membership active view (HyParView)",
+            active_peers,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_membership_passive",
+            "Number of peers in membership passive view (HyParView)",
+            passive_peers,
+        );
+
+        // Entity metrics
+        write_gauge(
+            &mut output,
+            "communitas_groups_total",
+            "Number of joined groups/entities",
+            groups_count,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_topics_subscribed",
+            "Number of gossip topics subscribed",
+            topics_count,
+        );
+
+        // Data metrics
+        write_gauge(
+            &mut output,
+            "communitas_crdt_messages_stored",
+            "Number of messages in CRDT message set",
+            crdt_messages,
+        );
+
+        // Presence metrics
+        write_gauge(
+            &mut output,
+            "communitas_presence_broadcast_peers",
+            "Number of peers receiving presence beacons",
+            presence_broadcast_peers,
+        );
+
+        // Info metric (with labels)
+        let _ = writeln!(output, "# HELP communitas_info Node information");
+        let _ = writeln!(output, "# TYPE communitas_info gauge");
+        let _ = writeln!(
+            output,
+            "communitas_info{{version=\"{}\",four_words=\"{}\"}} 1",
+            env!("CARGO_PKG_VERSION"),
+            g.four_words
+        );
+    } else {
+        // No gossip context available - return zeroed metrics
+        write_gauge(
+            &mut output,
+            "communitas_peers_connected",
+            "Number of connected peers (transport layer)",
+            0,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_membership_active",
+            "Number of peers in membership active view (HyParView)",
+            0,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_membership_passive",
+            "Number of peers in membership passive view (HyParView)",
+            0,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_groups_total",
+            "Number of joined groups/entities",
+            0,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_topics_subscribed",
+            "Number of gossip topics subscribed",
+            0,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_crdt_messages_stored",
+            "Number of messages in CRDT message set",
+            0,
+        );
+        write_gauge(
+            &mut output,
+            "communitas_presence_broadcast_peers",
+            "Number of peers receiving presence beacons",
+            0,
+        );
+    }
+
+    // Uptime (seconds since UNIX epoch)
+    let uptime = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_else(|_| std::time::Duration::from_secs(0))
+        .as_secs() as usize;
+    write_gauge(
+        &mut output,
+        "communitas_uptime_seconds",
+        "Node uptime in seconds since epoch",
+        uptime,
+    );
+
+    output
 }
 
 static FOUR_WORD_ENCODER: Lazy<Result<FourWordAdaptiveEncoder>> =

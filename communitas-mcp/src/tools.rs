@@ -4392,29 +4392,37 @@ async fn execute_list_pending_invites(app: &CommunitasApp) -> ToolCallResult {
 async fn execute_network_start(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let preferred_port = args["preferred_port"].as_u64().map(|p| p as u16);
 
-    let cmd = Command::StartNetworking { preferred_port };
-
-    match app.execute(cmd).await {
-        Ok(events) => {
-            // Look for NetworkingStarted event to get the listen address
-            for event in &events {
-                if let Event::NetworkingStarted {
-                    listen_address,
-                    connection_identity,
-                } = event
-                {
-                    return json_result(&json!({
-                        "success": true,
-                        "message": "Networking started",
-                        "listen_address": listen_address,
-                        "connection_identity": connection_identity
-                    }));
-                }
-            }
-            success_result("Networking started")
-        }
-        Err(e) => error_result(&format!("Failed to start networking: {}", e.message)),
+    // Check if networking is already active before spawning
+    if let Ok(QueryResponse::Bool(true)) = app.query(Query::IsNetworkingActive).await {
+        return json_result(&json!({
+            "success": true,
+            "message": "Networking is already active",
+            "status": "active"
+        }));
     }
+
+    // Clone the app (cheap - all fields are Arc-wrapped) and spawn the boot
+    // sequence in a background task. The gossip boot sequence involves NAT
+    // traversal and peer discovery which can take 60+ seconds, so we return
+    // immediately and let the caller poll network_status for completion.
+    let app_clone = app.clone();
+    tokio::spawn(async move {
+        let cmd = Command::StartNetworking { preferred_port };
+        match app_clone.execute(cmd).await {
+            Ok(_) => {
+                tracing::info!("Background networking start completed successfully");
+            }
+            Err(e) => {
+                tracing::error!("Background networking start failed: {}", e.message);
+            }
+        }
+    });
+
+    json_result(&json!({
+        "success": true,
+        "message": "Networking start initiated. The gossip boot sequence is running in the background. Use network_status to check when networking is fully active.",
+        "status": "starting"
+    }))
 }
 
 async fn execute_network_stop(app: &CommunitasApp) -> ToolCallResult {

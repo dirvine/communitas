@@ -138,6 +138,9 @@ async fn presence_by_four_words(
 ///
 /// This struct provides the headless core API that all adapters use.
 /// It wraps CoreContext and provides a clean Command/Query/Subscribe interface.
+///
+/// Clone is cheap since all fields are Arc-wrapped.
+#[derive(Clone)]
 pub struct CommunitasApp {
     /// The underlying core context (protected by RwLock for concurrent access)
     context: Arc<RwLock<CoreContext>>,

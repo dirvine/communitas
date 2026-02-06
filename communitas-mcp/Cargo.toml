@@ -65,6 +65,13 @@ rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", 
 saorsa-pqc.workspace = true
 communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }
 
+# Vendored OpenSSL for cross-compilation (transitive dep via reqwest/native-tls)
+openssl = { version = "0.10", features = ["vendored"], optional = true }
+
+[features]
+default = []
+vendored-openssl = ["openssl"]
+
 [dev-dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tempfile = "3"

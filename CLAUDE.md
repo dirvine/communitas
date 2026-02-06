@@ -21,16 +21,23 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Purpose**: Cross-platform business logic, P2P networking, cryptography
 - **Cryptography**: Post-quantum (ML-DSA/ML-KEM) with ChaCha20-Poly1305
 - **Storage**: Virtual disks with CRDT synchronization (Yrs)
-- **Networking**: QUIC via ant-quic, IPv4-first with Happy Eyeballs fallback
+- **Networking**: QUIC via ant-quic, IPv4-first with Happy Eyeballs (RFC 8305) dual-stack fallback
 
 ### Key Components
 - **Connection Words**: Human-readable encoding for sharing IP:port (e.g., "ocean-forest-moon-star")
 - **Virtual Disks**: Private/Public/Shared per entity with different encryption policies
 - **Website Publishing**: DNS-free web via identity.website_root binding
-- **Messaging**: End-to-end encrypted group messaging with channel support
-- **Groups**: Threshold-ready group identities with ML-DSA signatures
+- **Messaging**: End-to-end encrypted group messaging with editing, deletion, and pinning support
+- **Groups**: Threshold-ready group identities with ML-DSA signatures and member management (add/remove/roles)
 - **Kanban System**: CRDT-based collaborative project management (`communitas-kanban/`)
+- **Entity Tabs**: Board, Chat, Call, Canvas, Drive, Documents, and Details views per entity type
 - **Offline-First**: All operations work locally and sync when network available
+- **CRDT Tombstone Compaction**: Configurable retention policies with background compaction tasks
+- **Signed Presence Beacons**: ML-DSA signed presence broadcasts with per-peer rate limiting
+- **SWIM Failure Detection**: Complete K-peer probing, indirect probes, suspect-to-dead transitions
+- **Anti-Entropy Reconciliation**: Set-difference based partition recovery
+- **Prometheus Metrics**: `/metrics` endpoint on headless nodes with peer, membership, CRDT, and uptime gauges
+- **UI Components**: VirtualList, SearchBar, FilterChips, Pagination, ConfirmDialog, ErrorBanner, loading skeletons, empty states
 
 ## Development Commands
 
@@ -97,13 +104,17 @@ MCP Apps notes:
 ## Architecture Insights
 
 ### Core Context System
-The application uses a centralized `CoreContext` (communitas-core/src/core_context.rs) that wires Communitas to saorsa-gossip components:
+The application uses a centralized `CoreContext` (communitas-core/src/core_context.rs) that wires Communitas to saorsa-gossip v0.5.0 components:
 - Identity management with enhanced PQC support
-- Storage management with CRDT synchronization (Yrs)
-- Chat management with persistent storage
+- Storage management with CRDT synchronization (Yrs) and tombstone compaction
+- Chat management with persistent storage, message editing/deletion
 - Messaging service for real-time communication via gossip overlay
 - Kanban service for collaborative project management
 - Group key storage for membership updates
+- SWIM failure detection with K-peer probing and indirect probes
+- Signed presence beacons with per-peer rate limiting
+- Anti-entropy reconciliation for partition recovery
+- Lock hierarchy enforcement for deadlock-free gossip context
 
 ### Shared Rust UI Services
 Commands flow through the shared `UiServices` layer (ADR-019):
@@ -120,9 +131,11 @@ Per-entity storage with different access policies:
 
 ### Security Model
 - **Zero panics/unwraps**: Production Rust code enforces Result types
-- **Rate limiting**: Built-in protection against abuse
+- **Rate limiting**: Built-in protection against abuse, per-peer rate limiting on presence beacons
 - **Input validation**: All commands validate inputs
 - **Secure storage**: Platform-specific secure storage integration
+- **Signed presence**: ML-DSA signed presence beacons prevent spoofing
+- **Lock hierarchy**: Audited lock ordering in GossipContext for deadlock-free operation
 
 ## Quality Standards
 
@@ -138,6 +151,9 @@ Per-entity storage with different access policies:
 - Keep UI logic thin; push orchestration into `communitas-ui-service`
 - Ensure accessibility (keyboard focus order, screen-reader labels)
 - Prefer structured errors surfaced from Rust services
+- Use `VirtualList` for large datasets, `SearchBar`/`FilterChips`/`Pagination` for navigation
+- Use `ConfirmDialog` for destructive actions, `ErrorBanner` for recoverable errors
+- Loading skeletons and empty states are required for all async data-fetching views
 
 ### Git Workflow
 ```bash
@@ -166,6 +182,8 @@ Cross-platform distribution:
 Bootstrap and seed nodes for network support:
 - Binary: `communitas-headless`
 - Config: TOML with listen addresses, storage paths
+- Metrics: Prometheus-compatible `/metrics` endpoint with peer, membership, CRDT, and uptime gauges
+- Health: `/health` endpoint for monitoring
 
 ## Troubleshooting
 

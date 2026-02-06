@@ -147,7 +147,6 @@ enum PreviewLoadState {
     Error(String),
 }
 
-
 // Test-only methods
 #[cfg(test)]
 impl PreviewLoadState {

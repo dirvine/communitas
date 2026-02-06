@@ -70,7 +70,6 @@ pub enum PickerResult {
     Error(String),
 }
 
-
 // Test-only methods for PickerResult
 #[cfg(test)]
 impl PickerResult {
@@ -304,7 +303,6 @@ pub fn open_file_picker(config: &PickerConfig) -> PickerResult {
         }
     }
 }
-
 
 /// File picker button component props.
 #[derive(Props, Clone, PartialEq)]

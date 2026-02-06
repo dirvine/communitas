@@ -110,23 +110,41 @@ To simulate authentication failures during QA, set `COMMUNITAS_UI_FORCE_AUTH_ERR
 ### CRDT-Based Eventual Consistency
 - **Yrs CRDT (v0.19)**: Conflict-free replicated data types for documents, messages, and shared state
 - **Operation-Based Synchronization**: Delta-based sync protocol minimizes bandwidth during partition healing
-- **Anti-Entropy Protocol**: 60-second background synchronization with adaptive intervals based on network conditions
+- **Anti-Entropy Reconciliation**: Set-difference based background synchronization for automatic partition recovery with adaptive intervals
+- **Tombstone Compaction**: Configurable retention policies with background compaction tasks to bound CRDT growth
 - **Causal Consistency**: Vector clocks ensure causal ordering of operations across partitioned replicas
 - **Automatic Merge**: Conflict-free convergence without manual intervention or consensus protocols
 
 ### Decentralized Network Architecture
 - **QUIC Transport**: saorsa-gossip-transport (UdpTransportAdapter on ant-quic v0.18)
-- **Gossip Overlay (saorsa-gossip v0.2.0)**: HyParView membership + SWIM failure detection + Plumtree broadcast
+- **Gossip Overlay (saorsa-gossip v0.5.0)**: HyParView membership + SWIM failure detection + Plumtree broadcast
+- **SWIM Failure Detection**: Complete protocol with K-peer probing, indirect probes, and suspect-to-dead state transitions
+- **Signed Presence Beacons**: ML-DSA signed presence broadcasts with per-peer rate limiting
+- **Peer Scoring**: Quality-based peer selection for Plumtree broadcast tree optimization
 - **FOAF Discovery**: Friend-of-a-friend peer discovery without DHT or global indexing
 - **Rendezvous Shards**: 65,536-shard distributed discovery system for global user location
+- **Prometheus Metrics**: `/metrics` endpoint exposing peer counts, membership views, CRDT state, and uptime gauges
 - **No Single Point of Failure**: Operates without bootstrap nodes after initial peer cache seeding
 
 ### Entity-Based Collaboration
 - **Individuals**: Personal identity with ML-DSA-87 keypairs, encrypted local storage
-- **Groups**: CRDT-synchronized shared state, partition-tolerant membership
+- **Groups**: CRDT-synchronized shared state, partition-tolerant membership, member management (add/remove/roles)
 - **Organizations**: Multi-channel hierarchy with admin delegation
 - **Projects**: Version-controlled workspaces with conflict-free document merging
 - **Channels**: Topic-scoped pubsub with message anti-entropy
+- **Entity Tabs**: Board, Chat, Call, Canvas, Drive, Documents, and Details views per entity type
+- **Messaging**: Message editing, deletion with confirmation, and pinning support
+- **Member Management**: Add/remove members with role display and permission controls
+
+### UI Components (Dioxus)
+- **VirtualList**: Windowed rendering for large datasets with configurable item heights and smooth scrolling
+- **SearchBar**: Global and contextual search with debounced input
+- **FilterChips**: Composable filter controls for lists and feeds
+- **Pagination**: Page-based navigation for large result sets
+- **ConfirmDialog**: Modal confirmation for destructive actions (delete, leave, remove member)
+- **ErrorBanner**: Contextual error recovery with retry actions
+- **Loading States**: Skeleton screens and spinners for async data fetching
+- **Empty States**: Contextual guidance when lists or views have no content
 
 ---
 
@@ -325,7 +343,7 @@ await connectToPeer(connectionWords);
 ### Development Standards
 - **No Panics**: Rust code forbids `unwrap`/`expect`/`panic!` in production (enforced by clippy)
 - **Type Safety**: Rust-first surfaces with strict clippy/fmt enforcement
-- **Test Coverage**: 37+ integration tests covering resilience features
+- **Test Coverage**: Comprehensive integration tests covering resilience, messaging, and membership features
 - **Security First**: Post-quantum cryptography and secure defaults
 - **Partition Tolerance**: All features must operate correctly during network partitions
 
@@ -341,7 +359,7 @@ await connectToPeer(connectionWords);
 ### Distributed Systems Theory
 - **CAP Theorem**: Prioritizes availability and partition tolerance (AP system)
 - **CRDT Research**: Operation-based CRDTs with causal consistency (Shapiro et al.)
-- **Gossip Protocols**: HyParView (Leitao et al.), SWIM (Das et al.), Plumtree (Leitao et al.)
+- **Gossip Protocols**: HyParView (Leitao et al.), SWIM with indirect probes (Das et al.), Plumtree with peer scoring (Leitao et al.)
 
 ### Network Resilience Testing
 - **Partition Tolerance**: Verified through integration tests with simulated network failures

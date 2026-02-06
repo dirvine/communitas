@@ -18,8 +18,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Core dependency - the headless app (version required for crates.io publishing)
-communitas-core = { version = "=0.8.4", path = "../communitas-core" }
-communitas-kanban = { version = "=0.8.4", path = "../communitas-kanban" }
+communitas-core = { version = "=0.8.6", path = "../communitas-core" }
+communitas-kanban = { version = "=0.8.6", path = "../communitas-kanban" }
 communitas-ui-service = { path = "../communitas-ui-service" }
 communitas-ui-api = { path = "../communitas-ui-api" }
 

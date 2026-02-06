@@ -14,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.4"
+version = "0.8.6"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
 license = "GPL-3.0"

@@ -141,7 +141,7 @@ async fn test_get_messages() {
         .call_tool(
             "get_messages",
             json!({
-                "thread_id": channel_id,
+                "entity_id": channel_id,
                 "limit": 10
             }),
         )
@@ -181,8 +181,7 @@ async fn test_list_messages() {
         .call_tool(
             "list_messages",
             json!({
-                "entity_id": channel_id,
-                "entity_type": "channel"
+                "thread_id": channel_id
             }),
         )
         .await;
@@ -226,7 +225,7 @@ async fn test_edit_message() {
         .call_tool(
             "edit_message",
             json!({
-                "thread_id": channel_id,
+                "entity_id": channel_id,
                 "message_id": message_id,
                 "new_text": "Edited text"
             }),
@@ -268,7 +267,7 @@ async fn test_delete_message() {
         .call_tool(
             "delete_message",
             json!({
-                "thread_id": channel_id,
+                "entity_id": channel_id,
                 "message_id": message_id
             }),
         )
@@ -443,7 +442,7 @@ async fn test_get_thread_messages() {
 async fn test_mark_thread_read() {
     let node = start_node("alice").await;
 
-    // Create a channel and thread
+    // Create a channel and send a message
     let r = node
         .call_tool(
             "create_entity",
@@ -453,25 +452,26 @@ async fn test_mark_thread_read() {
     r.assert_success();
     let channel_id = r.get_str("id").unwrap();
 
-    let r = node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Thread parent"
-            }),
-        )
-        .await;
-    r.assert_success();
-    let thread_id = r.get_str("id").unwrap();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Thread parent"
+        }),
+    )
+    .await
+    .assert_success();
 
-    // Mark thread as read
+    // Ensure thread is populated in the messaging service
+    node.call_tool("list_threads", json!({})).await;
+
+    // Mark thread as read using the channel_id (thread = channel)
     let r = node
         .call_tool(
             "mark_thread_read",
             json!({
-                "thread_id": thread_id
+                "thread_id": channel_id
             }),
         )
         .await;
@@ -483,7 +483,7 @@ async fn test_mark_thread_read() {
 async fn test_pin_thread() {
     let node = start_node("alice").await;
 
-    // Create a channel and thread
+    // Create a channel
     let r = node
         .call_tool(
             "create_entity",
@@ -493,25 +493,36 @@ async fn test_pin_thread() {
     r.assert_success();
     let channel_id = r.get_str("id").unwrap();
 
-    let r = node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Important thread"
-            }),
-        )
-        .await;
-    r.assert_success();
-    let thread_id = r.get_str("id").unwrap();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Important thread"
+        }),
+    )
+    .await
+    .assert_success();
 
-    // Pin the thread
+    // Ensure thread is populated
+    node.call_tool("list_threads", json!({})).await;
+
+    // Clear any previously pinned threads to avoid hitting the limit
+    let pinned = node.call_tool("get_pinned_threads", json!({})).await;
+    if let Some(ids) = pinned.get_array("pinned_threads") {
+        for id_val in ids {
+            if let Some(id) = id_val.as_str() {
+                node.call_tool("unpin_thread", json!({"thread_id": id})).await;
+            }
+        }
+    }
+
+    // Pin the thread (thread = channel)
     let r = node
         .call_tool(
             "pin_thread",
             json!({
-                "thread_id": thread_id
+                "thread_id": channel_id
             }),
         )
         .await;
@@ -523,7 +534,7 @@ async fn test_pin_thread() {
 async fn test_unpin_thread() {
     let node = start_node("alice").await;
 
-    // Create a channel and thread
+    // Create a channel
     let r = node
         .call_tool(
             "create_entity",
@@ -533,24 +544,35 @@ async fn test_unpin_thread() {
     r.assert_success();
     let channel_id = r.get_str("id").unwrap();
 
-    let r = node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Thread to unpin"
-            }),
-        )
-        .await;
-    r.assert_success();
-    let thread_id = r.get_str("id").unwrap();
+    node.call_tool(
+        "send_message",
+        json!({
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Thread to unpin"
+        }),
+    )
+    .await
+    .assert_success();
 
-    // Pin then unpin
+    // Ensure thread is populated
+    node.call_tool("list_threads", json!({})).await;
+
+    // Clear any previously pinned threads to avoid hitting the limit
+    let pinned = node.call_tool("get_pinned_threads", json!({})).await;
+    if let Some(ids) = pinned.get_array("pinned_threads") {
+        for id_val in ids {
+            if let Some(id) = id_val.as_str() {
+                node.call_tool("unpin_thread", json!({"thread_id": id})).await;
+            }
+        }
+    }
+
+    // Pin then unpin (thread = channel)
     node.call_tool(
         "pin_thread",
         json!({
-            "thread_id": thread_id
+            "thread_id": channel_id
         }),
     )
     .await
@@ -560,7 +582,7 @@ async fn test_unpin_thread() {
         .call_tool(
             "unpin_thread",
             json!({
-                "thread_id": thread_id
+                "thread_id": channel_id
             }),
         )
         .await;
@@ -572,7 +594,7 @@ async fn test_unpin_thread() {
 async fn test_get_pinned_threads() {
     let node = start_node("alice").await;
 
-    // Create a channel and thread
+    // Create a channel
     let r = node
         .call_tool(
             "create_entity",
@@ -582,37 +604,43 @@ async fn test_get_pinned_threads() {
     r.assert_success();
     let channel_id = r.get_str("id").unwrap();
 
-    let r = node
-        .call_tool(
-            "send_message",
-            json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
-                "text": "Pinned thread"
-            }),
-        )
-        .await;
-    r.assert_success();
-    let thread_id = r.get_str("id").unwrap();
-
-    // Pin the thread
     node.call_tool(
-        "pin_thread",
+        "send_message",
         json!({
-            "thread_id": thread_id
+            "entity_id": channel_id,
+            "entity_type": "channel",
+            "text": "Pinned thread"
         }),
     )
     .await
     .assert_success();
 
-    // Get pinned threads
+    // Ensure thread is populated
+    node.call_tool("list_threads", json!({})).await;
+
+    // Clear any previously pinned threads to avoid hitting the limit
+    let existing = node.call_tool("get_pinned_threads", json!({})).await;
+    if let Some(ids) = existing.get_array("pinned_threads") {
+        for id_val in ids {
+            if let Some(id) = id_val.as_str() {
+                node.call_tool("unpin_thread", json!({"thread_id": id})).await;
+            }
+        }
+    }
+
+    // Pin the thread (thread = channel)
+    node.call_tool(
+        "pin_thread",
+        json!({
+            "thread_id": channel_id
+        }),
+    )
+    .await
+    .assert_success();
+
+    // Get pinned threads (no args needed)
     let r = node
-        .call_tool(
-            "get_pinned_threads",
-            json!({
-                "channel_id": channel_id
-            }),
-        )
+        .call_tool("get_pinned_threads", json!({}))
         .await;
 
     r.assert_success();
@@ -641,8 +669,7 @@ async fn test_send_typing_indicator() {
         .call_tool(
             "send_typing_indicator",
             json!({
-                "entity_id": channel_id,
-                "entity_type": "channel"
+                "thread_id": channel_id
             }),
         )
         .await;
@@ -669,7 +696,7 @@ async fn test_get_typing_users() {
         .call_tool(
             "get_typing_users",
             json!({
-                "entity_id": channel_id
+                "thread_id": channel_id
             }),
         )
         .await;
@@ -895,8 +922,7 @@ async fn test_queue_offline_message() {
         .call_tool(
             "queue_offline_message",
             json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
+                "thread_id": channel_id,
                 "text": "Offline message"
             }),
         )
@@ -923,8 +949,7 @@ async fn test_get_pending_messages() {
     node.call_tool(
         "queue_offline_message",
         json!({
-            "entity_id": channel_id,
-            "entity_type": "channel",
+            "thread_id": channel_id,
             "text": "Pending message"
         }),
     )
@@ -933,12 +958,7 @@ async fn test_get_pending_messages() {
 
     // Get pending messages
     let r = node
-        .call_tool(
-            "get_pending_messages",
-            json!({
-                "entity_id": channel_id
-            }),
-        )
+        .call_tool("get_pending_messages", json!({}))
         .await;
 
     r.assert_success();
@@ -962,8 +982,7 @@ async fn test_retry_pending_messages() {
     node.call_tool(
         "queue_offline_message",
         json!({
-            "entity_id": channel_id,
-            "entity_type": "channel",
+            "thread_id": channel_id,
             "text": "Retry this message"
         }),
     )
@@ -972,12 +991,7 @@ async fn test_retry_pending_messages() {
 
     // Retry pending messages
     let r = node
-        .call_tool(
-            "retry_pending_messages",
-            json!({
-                "entity_id": channel_id
-            }),
-        )
+        .call_tool("retry_pending_messages", json!({}))
         .await;
 
     r.assert_success();
@@ -1002,24 +1016,22 @@ async fn test_cancel_pending_message() {
         .call_tool(
             "queue_offline_message",
             json!({
-                "entity_id": channel_id,
-                "entity_type": "channel",
+                "thread_id": channel_id,
                 "text": "Cancel this message"
             }),
         )
         .await;
     r.assert_success();
 
-    // Get the message ID from the response
-    let message_id = r.get_str("id").unwrap_or("pending-1");
+    // Get the pending ID from the response
+    let pending_id = r.get_str("pending_id").unwrap_or("pending-1");
 
     // Cancel the pending message
     let r = node
         .call_tool(
             "cancel_pending_message",
             json!({
-                "entity_id": channel_id,
-                "message_id": message_id
+                "pending_id": pending_id
             }),
         )
         .await;
@@ -1125,12 +1137,15 @@ async fn test_full_messaging_workflow() {
         .await
         .assert_success();
 
-    // 6. Mark thread as read
+    // Ensure thread is populated in the messaging service
+    alice.call_tool("list_threads", json!({})).await;
+
+    // 6. Mark thread as read (thread = channel)
     alice
         .call_tool(
             "mark_thread_read",
             json!({
-                "thread_id": parent_msg_id
+                "thread_id": channel_id
             }),
         )
         .await
@@ -1162,12 +1177,23 @@ async fn test_full_messaging_workflow() {
 
     r.assert_success();
 
-    // 9. Pin the thread
+    // 9. Pin the thread (thread = channel) - clear existing pins first
+    let existing = alice.call_tool("get_pinned_threads", json!({})).await;
+    if let Some(ids) = existing.get_array("pinned_threads") {
+        for id_val in ids {
+            if let Some(id) = id_val.as_str() {
+                alice
+                    .call_tool("unpin_thread", json!({"thread_id": id}))
+                    .await;
+            }
+        }
+    }
+
     alice
         .call_tool(
             "pin_thread",
             json!({
-                "thread_id": parent_msg_id
+                "thread_id": channel_id
             }),
         )
         .await
@@ -1178,7 +1204,7 @@ async fn test_full_messaging_workflow() {
         .call_tool(
             "edit_message",
             json!({
-                "thread_id": channel_id,
+                "entity_id": channel_id,
                 "message_id": parent_msg_id,
                 "new_text": "Let's discuss the new feature! (updated)"
             }),

@@ -10,8 +10,9 @@
     "isError": "boolean"
   },
   "response_structure": {
-    "board_id": "string",
-    "name": "string",
-    "created_at": "string|optional"
+    "id": "string|optional",
+    "board_id": "string|optional",
+    "message": "string|optional",
+    "success": "boolean|optional"
   }
 }

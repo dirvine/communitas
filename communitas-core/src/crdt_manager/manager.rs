@@ -114,12 +114,25 @@ impl CrdtManager {
         self.storage_dir.join("crdt").join(entity_type)
     }
 
-    /// Sanitize doc_id for use as filename (Windows-safe)
+    /// Sanitize doc_id for use as filename (Windows-safe, length-safe)
     ///
     /// Doc IDs can contain colons (e.g., "entity:{id}:core") which are forbidden
     /// on Windows. We hex-encode the entire doc_id to ensure cross-platform safety.
+    ///
+    /// For long doc_ids, hex-encoding doubles the length and may exceed the
+    /// 255-byte filesystem filename limit (especially with `.yrs` extension and
+    /// temp file suffixes). When the hex-encoded name would exceed 200 chars,
+    /// we use a SHA-256 hash instead, producing a fixed 67-char filename
+    /// (`h_` prefix + 64 hex chars).
     fn sanitize_doc_id(doc_id: &str) -> String {
-        hex::encode(doc_id.as_bytes())
+        let hex_encoded = hex::encode(doc_id.as_bytes());
+        if hex_encoded.len() > 200 {
+            use sha2::{Digest, Sha256};
+            let hash = Sha256::digest(doc_id.as_bytes());
+            format!("h_{}", hex::encode(hash))
+        } else {
+            hex_encoded
+        }
     }
 
     /// Get the file paths for a document

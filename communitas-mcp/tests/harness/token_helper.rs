@@ -54,89 +54,88 @@ impl TokenTestHelper {
 
     /// Create a read-only token (can only read messages and files)
     pub fn create_read_only_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::ReadMessages, Scope::ReadFiles],
             24,
-        )?)
+        )
     }
 
     /// Create a messaging token (can read and send messages)
     pub fn create_messaging_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::ReadMessages, Scope::SendMessages],
             24,
-        )?)
+        )
     }
 
     /// Create a kanban-only token
     pub fn create_kanban_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::ManageKanban, Scope::ReadMessages],
             24,
-        )?)
+        )
     }
 
     /// Create a files-only token (read and write files)
     pub fn create_files_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::ReadFiles, Scope::WriteFiles],
             24,
-        )?)
+        )
     }
 
     /// Create an entities token (can manage entities and members)
     pub fn create_entities_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::ManageEntities, Scope::ManageMembers],
             24,
-        )?)
+        )
     }
 
     /// Create a network token (can manage network operations)
     pub fn create_network_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::ManageNetwork],
             24,
-        )?)
+        )
     }
 
     /// Create a contacts token (can manage contacts)
     pub fn create_contacts_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::ManageContacts],
             24,
-        )?)
+        )
     }
 
     /// Create a full-access token (all permissions)
     pub fn create_full_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self
-            .manager
-            .create_token(&self.issuer, delegate_name, vec![Scope::Full], 24)?)
+        self.manager
+            .create_token(&self.issuer, delegate_name, vec![Scope::Full], 24)
     }
 
     /// Create an expired token (0-hour expiration)
     pub fn create_expired_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self.manager.create_token(
+        self.manager.create_token(
             &self.issuer,
             delegate_name,
             vec![Scope::Full],
             0, // Expires immediately
-        )?)
+        )
     }
 
     /// Create a token with custom scopes
@@ -146,16 +145,14 @@ impl TokenTestHelper {
         scopes: Vec<Scope>,
         hours: u64,
     ) -> Result<String, anyhow::Error> {
-        Ok(self
-            .manager
-            .create_token(&self.issuer, delegate_name, scopes, hours)?)
+        self.manager
+            .create_token(&self.issuer, delegate_name, scopes, hours)
     }
 
     /// Create a token with no scopes (should be rejected by all operations)
     pub fn create_empty_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        Ok(self
-            .manager
-            .create_token(&self.issuer, delegate_name, vec![], 24)?)
+        self.manager
+            .create_token(&self.issuer, delegate_name, vec![], 24)
     }
 
     /// Verify a token
@@ -163,7 +160,7 @@ impl TokenTestHelper {
         &self,
         token: &str,
     ) -> Result<communitas_mcp::auth::DelegateToken, anyhow::Error> {
-        Ok(self.manager.verify_token(token)?)
+        self.manager.verify_token(token)
     }
 
     /// Get a reference to the underlying manager

@@ -256,7 +256,7 @@ mod messaging_sync {
         let channel_id = channel.get_str("entity_id").unwrap_or(org_id); // Fall back to org if channel creation fails
 
         // Send messages
-        let messages = vec![
+        let messages = [
             "Hello, this is message 1",
             "This is message 2 for sync test",
             "Final message - number 3",
@@ -803,10 +803,10 @@ mod contact_exchange {
 
             println!("Bob's presence from Alice's view: {:?}", presence);
 
-            if presence.success {
-                if let Some(status) = presence.get_str("status") {
-                    assert_eq!(status, "online", "Bob's status should be online");
-                }
+            if presence.success
+                && let Some(status) = presence.get_str("status")
+            {
+                assert_eq!(status, "online", "Bob's status should be online");
             }
         }
     }
@@ -872,30 +872,29 @@ mod invitation_workflow {
             println!("Pending invites: {:?}", pending);
 
             // Accept invitation (if present)
-            if let Some(invites) = pending.get_array("invitations") {
-                if let Some(first_invite) = invites.first() {
-                    if let Some(invite_id) = first_invite.get("invitation_id") {
-                        let accept = invitee
-                            .call_tool(
-                                "accept_invitation",
-                                json!({
-                                    "invitation_id": invite_id
-                                }),
-                            )
-                            .await;
+            if let Some(invites) = pending.get_array("invitations")
+                && let Some(first_invite) = invites.first()
+                && let Some(invite_id) = first_invite.get("invitation_id")
+            {
+                let accept = invitee
+                    .call_tool(
+                        "accept_invitation",
+                        json!({
+                            "invitation_id": invite_id
+                        }),
+                    )
+                    .await;
 
-                        println!("Accept invitation result: {:?}", accept);
+                println!("Accept invitation result: {:?}", accept);
 
-                        // Verify membership synced
-                        let verifier = CrdtSyncVerifier::new(vec![inviter, invitee])
-                            .with_timeout(Duration::from_secs(20));
+                // Verify membership synced
+                let verifier = CrdtSyncVerifier::new(vec![inviter, invitee])
+                    .with_timeout(Duration::from_secs(20));
 
-                        let synced = verifier
-                            .verify_member_count(org_id, "organization", 2)
-                            .await;
-                        println!("Membership synced: {}", synced);
-                    }
-                }
+                let synced = verifier
+                    .verify_member_count(org_id, "organization", 2)
+                    .await;
+                println!("Membership synced: {}", synced);
             }
         }
     }

@@ -35,17 +35,17 @@ macro_rules! require_network {
 
 async fn resolve_connection_words(node: &P2pTestNode) -> Option<String> {
     let words = node.call_tool("get_connection_words", json!({})).await;
-    if words.success {
-        if let Some(value) = words.get_str("connection_words") {
-            return Some(value.to_string());
-        }
+    if words.success
+        && let Some(value) = words.get_str("connection_words")
+    {
+        return Some(value.to_string());
     }
 
     let status = node.call_tool("network_status", json!({})).await;
-    if status.success {
-        if let Some(value) = status.get_str("connection_identity") {
-            return Some(value.to_string());
-        }
+    if status.success
+        && let Some(value) = status.get_str("connection_identity")
+    {
+        return Some(value.to_string());
     }
 
     node.four_words().map(|v| v.to_string())
@@ -295,7 +295,7 @@ mod peer_discovery {
 
         // Wait for Bob to register the peer
         bob.wait_for_peer(
-            &alice.four_words().unwrap_or_default(),
+            alice.four_words().unwrap_or_default(),
             Duration::from_secs(10),
         )
         .await
@@ -415,10 +415,10 @@ mod presence {
 
             // Verify the update
             let current = node.call_tool("get_our_presence", json!({})).await;
-            if current.success {
-                if let Some(current_status) = current.get_str("status") {
-                    assert_eq!(current_status, status, "Status should be updated");
-                }
+            if current.success
+                && let Some(current_status) = current.get_str("status")
+            {
+                assert_eq!(current_status, status, "Status should be updated");
             }
         }
     }
@@ -479,10 +479,10 @@ mod external_address {
         // The important thing is that it doesn't crash
         println!("External address request result: {:?}", result);
 
-        if result.success {
-            if let Some(addr) = result.get_str("external_address") {
-                println!("External address: {}", addr);
-            }
+        if result.success
+            && let Some(addr) = result.get_str("external_address")
+        {
+            println!("External address: {}", addr);
         }
     }
 }

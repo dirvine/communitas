@@ -392,7 +392,7 @@ mod tests {
         assert_eq!(org2_children[0].id, "channel3");
 
         // Non-existent parent should not be in index
-        assert!(index.get("org3").is_none());
+        assert!(!index.contains_key("org3"));
     }
 
     #[test]

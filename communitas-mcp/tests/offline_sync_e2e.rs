@@ -55,9 +55,8 @@ mod offline_message_queue {
             .call_tool(
                 "queue_offline_message",
                 json!({
-                    "entity_id": "test-channel",
-                    "content": "This message was sent while offline",
-                    "message_type": "text"
+                    "thread_id": "test-channel",
+                    "text": "This message was sent while offline"
                 }),
             )
             .await;
@@ -66,18 +65,16 @@ mod offline_message_queue {
 
         // Verify message is in pending queue
         let pending = client
-            .call_tool(
-                "get_pending_messages",
-                json!({
-                    "entity_id": "test-channel"
-                }),
-            )
+            .call_tool("get_pending_messages", json!({}))
             .await;
 
         println!("Pending messages: {:?}", pending);
 
         if pending.success {
-            let count = pending.get_array("messages").map(|a| a.len()).unwrap_or(0);
+            let count = pending
+                .get_array("pending_messages")
+                .map(|a| a.len())
+                .unwrap_or(0);
             assert!(count > 0, "Should have at least one pending message");
         }
 
@@ -95,12 +92,7 @@ mod offline_message_queue {
 
         // Trigger sync of pending messages
         let retry = client
-            .call_tool(
-                "retry_pending_messages",
-                json!({
-                    "entity_id": "test-channel"
-                }),
-            )
+            .call_tool("retry_pending_messages", json!({}))
             .await;
 
         println!("Retry pending: {:?}", retry);
@@ -129,9 +121,8 @@ mod offline_message_queue {
             .call_tool(
                 "queue_offline_message",
                 json!({
-                    "entity_id": "test-channel",
-                    "content": "Message to be canceled",
-                    "message_type": "text"
+                    "thread_id": "test-channel",
+                    "text": "Message to be canceled"
                 }),
             )
             .await;
@@ -153,27 +144,22 @@ mod offline_message_queue {
 
             // Verify message is no longer pending
             let pending = client
-                .call_tool(
-                    "get_pending_messages",
-                    json!({
-                        "entity_id": "test-channel"
-                    }),
-                )
+                .call_tool("get_pending_messages", json!({}))
                 .await;
 
-            if pending.success {
-                if let Some(messages) = pending.get_array("messages") {
-                    let still_exists = messages.iter().any(|m| {
-                        m.get("pending_id")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s == id)
-                            .unwrap_or(false)
-                    });
-                    assert!(
-                        !still_exists,
-                        "Canceled message should not be in pending queue"
-                    );
-                }
+            if pending.success
+                && let Some(messages) = pending.get_array("pending_messages")
+            {
+                let still_exists = messages.iter().any(|m| {
+                    m.get("pending_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s == id)
+                        .unwrap_or(false)
+                });
+                assert!(
+                    !still_exists,
+                    "Canceled message should not be in pending queue"
+                );
             }
         }
 
@@ -215,9 +201,8 @@ mod offline_message_queue {
                 .call_tool(
                     "queue_offline_message",
                     json!({
-                        "entity_id": "multi-channel",
-                        "content": content,
-                        "message_type": "text"
+                        "thread_id": "multi-channel",
+                        "text": content
                     }),
                 )
                 .await;
@@ -225,16 +210,14 @@ mod offline_message_queue {
 
         // Verify all messages are queued
         let pending = client
-            .call_tool(
-                "get_pending_messages",
-                json!({
-                    "entity_id": "multi-channel"
-                }),
-            )
+            .call_tool("get_pending_messages", json!({}))
             .await;
 
         if pending.success {
-            let count = pending.get_array("messages").map(|a| a.len()).unwrap_or(0);
+            let count = pending
+                .get_array("pending_messages")
+                .map(|a| a.len())
+                .unwrap_or(0);
             assert_eq!(count, messages.len(), "All messages should be queued");
         }
 
@@ -484,10 +467,10 @@ mod conflict_resolution {
         println!("Sync conflicts: {:?}", conflicts);
 
         // May be empty if no conflicts exist
-        if conflicts.success {
-            if let Some(conflict_list) = conflicts.get_array("conflicts") {
-                println!("Found {} conflicts", conflict_list.len());
-            }
+        if conflicts.success
+            && let Some(conflict_list) = conflicts.get_array("conflicts")
+        {
+            println!("Found {} conflicts", conflict_list.len());
         }
     }
 }
@@ -800,9 +783,8 @@ mod integration {
             .call_tool(
                 "queue_offline_message",
                 json!({
-                    "entity_id": entity.get_str("entity_id").unwrap_or("test"),
-                    "content": "Message created while offline",
-                    "message_type": "text"
+                    "thread_id": entity.get_str("entity_id").unwrap_or("test"),
+                    "text": "Message created while offline"
                 }),
             )
             .await;

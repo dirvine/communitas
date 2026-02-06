@@ -298,8 +298,8 @@ impl P2pTestScenario {
             .collect();
 
         for i in 0..self.nodes.len() {
-            for j in (i + 1)..self.nodes.len() {
-                if let Some(ref target_words) = words[j] {
+            for (j, word_opt) in words.iter().enumerate().skip(i + 1) {
+                if let Some(target_words) = word_opt {
                     let result = self.nodes[i]
                         .call_tool(
                             "connect_by_words",

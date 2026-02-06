@@ -656,7 +656,7 @@ mod integration {
         ];
 
         for (name, result) in presets {
-            let token = result.expect(&format!("create {} token", name));
+            let token = result.unwrap_or_else(|_| panic!("create {} token", name));
             let verified = helper.verify_token(&token);
             assert!(verified.is_ok(), "{} token should be valid", name);
         }

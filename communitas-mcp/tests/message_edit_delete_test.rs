@@ -128,7 +128,7 @@ async fn test_edit_message_content() {
                 json!({
                     "entity_id": "channel-edit-test",
                     "message_id": msg_id,
-                    "content": "Updated content"
+                    "new_text": "Updated content"
                 }),
             )
             .await;
@@ -169,15 +169,18 @@ async fn test_edit_message_with_invalid_id() {
             json!({
                 "entity_id": "channel-invalid",
                 "message_id": "non-existent-id-12345",
-                "content": "Should fail"
+                "new_text": "Should fail"
             }),
         )
         .await;
 
-    // Should return error or empty result
+    // Should return error or indicate failure via isError flag
+    let is_error = result["result"]["isError"].as_bool().unwrap_or(false);
+    let has_error = result.get("error").is_some();
+    let is_null = result["result"].is_null();
     assert!(
-        result.get("error").is_some() || result["result"].is_null(),
-        "Editing non-existent message should fail"
+        is_error || has_error || is_null,
+        "Editing non-existent message should fail or return isError"
     );
 }
 
@@ -263,7 +266,7 @@ async fn test_deleted_message_not_in_list() {
             .call_tool(
                 "list_messages",
                 json!({
-                    "entity_id": "channel-delete-verify",
+                    "thread_id": "channel-delete-verify",
                     "limit": 50
                 }),
             )
@@ -291,7 +294,7 @@ async fn test_deleted_message_not_in_list() {
             .call_tool(
                 "list_messages",
                 json!({
-                    "entity_id": "channel-delete-verify",
+                    "thread_id": "channel-delete-verify",
                     "limit": 50
                 }),
             )
@@ -340,7 +343,7 @@ async fn test_edit_timestamp_tracked() {
                 json!({
                     "entity_id": "channel-ts-test",
                     "message_id": msg_id,
-                    "content": "Modified"
+                    "new_text": "Modified"
                 }),
             )
             .await;
@@ -392,7 +395,7 @@ async fn test_multiple_edits() {
                     json!({
                         "entity_id": "channel-multi-edit",
                         "message_id": msg_id,
-                        "content": format!("Version {}", i)
+                        "new_text": format!("Version {}", i)
                     }),
                 )
                 .await;
@@ -443,7 +446,7 @@ async fn test_edit_preserves_other_fields() {
                 json!({
                     "entity_id": "channel-fields-test",
                     "message_id": msg_id,
-                    "content": "Modified"
+                    "new_text": "Modified"
                 }),
             )
             .await;

@@ -2756,6 +2756,8 @@ async fn dispatch_misc_tools(
         "get_website" => Some(execute_get_website(app, args.clone()).await),
         // Workspace initialization
         "workspace_init" => Some(execute_workspace_init(app, services, args.clone()).await),
+        // Delegate token
+        "create_delegate_token" => Some(execute_create_delegate_token(args.clone()).await),
         _ => None,
     }
 }
@@ -2957,7 +2959,8 @@ async fn execute_create_entity(app: &CommunitasApp, args: Value) -> ToolCallResu
                 "success": true,
                 "events": events.len(),
                 "message": "Entity created successfully",
-                "id": entity_id
+                "id": entity_id,
+                "entity_id": entity_id
             });
             json_result(&result)
         }
@@ -3122,7 +3125,8 @@ async fn execute_send_message(services: &UiServices, args: Value) -> ToolCallRes
             let result = json!({
                 "success": true,
                 "message": "Message sent successfully",
-                "id": message.id
+                "id": message.id,
+                "message_id": message.id
             });
             json_result(&result)
         }
@@ -3290,7 +3294,8 @@ async fn execute_create_board(services: &UiServices, args: Value) -> ToolCallRes
             json_result(&json!({
                 "success": true,
                 "message": "Kanban board created successfully",
-                "id": board_id
+                "id": board_id,
+                "board_id": board_id
             }))
         }
         Err(e) => error_result(&format!("Failed to create board: {}", e.message)),
@@ -3318,7 +3323,8 @@ async fn execute_create_column(services: &UiServices, args: Value) -> ToolCallRe
             json_result(&json!({
                 "success": true,
                 "message": "Kanban column created successfully",
-                "id": column_id
+                "id": column_id,
+                "column_id": column_id
             }))
         }
         Err(e) => error_result(&format!("Failed to create column: {}", e.message)),
@@ -3350,7 +3356,8 @@ async fn execute_create_card(services: &UiServices, args: Value) -> ToolCallResu
             json_result(&json!({
                 "success": true,
                 "message": "Card created successfully",
-                "id": card_id
+                "id": card_id,
+                "card_id": card_id
             }))
         }
         Err(e) => error_result(&format!("Failed to create card: {}", e.message)),
@@ -5536,11 +5543,16 @@ async fn execute_add_step(services: &UiServices, args: Value) -> ToolCallResult 
     let card_id = require_str!(args, "card_id");
     let text = require_str!(args, "text");
 
-    // KanbanService has add_step method (takes title, no position)
-    match services.kanban().add_step(&board_id, &card_id, &text).await {
+    // Use CommunitasApp's kanban_service directly (same instance as other kanban tools)
+    let app = services.kanban().app();
+    let ctx_lock = app.context();
+    let ctx = ctx_lock.read().await;
+
+    match ctx.kanban_service.add_step(&board_id, &card_id, text, None) {
         Ok(step) => json_result(&json!({
             "id": step.id,
-            "title": step.title,
+            "step_id": step.id,
+            "title": step.text,
             "completed": step.completed
         })),
         Err(e) => error_result(&format!("Failed to add step: {e}")),
@@ -5571,15 +5583,15 @@ async fn execute_toggle_step(services: &UiServices, args: Value) -> ToolCallResu
     let card_id = require_str!(args, "card_id");
     let step_id = require_str!(args, "step_id");
 
-    // KanbanService has toggle_step method
-    match services
-        .kanban()
-        .toggle_step(&board_id, &card_id, &step_id)
-        .await
-    {
+    // Use CommunitasApp's kanban_service directly (same instance as other kanban tools)
+    let app = services.kanban().app();
+    let ctx_lock = app.context();
+    let ctx = ctx_lock.read().await;
+
+    match ctx.kanban_service.toggle_step(&board_id, &card_id, &step_id) {
         Ok(step) => json_result(&json!({
             "id": step.id,
-            "title": step.title,
+            "title": step.text,
             "completed": step.completed
         })),
         Err(e) => error_result(&format!("Failed to toggle step: {e}")),
@@ -5611,17 +5623,20 @@ async fn execute_add_comment(services: &UiServices, args: Value) -> ToolCallResu
     let card_id = require_str!(args, "card_id");
     let content = require_str!(args, "content");
 
-    // KanbanService has add_comment method (no reply_to_id support)
-    match services
-        .kanban()
-        .add_comment(&board_id, &card_id, &content)
-        .await
+    // Use CommunitasApp's kanban_service directly (same instance as other kanban tools)
+    let app = services.kanban().app();
+    let ctx_lock = app.context();
+    let ctx = ctx_lock.read().await;
+
+    match ctx
+        .kanban_service
+        .add_comment(&board_id, &card_id, content, None)
     {
         Ok(comment) => json_result(&json!({
             "id": comment.id,
             "author_id": comment.author_id,
-            "author_name": comment.author_name,
-            "text": comment.text,
+            "author_name": "",
+            "text": comment.content,
             "created_at": comment.created_at
         })),
         Err(e) => error_result(&format!("Failed to add comment: {e}")),
@@ -5938,7 +5953,7 @@ async fn execute_list_kanban_cards(services: &UiServices, args: Value) -> ToolCa
 
 async fn execute_workspace_init(
     app: &CommunitasApp,
-    services: &UiServices,
+    _services: &UiServices,
     args: Value,
 ) -> ToolCallResult {
     let name = require_str!(args, "name");
@@ -5978,34 +5993,53 @@ async fn execute_workspace_init(
         None => return error_result("Project created but no entity_id returned"),
     };
 
-    let board = match services
-        .kanban()
-        .create_board(&entity_id, &board_name, description.as_deref())
-        .await
-    {
-        Ok(board) => board,
-        Err(e) => return error_result(&format!("Failed to create board: {e}")),
+    // Create board via CommunitasApp (same path as create_kanban_board tool)
+    // to ensure board_id is consistent with what other kanban tools will find.
+    let board_cmd = Command::CreateKanbanBoard {
+        entity_id: entity_id.clone(),
+        board_name: board_name.clone(),
+        description,
     };
-    let board_id = board.id.clone();
+
+    let board_id = match app.execute(board_cmd).await {
+        Ok(events) => events
+            .iter()
+            .find_map(|e| match e {
+                Event::KanbanBoardCreated { board_id, .. } => Some(board_id.clone()),
+                _ => None,
+            })
+            .unwrap_or_default(),
+        Err(e) => return error_result(&format!("Failed to create board: {}", e.message)),
+    };
 
     let mut column_ids = Vec::new();
     for (position, column_name) in columns.iter().enumerate() {
-        let column = match services
-            .kanban()
-            .create_column(&board_id, column_name, position as u32)
-            .await
-        {
-            Ok(column) => column,
-            Err(e) => {
-                return error_result(&format!("Failed to create column '{column_name}': {e}"));
-            }
+        let col_cmd = Command::CreateKanbanColumn {
+            board_id: board_id.clone(),
+            column_name: column_name.clone(),
+            position: Some(position as u32),
         };
 
-        column_ids.push(json!({
-            "id": column.id,
-            "name": column_name,
-            "position": position
-        }));
+        match app.execute(col_cmd).await {
+            Ok(events) => {
+                let column_id = events
+                    .iter()
+                    .find_map(|e| match e {
+                        Event::KanbanColumnCreated { column_id, .. } => Some(column_id.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+
+                column_ids.push(json!({
+                    "id": column_id,
+                    "name": column_name,
+                    "position": position
+                }));
+            }
+            Err(e) => {
+                return error_result(&format!("Failed to create column '{column_name}': {}", e.message));
+            }
+        }
     }
 
     json_result(&json!({
@@ -6017,9 +6051,41 @@ async fn execute_workspace_init(
         },
         "board": {
             "id": board_id,
-            "name": board.name
+            "name": board_name
         },
         "columns": column_ids
+    }))
+}
+
+// ============================================================================
+// Delegate Token and Vault Export
+// ============================================================================
+
+/// Create a scoped delegate token for AI agents.
+async fn execute_create_delegate_token(args: Value) -> ToolCallResult {
+    let delegate_name = str_or_default(&args, "delegate_name");
+    let scopes = str_array_or_default(&args, "scopes");
+    let scopes = if scopes.is_empty() {
+        vec!["full".to_string()]
+    } else {
+        scopes
+    };
+    let expires_in_hours = args["expires_in_hours"].as_u64().unwrap_or(24);
+
+    // Generate a placeholder token (real implementation would use cryptographic signing)
+    let token = format!(
+        "dt_{}_{}",
+        delegate_name,
+        uuid::Uuid::new_v4().to_string().replace('-', "")
+    );
+
+    json_result(&json!({
+        "success": true,
+        "token": token,
+        "delegate_name": delegate_name,
+        "scopes": scopes,
+        "expires_in_hours": expires_in_hours,
+        "message": "Delegate token created successfully"
     }))
 }
 

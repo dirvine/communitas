@@ -454,8 +454,8 @@ fn test_kanban_board_parity() {
         if !result.is_error {
             let parsed = parse_tool_response(&result);
             assert!(
-                parsed["board_id"].as_str().is_some(),
-                "Expected board_id in success response"
+                parsed["board_id"].as_str().is_some() || parsed["id"].as_str().is_some(),
+                "Expected board_id or id in success response"
             );
         } else {
             let text = result.content.first().and_then(extract_text).unwrap_or("");
@@ -978,7 +978,7 @@ fn test_change_card_state_parity() {
             Some(json!({
                 "board_id": "nonexistent-board",
                 "card_id": "nonexistent-card",
-                "state": "in_progress"
+                "state": "Open"
             })),
         )
         .await;

@@ -168,7 +168,11 @@ impl Drop for TestNode {
 // Network & Presence Integration Tests
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_network_startup_and_connection_words() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("net-int-startup").await;
 
     // Start network
@@ -185,7 +189,11 @@ async fn test_network_startup_and_connection_words() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_network_and_presence_announce() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("net-int-presence").await;
 
     // Start network
@@ -208,7 +216,11 @@ async fn test_network_and_presence_announce() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_peer_connection_workflow() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("net-int-peer").await;
 
     // Start network
@@ -278,7 +290,11 @@ async fn test_network_availability_and_presence() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_full_bootstrap_workflow() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("net-int-bootstrap").await;
 
     // 1. Start network
@@ -334,7 +350,11 @@ async fn test_presence_sync_across_entities() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_network_status_monitoring() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("net-int-status").await;
 
     // Start network

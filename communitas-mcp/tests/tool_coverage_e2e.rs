@@ -4580,5 +4580,5 @@ async fn test_tool_coverage_summary() {
     println!("================================\n");
 
     // Just verify the count
-    assert_eq!(TESTABLE_TOOLS.len(), 145, "Expected 145 testable tools");
+    assert_eq!(TESTABLE_TOOLS.len(), 143, "Expected 143 testable tools");
 }

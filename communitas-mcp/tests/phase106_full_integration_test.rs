@@ -168,7 +168,11 @@ impl Drop for TestNode {
 // Full Integration Tests
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_full_call_network_presence_workflow() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("full-int-all").await;
 
     // 1. Start network
@@ -356,7 +360,11 @@ async fn test_presence_updates_during_call() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_network_reconnection_with_call_recovery() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("full-int-reconnect").await;
 
     // Start network

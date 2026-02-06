@@ -184,7 +184,11 @@ async fn test_get_connection_words() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_connect_by_words_valid_format() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("connect_by_words_valid").await;
 
     // Start network
@@ -254,7 +258,11 @@ async fn test_network_connect_with_peer_four_words() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_network_connect_with_invalid_words() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("network_connect_invalid").await;
 
     // Start network
@@ -333,7 +341,11 @@ async fn test_network_peers_after_connection() {
 }
 
 #[tokio::test]
+#[ignore] // Requires live network: set MCP_TEST_NETWORK_ENABLED=true to run
 async fn test_disconnect_after_connect() {
+    if std::env::var("MCP_TEST_NETWORK_ENABLED").is_err() {
+        return;
+    }
     let node = TestNode::start("disconnect_after_connect").await;
 
     // Start network

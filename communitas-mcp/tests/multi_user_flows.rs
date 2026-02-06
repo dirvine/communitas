@@ -76,10 +76,10 @@ async fn pubkey_hex(node: &P2pTestNode) -> String {
 
 async fn identity_four_words(node: &P2pTestNode) -> String {
     let profile = node.call_tool("get_profile", json!({})).await;
-    if profile.success {
-        if let Some(words) = profile.get_str("four_words") {
-            return words.to_string();
-        }
+    if profile.success
+        && let Some(words) = profile.get_str("four_words")
+    {
+        return words.to_string();
     }
 
     if let Some(words) = node.four_words() {

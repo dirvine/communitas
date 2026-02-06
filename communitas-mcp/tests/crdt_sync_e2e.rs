@@ -259,17 +259,17 @@ mod message_sync {
             )
             .await;
 
-        if bob_messages.success {
-            if let Some(messages) = bob_messages.get_array("messages") {
-                let found = messages.iter().any(|m| {
-                    m.get("content")
-                        .and_then(|c| c.as_str())
-                        .map(|s| s == unique_content)
-                        .unwrap_or(false)
-                });
-                assert!(found, "Bob should have the same message content");
-                println!("✓ Message content verified on both nodes");
-            }
+        if bob_messages.success
+            && let Some(messages) = bob_messages.get_array("messages")
+        {
+            let found = messages.iter().any(|m| {
+                m.get("content")
+                    .and_then(|c| c.as_str())
+                    .map(|s| s == unique_content)
+                    .unwrap_or(false)
+            });
+            assert!(found, "Bob should have the same message content");
+            println!("✓ Message content verified on both nodes");
         }
     }
 }

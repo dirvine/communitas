@@ -114,10 +114,10 @@ impl ToolResult {
         let search_str = substring.to_lowercase();
 
         // Check error field
-        if let Some(ref err) = self.error {
-            if err.to_lowercase().contains(&search_str) {
-                return true;
-            }
+        if let Some(ref err) = self.error
+            && err.to_lowercase().contains(&search_str)
+        {
+            return true;
         }
 
         // Check content field (error messages are often in content)
@@ -133,10 +133,10 @@ impl ToolResult {
                     return true;
                 }
             }
-            if let Some(message) = parsed.get("message").and_then(|v| v.as_str()) {
-                if message.to_lowercase().contains(&search_str) {
-                    return true;
-                }
+            if let Some(message) = parsed.get("message").and_then(|v| v.as_str())
+                && message.to_lowercase().contains(&search_str)
+            {
+                return true;
             }
         }
 

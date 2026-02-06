@@ -1042,7 +1042,7 @@ async fn test_change_card_state() {
             json!({
                 "board_id": board_id,
                 "card_id": card_id,
-                "new_state": "in_progress"
+                "state": "Closed"
             }),
         )
         .await;
@@ -1086,7 +1086,7 @@ async fn test_create_kanban_tag() {
             "create_kanban_tag",
             json!({
                 "board_id": board_id,
-                "tag_name": "Bug",
+                "name": "Bug",
                 "color": "#ff0000"
             }),
         )
@@ -1126,7 +1126,7 @@ async fn test_list_kanban_tags() {
         "create_kanban_tag",
         json!({
             "board_id": board_id,
-            "tag_name": "Bug",
+            "name": "Bug",
             "color": "#ff0000"
         }),
     )
@@ -1137,7 +1137,7 @@ async fn test_list_kanban_tags() {
         "create_kanban_tag",
         json!({
             "board_id": board_id,
-            "tag_name": "Feature",
+            "name": "Feature",
             "color": "#00ff00"
         }),
     )
@@ -1221,7 +1221,7 @@ async fn test_tag_card() {
             "create_kanban_tag",
             json!({
                 "board_id": board_id,
-                "tag_name": "Priority",
+                "name": "Priority",
                 "color": "#ff0000"
             }),
         )
@@ -1301,7 +1301,7 @@ async fn test_untag_card() {
             "create_kanban_tag",
             json!({
                 "board_id": board_id,
-                "tag_name": "Remove",
+                "name": "Remove",
                 "color": "#ff0000"
             }),
         )
@@ -1414,7 +1414,7 @@ async fn test_full_kanban_workflow() {
             "create_kanban_tag",
             json!({
                 "board_id": board_id,
-                "tag_name": "Bug",
+                "name": "Bug",
                 "color": "#ff0000"
             }),
         )
@@ -1427,7 +1427,7 @@ async fn test_full_kanban_workflow() {
             "create_kanban_tag",
             json!({
                 "board_id": board_id,
-                "tag_name": "Feature",
+                "name": "Feature",
                 "color": "#00ff00"
             }),
         )
@@ -1465,7 +1465,7 @@ async fn test_full_kanban_workflow() {
     let card2_id = r.get_str("id").unwrap();
 
     // 6. Tag cards
-    node.call_tool(
+    let r6a = node.call_tool(
         "tag_card",
         json!({
             "board_id": board_id,
@@ -1473,10 +1473,10 @@ async fn test_full_kanban_workflow() {
             "tag_id": bug_tag
         }),
     )
-    .await
-    .assert_success();
+    .await;
+    r6a.assert_success();
 
-    node.call_tool(
+    let r6b = node.call_tool(
         "tag_card",
         json!({
             "board_id": board_id,
@@ -1484,11 +1484,11 @@ async fn test_full_kanban_workflow() {
             "tag_id": feature_tag
         }),
     )
-    .await
-    .assert_success();
+    .await;
+    r6b.assert_success();
 
     // 7. Move card through workflow
-    node.call_tool(
+    let r7 = node.call_tool(
         "move_kanban_card",
         json!({
             "board_id": board_id,
@@ -1497,11 +1497,11 @@ async fn test_full_kanban_workflow() {
             "new_position": 0
         }),
     )
-    .await
-    .assert_success();
+    .await;
+    r7.assert_success();
 
     // 8. Update card
-    node.call_tool(
+    let r8 = node.call_tool(
         "update_kanban_card",
         json!({
             "board_id": board_id,
@@ -1510,23 +1510,23 @@ async fn test_full_kanban_workflow() {
             "description": "Working on special character handling"
         }),
     )
-    .await
-    .assert_success();
+    .await;
+    r8.assert_success();
 
-    // 9. Change card state
-    node.call_tool(
+    // 9. Change card state (Open -> Closed)
+    let r9 = node.call_tool(
         "change_card_state",
         json!({
             "board_id": board_id,
             "card_id": card1_id,
-            "new_state": "in_progress"
+            "state": "Closed"
         }),
     )
-    .await
-    .assert_success();
+    .await;
+    r9.assert_success();
 
-    // 10. Complete card
-    node.call_tool(
+    // 10. Complete card - move to done column and archive
+    let r10a = node.call_tool(
         "move_kanban_card",
         json!({
             "board_id": board_id,
@@ -1535,19 +1535,19 @@ async fn test_full_kanban_workflow() {
             "new_position": 0
         }),
     )
-    .await
-    .assert_success();
+    .await;
+    r10a.assert_success();
 
-    node.call_tool(
+    let r10b = node.call_tool(
         "change_card_state",
         json!({
             "board_id": board_id,
             "card_id": card1_id,
-            "new_state": "done"
+            "state": "Archived"
         }),
     )
-    .await
-    .assert_success();
+    .await;
+    r10b.assert_success();
 
     // Verify workflow completed
     println!("Full kanban workflow test passed!");

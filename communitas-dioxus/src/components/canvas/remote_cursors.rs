@@ -70,7 +70,6 @@ pub fn RemoteCursors(props: RemoteCursorsProps) -> Element {
 }
 
 /// Calculate opacity based on last activity time.
-#[allow(dead_code)]
 fn calculate_opacity(last_active: i64, current_time: i64, timeout: i64) -> f32 {
     if current_time == 0 {
         return 1.0;
@@ -170,7 +169,6 @@ fn RemoteCursorMarker(props: RemoteCursorMarkerProps) -> Element {
 }
 
 /// Get short abbreviation for tool name.
-#[allow(dead_code)]
 fn tool_abbreviation(tool: &str) -> &str {
     match tool.to_lowercase().as_str() {
         "select" => "S",
@@ -232,7 +230,7 @@ pub fn CollaboratorList(props: CollaboratorListProps) -> Element {
 }
 
 /// Get initials from a name.
-#[allow(dead_code)]
+#[allow(dead_code)] // Called from RSX macro in CollaboratorList component
 fn initials(name: &str) -> String {
     name.split_whitespace()
         .filter_map(|word| word.chars().next())
@@ -244,19 +242,6 @@ fn initials(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[allow(dead_code)]
-    fn make_cursor(user_id: &str, name: &str, x: f32, y: f32, color: &str) -> RemoteCursor {
-        RemoteCursor {
-            user_id: user_id.to_string(),
-            user_name: name.to_string(),
-            x,
-            y,
-            color: color.to_string(),
-            last_active: 1000,
-            tool: None,
-        }
-    }
 
     #[test]
     fn initials_extraction() {

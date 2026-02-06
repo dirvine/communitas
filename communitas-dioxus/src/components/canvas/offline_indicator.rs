@@ -237,7 +237,7 @@ fn OperationItem(props: OperationItemProps) -> Element {
 }
 
 /// Get icon for operation type.
-#[allow(dead_code)]
+#[allow(dead_code)] // Called from RSX macro in OperationItem component
 fn operation_icon(op_type: OperationType) -> &'static str {
     match op_type {
         OperationType::AddElement => "➕",

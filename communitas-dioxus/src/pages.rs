@@ -179,6 +179,8 @@ pub fn EntityPageV2(
                 match active_tab() {
                     EntityTab::Chat => rsx! { EntityChatContent { entity: entity.clone() } },
                     EntityTab::Board => rsx! { EntityBoardContent { entity: entity.clone() } },
+                    EntityTab::Call => rsx! { EntityCallContent { entity: entity.clone() } },
+                    EntityTab::Canvas => rsx! { EntityCanvasContent { entity: entity.clone() } },
                     EntityTab::Drive => rsx! { EntityDriveContent { entity: entity.clone() } },
                     EntityTab::Documents => rsx! { EntityDocsContent { entity: entity.clone() } },
                     EntityTab::Details => rsx! { EntityDetailsContent { entity: entity.clone() } },
@@ -793,6 +795,35 @@ fn EntityDocsContent(entity: UnifiedEntity) -> Element {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/// Call tab content.
+#[component]
+fn EntityCallContent(entity: UnifiedEntity) -> Element {
+    rsx! {
+        div {
+            style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
+            crate::components::CallView {
+                show_full_controls: true,
+            }
+        }
+    }
+}
+
+/// Canvas tab content.
+#[component]
+fn EntityCanvasContent(entity: UnifiedEntity) -> Element {
+    rsx! {
+        div {
+            style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
+            crate::components::CanvasView {
+                entity_id: entity.id.clone(),
+                show_grid: true,
+                show_history: true,
+                show_sync_status: true,
             }
         }
     }

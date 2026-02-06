@@ -212,7 +212,7 @@ fn ToolButton(props: ToolButtonProps) -> Element {
 }
 
 /// Get the emoji icon for a tool type.
-#[allow(dead_code)]
+#[allow(dead_code)] // Called from RSX macro in ToolButton component
 fn tool_icon(tool: ToolType) -> &'static str {
     match tool {
         ToolType::Select => "↖",

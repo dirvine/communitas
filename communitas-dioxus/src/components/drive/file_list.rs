@@ -64,11 +64,6 @@ pub fn FileList(props: FileListProps) -> Element {
             SortColumn::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
             SortColumn::Size => a.size_bytes.cmp(&b.size_bytes),
             SortColumn::Modified => a.modified_at.cmp(&b.modified_at),
-            SortColumn::Type => {
-                let a_type = a.mime_type.as_deref().unwrap_or("");
-                let b_type = b.mime_type.as_deref().unwrap_or("");
-                a_type.cmp(b_type)
-            }
         };
 
         match props.sort_direction {

@@ -160,7 +160,7 @@ fn HistoryEntryDot(props: HistoryEntryDotProps) -> Element {
 }
 
 /// Get icon for history action type.
-#[allow(dead_code)]
+#[allow(dead_code)] // Called from RSX macro in HistoryEntryDot component
 fn action_icon(action_type: HistoryActionType) -> &'static str {
     match action_type {
         HistoryActionType::AddElement => "+",

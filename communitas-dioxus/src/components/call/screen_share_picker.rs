@@ -254,7 +254,6 @@ pub fn ScreenSharePicker(props: ScreenSharePickerProps) -> Element {
 
 // Note: Used in the rsx! macro for selected_tab signal and match
 #[derive(Clone, Copy, PartialEq, Debug)]
-#[allow(dead_code)]
 enum SourceTab {
     Monitors,
     Windows,

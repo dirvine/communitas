@@ -12,6 +12,8 @@ use dioxus::prelude::*;
 pub enum EntityTab {
     Board,
     Chat,
+    Call,
+    Canvas,
     Drive,
     Documents,
     Details,
@@ -22,6 +24,8 @@ impl EntityTab {
         match self {
             Self::Board => "Board",
             Self::Chat => "Chat",
+            Self::Call => "Call",
+            Self::Canvas => "Canvas",
             Self::Drive => "Drive",
             Self::Documents => "Docs",
             Self::Details => "Details",
@@ -32,6 +36,8 @@ impl EntityTab {
         match self {
             Self::Board => "☰",
             Self::Chat => "💬",
+            Self::Call => "📞",
+            Self::Canvas => "🎨",
             Self::Drive => "📁",
             Self::Documents => "📄",
             Self::Details => "⚙",
@@ -51,29 +57,32 @@ impl EntityTab {
             UnifiedEntityType::Project => vec![
                 Self::Board,
                 Self::Chat,
+                Self::Call,
+                Self::Canvas,
                 Self::Drive,
                 Self::Documents,
                 Self::Details,
             ],
             UnifiedEntityType::Channel => {
-                vec![Self::Chat, Self::Drive]
+                vec![Self::Chat, Self::Call, Self::Drive]
             }
             UnifiedEntityType::Organization => {
-                vec![Self::Chat, Self::Drive, Self::Details]
+                vec![Self::Chat, Self::Call, Self::Drive, Self::Details]
             }
             UnifiedEntityType::Group => {
-                vec![Self::Chat, Self::Drive]
+                vec![Self::Chat, Self::Call, Self::Drive]
             }
-            UnifiedEntityType::Person => vec![Self::Chat],
+            UnifiedEntityType::Person => vec![Self::Chat, Self::Call],
         }
     }
 
     /// Get all tabs in order (for keyboard navigation).
-    #[allow(dead_code)] // Will be used for keyboard navigation in Phase 12.8
     pub fn all_tabs() -> &'static [Self] {
         &[
             Self::Board,
             Self::Chat,
+            Self::Call,
+            Self::Canvas,
             Self::Drive,
             Self::Documents,
             Self::Details,

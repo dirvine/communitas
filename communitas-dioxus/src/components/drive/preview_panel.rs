@@ -100,16 +100,15 @@ impl PreviewCache {
         }
     }
 
-    /// Clear the entire cache.
-    #[allow(dead_code)]
+    // Test-only methods
+    #[cfg(test)]
     pub fn clear(&self) {
         if let Ok(mut entries) = self.entries.write() {
             entries.clear();
         }
     }
 
-    /// Get current cache size.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn size(&self) -> usize {
         self.entries.read().map(|e| e.len()).unwrap_or(0)
     }
@@ -148,7 +147,9 @@ enum PreviewLoadState {
     Error(String),
 }
 
-#[allow(dead_code)]
+
+// Test-only methods
+#[cfg(test)]
 impl PreviewLoadState {
     fn is_loading(&self) -> bool {
         matches!(self, Self::Loading)

@@ -333,7 +333,6 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
 }
 
 /// Render remote cursors overlay if any are present.
-#[allow(dead_code)]
 fn render_remote_cursors(
     cursors: &[communitas_ui_api::canvas::RemoteCursor],
     viewport_width: f32,
@@ -444,7 +443,6 @@ fn CanvasElement(props: CanvasElementProps) -> Element {
 }
 
 /// Render the content of an element based on its kind.
-#[allow(dead_code)]
 fn render_element_content(kind: &ElementKindView, transform: &TransformView) -> Element {
     match kind {
         ElementKindView::Text {

@@ -29,8 +29,6 @@ pub enum SortColumn {
     Name,
     Size,
     Modified,
-    #[allow(dead_code)]
-    Type,
 }
 
 /// Sort direction.

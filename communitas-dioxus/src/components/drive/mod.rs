@@ -26,7 +26,6 @@ pub use browser::DriveBrowser;
 #[allow(unused_imports)]
 pub use file_picker::{
     DropZone, FileFilter, FilePickerButton, PickerConfig, PickerResult, open_file_picker,
-    open_save_picker, show_confirm_dialog, show_error_dialog, show_info_dialog,
 };
 
 // Permission dialog exports for security-sensitive operations

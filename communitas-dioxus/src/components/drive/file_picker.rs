@@ -7,7 +7,7 @@
 //! - Last used directory memory
 
 use dioxus::prelude::*;
-use native_dialog::{FileDialog, MessageDialog, MessageType};
+use native_dialog::FileDialog;
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
 
@@ -20,42 +20,42 @@ pub struct FileFilter {
     pub extensions: &'static [&'static str],
 }
 
-#[allow(dead_code)]
 impl FileFilter {
-    /// Common filter for image files.
+    /// Common filter for all files.
+    pub const ALL: Self = Self {
+        name: "All Files",
+        extensions: &["*"],
+    };
+
+    // Test-only constants
+    #[cfg(test)]
     pub const IMAGES: Self = Self {
         name: "Images",
         extensions: &["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svg"],
     };
 
-    /// Common filter for document files.
+    #[cfg(test)]
     pub const DOCUMENTS: Self = Self {
         name: "Documents",
         extensions: &["pdf", "doc", "docx", "txt", "rtf", "odt", "md"],
     };
 
-    /// Common filter for video files.
+    #[cfg(test)]
     pub const VIDEOS: Self = Self {
         name: "Videos",
         extensions: &["mp4", "mkv", "avi", "mov", "webm", "m4v"],
     };
 
-    /// Common filter for audio files.
+    #[cfg(test)]
     pub const AUDIO: Self = Self {
         name: "Audio",
         extensions: &["mp3", "wav", "flac", "ogg", "m4a", "aac"],
     };
 
-    /// Common filter for archive files.
+    #[cfg(test)]
     pub const ARCHIVES: Self = Self {
         name: "Archives",
         extensions: &["zip", "tar", "gz", "7z", "rar", "xz"],
-    };
-
-    /// Common filter for all files.
-    pub const ALL: Self = Self {
-        name: "All Files",
-        extensions: &["*"],
     };
 }
 
@@ -70,14 +70,14 @@ pub enum PickerResult {
     Error(String),
 }
 
-#[allow(dead_code)]
+
+// Test-only methods for PickerResult
+#[cfg(test)]
 impl PickerResult {
-    /// Returns true if files were selected.
     pub fn has_selection(&self) -> bool {
         matches!(self, Self::Selected(files) if !files.is_empty())
     }
 
-    /// Returns the selected files, or an empty vec.
     pub fn files(&self) -> Vec<PathBuf> {
         match self {
             Self::Selected(files) => files.clone(),
@@ -113,19 +113,7 @@ impl Default for PickerConfig {
     }
 }
 
-#[allow(dead_code)]
 impl PickerConfig {
-    /// Create a config for single file selection.
-    pub fn single_file() -> Self {
-        Self {
-            title: "Select File".to_string(),
-            multiple: false,
-            directory: false,
-            filters: vec![FileFilter::ALL],
-            start_directory: None,
-        }
-    }
-
     /// Create a config for multi-file selection.
     pub fn multiple_files() -> Self {
         Self {
@@ -137,7 +125,25 @@ impl PickerConfig {
         }
     }
 
-    /// Create a config for directory selection.
+    /// Builder: set the title.
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = title.into();
+        self
+    }
+
+    // Test-only builder methods
+    #[cfg(test)]
+    pub fn single_file() -> Self {
+        Self {
+            title: "Select File".to_string(),
+            multiple: false,
+            directory: false,
+            filters: vec![FileFilter::ALL],
+            start_directory: None,
+        }
+    }
+
+    #[cfg(test)]
     pub fn directory() -> Self {
         Self {
             title: "Select Folder".to_string(),
@@ -148,47 +154,19 @@ impl PickerConfig {
         }
     }
 
-    /// Create a config for image file selection.
-    pub fn images() -> Self {
-        Self {
-            title: "Select Images".to_string(),
-            multiple: true,
-            directory: false,
-            filters: vec![FileFilter::IMAGES, FileFilter::ALL],
-            start_directory: None,
-        }
-    }
-
-    /// Create a config for document selection.
-    pub fn documents() -> Self {
-        Self {
-            title: "Select Documents".to_string(),
-            multiple: true,
-            directory: false,
-            filters: vec![FileFilter::DOCUMENTS, FileFilter::ALL],
-            start_directory: None,
-        }
-    }
-
-    /// Builder: set the title.
-    pub fn with_title(mut self, title: impl Into<String>) -> Self {
-        self.title = title.into();
-        self
-    }
-
-    /// Builder: enable multiple selection.
+    #[cfg(test)]
     pub fn with_multiple(mut self, multiple: bool) -> Self {
         self.multiple = multiple;
         self
     }
 
-    /// Builder: set starting directory.
+    #[cfg(test)]
     pub fn with_start_directory(mut self, dir: PathBuf) -> Self {
         self.start_directory = Some(dir);
         self
     }
 
-    /// Builder: add a file filter.
+    #[cfg(test)]
     pub fn with_filter(mut self, filter: FileFilter) -> Self {
         self.filters.push(filter);
         self
@@ -327,77 +305,6 @@ pub fn open_file_picker(config: &PickerConfig) -> PickerResult {
     }
 }
 
-/// Open a save file dialog.
-#[allow(dead_code)]
-pub fn open_save_picker(title: &str, default_name: &str, filters: &[FileFilter]) -> PickerResult {
-    let start_dir = get_last_directory()
-        .or_else(dirs::download_dir)
-        .or_else(dirs::home_dir);
-
-    debug!(
-        target: "ui.drive.picker",
-        title = %title,
-        default_name = %default_name,
-        "Opening save picker"
-    );
-
-    let mut dialog = FileDialog::new().set_filename(default_name);
-
-    if let Some(ref dir) = start_dir {
-        dialog = dialog.set_location(dir);
-    }
-
-    for filter in filters {
-        dialog = dialog.add_filter(filter.name, filter.extensions);
-    }
-
-    match dialog.show_save_single_file() {
-        Ok(Some(path)) => {
-            info!(target: "ui.drive.picker", path = ?path, "Save location selected");
-            set_last_directory(&path);
-            PickerResult::Selected(vec![path])
-        }
-        Ok(None) => {
-            debug!(target: "ui.drive.picker", "Save picker cancelled");
-            PickerResult::Cancelled
-        }
-        Err(e) => {
-            warn!(target: "ui.drive.picker", error = %e, "Save picker error");
-            PickerResult::Error(e.to_string())
-        }
-    }
-}
-
-/// Show an error message dialog.
-#[allow(dead_code)]
-pub fn show_error_dialog(title: &str, message: &str) {
-    let _ = MessageDialog::new()
-        .set_title(title)
-        .set_text(message)
-        .set_type(MessageType::Error)
-        .show_alert();
-}
-
-/// Show an info message dialog.
-#[allow(dead_code)]
-pub fn show_info_dialog(title: &str, message: &str) {
-    let _ = MessageDialog::new()
-        .set_title(title)
-        .set_text(message)
-        .set_type(MessageType::Info)
-        .show_alert();
-}
-
-/// Show a confirmation dialog. Returns true if confirmed.
-#[allow(dead_code)]
-pub fn show_confirm_dialog(title: &str, message: &str) -> bool {
-    MessageDialog::new()
-        .set_title(title)
-        .set_text(message)
-        .set_type(MessageType::Warning)
-        .show_confirm()
-        .unwrap_or(false)
-}
 
 /// File picker button component props.
 #[derive(Props, Clone, PartialEq)]

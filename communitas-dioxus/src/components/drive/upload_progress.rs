@@ -9,10 +9,8 @@ use std::sync::Arc;
 #[derive(Props, Clone, PartialEq)]
 pub struct UploadProgressPanelProps {
     /// Entity ID that owns the drive.
-    #[allow(dead_code)]
     pub entity_id: String,
     /// Current disk type.
-    #[allow(dead_code)]
     pub disk_type: DiskType,
     /// Close handler.
     pub on_close: EventHandler<()>,

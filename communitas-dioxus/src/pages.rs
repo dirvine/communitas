@@ -210,6 +210,7 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
     let mut show_emoji_picker: Signal<Option<String>> = use_signal(|| None); // message_id to show picker for
     let mut show_search = use_signal(|| false);
     let mut message_limit = use_signal(|| 50_usize);
+    let mut show_delete_confirm: Signal<Option<String>> = use_signal(|| None);
 
     let thread_id = entity.id.clone();
     let thread_id_for_load = thread_id.clone();
@@ -282,6 +283,65 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
         }
     };
 
+    // Edit message handler
+    let services_for_edit = services.clone();
+    let thread_id_for_edit = thread_id.clone();
+    let on_edit_message = move |(message_id, new_text): (String, String)| {
+        let services = services_for_edit.clone();
+        let thread_id = thread_id_for_edit.clone();
+        spawn(async move {
+            match services
+                .messaging()
+                .edit_message(&thread_id, &message_id, &new_text)
+                .await
+            {
+                Ok(updated_msg) => {
+                    let mut msgs = messages();
+                    if let Some(pos) = msgs.iter().position(|m| m.id == message_id) {
+                        msgs[pos] = updated_msg;
+                        messages.set(msgs);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to edit message: {e}");
+                    send_error.set(Some(
+                        "Failed to edit message. Please try again.".to_string(),
+                    ));
+                }
+            }
+        });
+    };
+
+    // Delete message handler (called after confirm dialog)
+    let services_for_delete = services.clone();
+    let thread_id_for_delete = thread_id.clone();
+    let on_delete_confirmed = move |_| {
+        if let Some(message_id) = show_delete_confirm() {
+            let services = services_for_delete.clone();
+            let thread_id = thread_id_for_delete.clone();
+            show_delete_confirm.set(None);
+            spawn(async move {
+                match services
+                    .messaging()
+                    .delete_message(&thread_id, &message_id)
+                    .await
+                {
+                    Ok(()) => {
+                        let mut msgs = messages();
+                        msgs.retain(|m| m.id != message_id);
+                        messages.set(msgs);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to delete message: {e}");
+                        send_error.set(Some(
+                            "Failed to delete message. Please try again.".to_string(),
+                        ));
+                    }
+                }
+            });
+        }
+    };
+
     // Send message handler
     let services_for_send = services.clone();
     let on_send = move |_| {
@@ -310,7 +370,9 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                 }
                 Err(e) => {
                     tracing::error!("Failed to send message: {e}");
-                    send_error.set(Some("Failed to send message. Please try again.".to_string()));
+                    send_error.set(Some(
+                        "Failed to send message. Please try again.".to_string(),
+                    ));
                 }
             }
         });
@@ -449,6 +511,7 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                                         return rsx! {};
                                     };
                                     let user_id_for_reply = current_user_id.clone();
+                                    let on_edit_handler = on_edit_message.clone();
                                     rsx! {
                                         ChatMessageItem {
                                             key: "{msg.id}",
@@ -468,6 +531,8 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                                                     show_emoji_picker.set(Some(msg_id));
                                                 }
                                             },
+                                            on_edit: on_edit_handler,
+                                            on_delete: move |msg_id: String| show_delete_confirm.set(Some(msg_id)),
                                             on_emoji_select: on_emoji_select.clone(),
                                             on_picker_close: move |_| show_emoji_picker.set(None),
                                         }
@@ -481,6 +546,7 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                             for msg in visible_messages().iter() {
                                 {
                                     let user_id_for_reply = current_user_id.clone();
+                                    let on_edit_handler = on_edit_message.clone();
                                     rsx! {
                                         ChatMessageItem {
                                             key: "{msg.id}",
@@ -500,6 +566,8 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                                                     show_emoji_picker.set(Some(msg_id));
                                                 }
                                             },
+                                            on_edit: on_edit_handler,
+                                            on_delete: move |msg_id: String| show_delete_confirm.set(Some(msg_id)),
                                             on_emoji_select: on_emoji_select.clone(),
                                             on_picker_close: move |_| show_emoji_picker.set(None),
                                         }
@@ -525,6 +593,19 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                     }
                 }
 
+                // Delete confirmation dialog
+                if show_delete_confirm().is_some() {
+                    crate::components::ConfirmDialog {
+                        title: "Delete Message".to_string(),
+                        message: "Are you sure you want to delete this message? This action cannot be undone.".to_string(),
+                        confirm_text: "Delete".to_string(),
+                        cancel_text: "Cancel".to_string(),
+                        destructive: true,
+                        on_confirm: on_delete_confirmed,
+                        on_cancel: move |_| show_delete_confirm.set(None),
+                    }
+                }
+
                 // Send error banner
                 if let Some(err) = send_error() {
                     crate::components::ErrorBanner {
@@ -546,18 +627,21 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
 }
 
 /// Emoji picker for reactions.
-/// Individual chat message item with reply/react handlers.
+/// Individual chat message item with reply/react/edit/delete handlers.
 #[component]
 fn ChatMessageItem(
     message: MessageDisplay,
     show_picker: bool,
     on_reply: EventHandler<String>,
     on_react: EventHandler<String>,
+    #[props(default)] on_edit: Option<EventHandler<(String, String)>>,
+    #[props(default)] on_delete: Option<EventHandler<String>>,
     on_emoji_select: EventHandler<String>,
     on_picker_close: EventHandler<()>,
 ) -> Element {
     let msg_id_for_reply = message.id.clone();
     let msg_id_for_react = message.id.clone();
+    let msg_id_for_delete = message.id.clone();
 
     rsx! {
         div {
@@ -567,6 +651,15 @@ fn ChatMessageItem(
                 message: message.clone(),
                 on_reply: move |_| on_reply.call(msg_id_for_reply.clone()),
                 on_react: move |_| on_react.call(msg_id_for_react.clone()),
+                on_edit: on_edit,
+                on_delete: {
+                    on_delete.map(|handler| {
+                        EventHandler::new({
+                            let msg_id = msg_id_for_delete.clone();
+                            move |_msg_id: String| handler.call(msg_id.clone())
+                        })
+                    })
+                },
             }
 
             // Emoji picker for this message

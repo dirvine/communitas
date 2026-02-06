@@ -238,14 +238,25 @@ pub fn MessageBubble(
     #[props(default = false)] show_avatar: bool,
     on_reply: EventHandler<String>,
     on_react: EventHandler<String>,
+    /// Called when the user saves an edit. Payload is (message_id, new_text).
+    #[props(default)]
+    on_edit: Option<EventHandler<(String, String)>>,
+    /// Called when the user deletes a message. Payload is the message_id.
+    #[props(default)]
+    on_delete: Option<EventHandler<String>>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
     let mut show_actions = use_signal(|| false);
+    let mut editing = use_signal(|| false);
+    let mut edit_text = use_signal(String::new);
 
     // Clone message.id for use in multiple closures
     let message_id_for_reply = message.id.clone();
     let message_id_for_react = message.id.clone();
     let message_id_for_thread = message.id.clone();
+    let message_id_for_edit_save = message.id.clone();
+    let message_id_for_delete = message.id.clone();
+    let message_content_for_edit = message.content.clone();
 
     let initials = message
         .author_name
@@ -417,19 +428,129 @@ pub fn MessageBubble(
                         }
                     }
 
-                    // Message text
-                    p {
-                        style: format!(
-                            "margin: 0; \
-                             font-size: {}; \
-                             line-height: {}; \
-                             color: {}; \
-                             word-wrap: break-word;",
-                            typography::SIZE_BASE,
-                            typography::LEADING_RELAXED,
-                            if message.is_own { "white" } else { semantic::TEXT_PRIMARY }
-                        ),
-                        "{message.content}"
+                    // Message text (or inline edit textarea)
+                    if editing() {
+                        div {
+                            style: "display: flex; flex-direction: column; gap: 6px; width: 100%;",
+
+                            textarea {
+                                value: "{edit_text}",
+                                rows: "3",
+                                aria_label: "Edit message",
+                                style: format!(
+                                    "width: 100%; \
+                                     background: {}; \
+                                     border: 1px solid {}; \
+                                     border-radius: {}; \
+                                     outline: none; \
+                                     resize: vertical; \
+                                     color: {}; \
+                                     font-family: {}; \
+                                     font-size: {}; \
+                                     line-height: {}; \
+                                     padding: {};",
+                                    semantic::BG_SECONDARY,
+                                    semantic::BORDER_DEFAULT,
+                                    radius::MD,
+                                    semantic::TEXT_PRIMARY,
+                                    typography::FONT_BODY,
+                                    typography::SIZE_BASE,
+                                    typography::LEADING_RELAXED,
+                                    spacing::SM
+                                ),
+                                oninput: move |evt: FormEvent| {
+                                    edit_text.set(evt.value().clone());
+                                },
+                                onkeydown: move |evt: KeyboardEvent| {
+                                    if evt.key() == Key::Escape {
+                                        editing.set(false);
+                                    }
+                                },
+                            }
+
+                            div {
+                                style: format!(
+                                    "display: flex; gap: {}; justify-content: flex-end;",
+                                    spacing::XS
+                                ),
+
+                                // Cancel button
+                                button {
+                                    style: format!(
+                                        "padding: {} {}; \
+                                         background: transparent; \
+                                         border: 1px solid {}; \
+                                         border-radius: {}; \
+                                         color: {}; \
+                                         font-size: {}; \
+                                         cursor: pointer; \
+                                         transition: {};",
+                                        spacing::XXS,
+                                        spacing::SM,
+                                        semantic::BORDER_DEFAULT,
+                                        radius::MD,
+                                        semantic::TEXT_SECONDARY,
+                                        typography::SIZE_XS,
+                                        motion::transition("background")
+                                    ),
+                                    aria_label: "Cancel editing",
+                                    onclick: move |_| {
+                                        editing.set(false);
+                                    },
+                                    "Cancel"
+                                }
+
+                                // Save button
+                                button {
+                                    style: format!(
+                                        "padding: {} {}; \
+                                         background: {}; \
+                                         border: none; \
+                                         border-radius: {}; \
+                                         color: white; \
+                                         font-size: {}; \
+                                         font-weight: {}; \
+                                         cursor: pointer; \
+                                         transition: {};",
+                                        spacing::XXS,
+                                        spacing::SM,
+                                        semantic::PRIMARY,
+                                        radius::MD,
+                                        typography::SIZE_XS,
+                                        typography::WEIGHT_MEDIUM,
+                                        motion::transition("background")
+                                    ),
+                                    aria_label: "Save edit",
+                                    onclick: {
+                                        let id = message_id_for_edit_save.clone();
+                                        move |_| {
+                                            let new_text = edit_text().trim().to_string();
+                                            if !new_text.is_empty()
+                                                && let Some(ref handler) = on_edit
+                                            {
+                                                handler.call((id.clone(), new_text));
+                                            }
+                                            editing.set(false);
+                                        }
+                                    },
+                                    "Save"
+                                }
+                            }
+                        }
+                    } else {
+                        p {
+                            style: format!(
+                                "margin: 0; \
+                                 font-size: {}; \
+                                 line-height: {}; \
+                                 color: {}; \
+                                 word-wrap: break-word;",
+                                typography::SIZE_BASE,
+                                typography::LEADING_RELAXED,
+                                if message.is_own { "white" } else { semantic::TEXT_PRIMARY }
+                            ),
+                            "{message.content}"
+                        }
                     }
 
                     // Timestamp and edited indicator
@@ -486,10 +607,44 @@ pub fn MessageBubble(
                             onclick: move |_| on_react.call(message_id_for_react.clone()),
                         }
 
-                        MessageActionButton {
-                            icon: "⋯".to_string(),
-                            tooltip: "More".to_string(),
-                            onclick: move |_| {},
+                        // Edit button (own messages only)
+                        if message.is_own && on_edit.is_some() {
+                            MessageActionButton {
+                                icon: "\u{270F}\u{FE0F}".to_string(),
+                                tooltip: "Edit".to_string(),
+                                onclick: {
+                                    let content = message_content_for_edit.clone();
+                                    move |_| {
+                                        edit_text.set(content.clone());
+                                        editing.set(true);
+                                    }
+                                },
+                            }
+                        }
+
+                        // Delete button (own messages only)
+                        if message.is_own && on_delete.is_some() {
+                            MessageActionButton {
+                                icon: "\u{1F5D1}\u{FE0F}".to_string(),
+                                tooltip: "Delete".to_string(),
+                                onclick: {
+                                    let id = message_id_for_delete.clone();
+                                    move |_| {
+                                        if let Some(ref handler) = on_delete {
+                                            handler.call(id.clone());
+                                        }
+                                    }
+                                },
+                            }
+                        }
+
+                        // More button (for non-own messages or when no edit/delete)
+                        if !message.is_own || (on_edit.is_none() && on_delete.is_none()) {
+                            MessageActionButton {
+                                icon: "\u{22EF}".to_string(),
+                                tooltip: "More".to_string(),
+                                onclick: move |_| {},
+                            }
                         }
                     }
                 }

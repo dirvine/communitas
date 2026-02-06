@@ -50,10 +50,10 @@ impl PlatformStorage {
         })
     }
 
-    /// Check if a vault exists
+    /// Check if a fully-initialized vault exists (has vault.meta, not just a directory)
     pub async fn vault_exists(&self, four_words: &str) -> Result<bool> {
         let vault_path = self.base_path.join(four_words);
-        Ok(vault_path.exists())
+        Ok(vault_path.join("vault.meta").exists())
     }
 
     /// Store a password locator for password-only login

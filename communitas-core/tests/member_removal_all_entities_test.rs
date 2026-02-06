@@ -342,7 +342,7 @@ async fn test_remove_multiple_members_from_group() {
 
     // Remove one member
     service
-        .remove_member(EntityType::Group, &group_id, "member-2", "owner")
+        .remove_member(EntityType::Group, &group_id, "member-2", "admin-user")
         .await
         .unwrap();
 
@@ -442,7 +442,7 @@ async fn test_remove_preserves_tombstone_for_sync() {
 
     // Remove member
     service
-        .remove_member(EntityType::Group, &group_id, "member-to-remove", "admin")
+        .remove_member(EntityType::Group, &group_id, "member-to-remove", "admin-user")
         .await
         .unwrap();
 

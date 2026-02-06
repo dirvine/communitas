@@ -294,8 +294,12 @@ impl GossipContext {
         let membership: Arc<RwLock<Box<dyn Membership>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_membership::HyParViewMembership::new(
                 peer_id,
-                5,  // active_degree: maintain 5 active connections
-                15, // passive_degree: keep 15 passive peers
+                saorsa_gossip_membership::MembershipConfig {
+                    active_degree: 5,
+                    max_active_degree: 10,
+                    max_passive_degree: 64,
+                    ..saorsa_gossip_membership::MembershipConfig::default()
+                },
                 transport.clone(),
             ),
         )));

@@ -11,6 +11,7 @@ use dioxus::prelude::*;
 use crate::components::app_shell::{
     EntityNavItem, ExpandableEntityNavItem, QuickActionButton, SidebarSection,
 };
+use crate::design_tokens::{radius, semantic, spacing, typography};
 
 /// Get child entities for a parent entity.
 pub fn get_entity_children(entities: &[UnifiedEntity], parent_id: &str) -> Vec<UnifiedEntity> {
@@ -59,30 +60,33 @@ pub fn filter_entities(entities: Vec<UnifiedEntity>, search_filter: &str) -> Vec
 /// ```
 #[component]
 pub fn EntityListSection(
-    /// Section title
+    /// Section title.
     title: String,
-    /// Entities to display in this section
+    /// Entities to display in this section.
     entities: Vec<UnifiedEntity>,
-    /// All entities (needed for finding children of expandable entities)
+    /// All entities (needed for finding children of expandable entities).
     #[props(default)]
     all_entities: Vec<UnifiedEntity>,
-    /// Current search filter string
+    /// Current search filter string.
     #[props(default)]
     search_filter: String,
-    /// Signal tracking expanded entity IDs (for expandable sections)
+    /// Signal tracking expanded entity IDs (for expandable sections).
     #[props(default)]
     expanded_ids: Signal<HashSet<String>>,
-    /// Whether entities in this section are expandable (have children)
+    /// Whether entities in this section are expandable (have children).
     #[props(default = false)]
     expandable: bool,
-    /// Label for the add button (if None, no button shown)
+    /// Whether entities are currently loading.
+    #[props(default = false)]
+    loading: bool,
+    /// Label for the add button (if None, no button shown).
     #[props(default)]
     add_button_label: Option<String>,
-    /// Callback to check if an entity is selected
+    /// Callback to check if an entity is selected.
     is_selected: Callback<UnifiedEntity, bool>,
-    /// Callback when an entity is clicked (for navigation)
+    /// Callback when an entity is clicked (for navigation).
     on_navigate: EventHandler<UnifiedEntity>,
-    /// Callback when add button is clicked
+    /// Callback when add button is clicked.
     #[props(default)]
     on_add: EventHandler<()>,
 ) -> Element {
@@ -107,7 +111,11 @@ pub fn EntityListSection(
             title: title,
             action: action,
 
-            if expandable {
+            if loading {
+                EntityListSkeleton {}
+            } else if filtered_entities.is_empty() {
+                EntityListEmpty {}
+            } else if expandable {
                 {filtered_entities.into_iter().map(|entity| {
                     let selected = is_selected.call(entity.clone());
                     let children = get_entity_children(&all_entities, &entity.id);
@@ -172,6 +180,89 @@ pub fn EntityListSection(
                         }
                     }
                 })}
+            }
+        }
+    }
+}
+
+/// Skeleton placeholder for entity list during loading.
+#[component]
+fn EntityListSkeleton() -> Element {
+    rsx! {
+        div {
+            style: format!(
+                "display: flex; flex-direction: column; gap: {}; padding: {} {};",
+                spacing::XS, spacing::XS, spacing::SM
+            ),
+            role: "status",
+            aria_busy: "true",
+            aria_label: "Loading entities",
+            for i in 0..4 {
+                EntitySkeletonItem { key: "{i}" }
+            }
+        }
+
+        style {
+            r#"
+            @keyframes entityPulse {{
+                0%, 100% {{ opacity: 1; }}
+                50% {{ opacity: 0.5; }}
+            }}
+            "#
+        }
+    }
+}
+
+/// Single entity skeleton item matching sidebar nav item layout.
+#[component]
+fn EntitySkeletonItem() -> Element {
+    rsx! {
+        div {
+            style: format!(
+                "display: flex; align-items: center; gap: {}; padding: {} {};",
+                spacing::SM, spacing::SM, spacing::BASE
+            ),
+            // Icon skeleton
+            div {
+                style: format!(
+                    "width: 24px; height: 24px; border-radius: {}; background: {}; \
+                     flex-shrink: 0; animation: entityPulse 1.5s ease-in-out infinite;",
+                    radius::MD, semantic::BG_TERTIARY
+                ),
+            }
+            // Text skeleton
+            div {
+                style: format!(
+                    "flex: 1; display: flex; flex-direction: column; gap: {};",
+                    spacing::XXS
+                ),
+                div {
+                    style: format!(
+                        "width: 70%; height: 12px; border-radius: {}; background: {}; \
+                         animation: entityPulse 1.5s ease-in-out infinite;",
+                        radius::SM, semantic::BG_TERTIARY
+                    ),
+                }
+            }
+        }
+    }
+}
+
+/// Empty state when no entities exist in this section.
+#[component]
+fn EntityListEmpty() -> Element {
+    rsx! {
+        div {
+            style: format!(
+                "padding: {} {}; text-align: center;",
+                spacing::MD, spacing::BASE
+            ),
+            p {
+                style: format!(
+                    "font-size: {}; color: {}; margin: 0;",
+                    typography::SIZE_XS, semantic::TEXT_MUTED
+                ),
+                "Nothing here yet"
             }
         }
     }

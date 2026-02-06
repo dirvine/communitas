@@ -202,8 +202,13 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                         current_swimlane: swimlane_mode(),
                     }
                 }
+                // Empty state when board has no columns
+                if board.columns.is_empty() && swimlane_mode() == SwimlaneMode::None {
+                    BoardEmptyState {
+                        on_add_column: move |_| show_add_column.set(true),
+                    }
                 // Render either swimlane view or standard column view
-                if swimlane_mode() == SwimlaneMode::None {
+                } else if swimlane_mode() == SwimlaneMode::None {
                     // Standard column view
                     div {
                         class: "flex-1 overflow-x-auto overflow-y-hidden",
@@ -741,6 +746,37 @@ fn ConflictBanner(props: ConflictBannerProps) -> Element {
                     },
                     "Dismiss"
                 }
+            }
+        }
+    }
+}
+
+/// Empty state when a board has no columns yet.
+#[derive(Props, Clone, PartialEq)]
+struct BoardEmptyStateProps {
+    /// Handler for adding the first column.
+    on_add_column: EventHandler<()>,
+}
+
+#[component]
+fn BoardEmptyState(props: BoardEmptyStateProps) -> Element {
+    rsx! {
+        div {
+            class: "flex-1 flex flex-col items-center justify-center text-center p-8",
+            role: "status",
+            div { class: "text-5xl mb-4", "☰" }
+            h3 {
+                class: "text-lg font-semibold text-slate-200 mb-2",
+                "No columns yet"
+            }
+            p {
+                class: "text-sm text-slate-400 mb-6 max-w-xs",
+                "Add your first column to start organizing cards on this board."
+            }
+            button {
+                class: "rounded-lg bg-emerald-500 px-5 py-2.5 font-semibold text-slate-900 hover:bg-emerald-400 transition",
+                onclick: move |_| props.on_add_column.call(()),
+                "+ Add Column"
             }
         }
     }

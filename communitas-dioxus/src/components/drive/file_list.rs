@@ -19,6 +19,9 @@ pub struct FileListProps {
     pub sort_column: SortColumn,
     /// Current sort direction.
     pub sort_direction: SortDirection,
+    /// Whether file entries are currently loading.
+    #[props(default = false)]
+    pub loading: bool,
     /// Selection handler (path, is_multi_select).
     pub on_select: EventHandler<(String, bool)>,
     /// Open handler (double-click).
@@ -38,6 +41,13 @@ pub struct FileListProps {
 /// File list component with list and grid views.
 #[component]
 pub fn FileList(props: FileListProps) -> Element {
+    // Show loading skeleton while data is being fetched
+    if props.loading {
+        return rsx! {
+            FileListSkeleton { view_mode: props.view_mode }
+        };
+    }
+
     // Sort entries
     let mut sorted_entries = props.entries.clone();
     sorted_entries.sort_by(|a, b| {
@@ -120,6 +130,113 @@ fn EmptyState() -> Element {
                 button {
                     class: "px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 transition",
                     "New folder"
+                }
+            }
+        }
+    }
+}
+
+/// Skeleton loading state for file list.
+#[derive(Props, Clone, PartialEq)]
+struct FileListSkeletonProps {
+    /// View mode to match skeleton layout.
+    view_mode: ViewMode,
+}
+
+/// Skeleton placeholder for file list during loading.
+#[component]
+fn FileListSkeleton(props: FileListSkeletonProps) -> Element {
+    match props.view_mode {
+        ViewMode::List => rsx! {
+            FileListSkeletonTable {}
+        },
+        ViewMode::Grid => rsx! {
+            FileListSkeletonGrid {}
+        },
+    }
+}
+
+/// Table-style skeleton for list view mode.
+#[component]
+fn FileListSkeletonTable() -> Element {
+    rsx! {
+        div {
+            class: "flex-1 overflow-auto animate-pulse",
+            role: "status",
+            aria_busy: "true",
+            aria_label: "Loading files",
+            table {
+                class: "w-full text-sm",
+                thead {
+                    class: "sticky top-0 bg-slate-900 border-b border-slate-800",
+                    tr {
+                        th { class: "w-8 p-2" }
+                        th { class: "text-left p-2",
+                            div { class: "h-4 w-16 bg-slate-700 rounded" }
+                        }
+                        th { class: "text-right p-2 w-24",
+                            div { class: "h-4 w-10 bg-slate-700 rounded ml-auto" }
+                        }
+                        th { class: "text-right p-2 w-32",
+                            div { class: "h-4 w-16 bg-slate-700 rounded ml-auto" }
+                        }
+                    }
+                }
+                tbody {
+                    for i in 0..8 {
+                        tr {
+                            key: "{i}",
+                            class: "border-b border-slate-800/50",
+                            td { class: "p-2",
+                                div { class: "w-4 h-4 rounded border border-slate-700" }
+                            }
+                            td { class: "p-2",
+                                div {
+                                    class: "flex items-center gap-2",
+                                    div { class: "w-5 h-5 bg-slate-700 rounded" }
+                                    div {
+                                        class: format!("h-4 bg-slate-700 rounded {}",
+                                            if i % 3 == 0 { "w-32" } else if i % 3 == 1 { "w-48" } else { "w-40" }
+                                        ),
+                                    }
+                                }
+                            }
+                            td { class: "p-2",
+                                div { class: "h-4 w-12 bg-slate-700 rounded ml-auto" }
+                            }
+                            td { class: "p-2",
+                                div { class: "h-4 w-16 bg-slate-700 rounded ml-auto" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Grid-style skeleton for grid view mode.
+#[component]
+fn FileListSkeletonGrid() -> Element {
+    rsx! {
+        div {
+            class: "flex-1 overflow-auto p-4 animate-pulse",
+            role: "status",
+            aria_busy: "true",
+            aria_label: "Loading files",
+            div {
+                class: "grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-4",
+                for i in 0..12 {
+                    div {
+                        key: "{i}",
+                        class: "flex flex-col items-center p-3 rounded-lg",
+                        div { class: "w-10 h-10 bg-slate-700 rounded mb-2" }
+                        div {
+                            class: format!("h-3 bg-slate-700 rounded {}",
+                                if i % 2 == 0 { "w-16" } else { "w-20" }
+                            ),
+                        }
+                    }
                 }
             }
         }

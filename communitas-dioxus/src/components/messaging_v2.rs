@@ -60,9 +60,18 @@ pub fn ChatView(children: Element) -> Element {
     }
 }
 
-/// Message list container with auto-scroll.
+/// Message list container with loading states and auto-scroll.
 #[component]
-pub fn MessageListContainer(children: Element) -> Element {
+pub fn MessageListContainer(
+    /// Whether messages are currently loading.
+    #[props(default = false)]
+    loading: bool,
+    /// Whether the message list is empty (loaded but no messages).
+    #[props(default = false)]
+    empty: bool,
+    /// Child elements (messages).
+    children: Element,
+) -> Element {
     rsx! {
         div {
             style: format!(
@@ -79,7 +88,141 @@ pub fn MessageListContainer(children: Element) -> Element {
                 spacing::SM,
                 semantic::BORDER_DEFAULT
             ),
-            {children}
+            role: "status",
+            aria_busy: if loading { "true" } else { "false" },
+
+            if loading {
+                MessageListSkeleton {}
+            } else if empty {
+                MessageEmptyState {}
+            } else {
+                {children}
+            }
+        }
+    }
+}
+
+/// Skeleton placeholder for message list during loading.
+#[component]
+fn MessageListSkeleton() -> Element {
+    rsx! {
+        div {
+            style: format!(
+                "display: flex; flex-direction: column; gap: {}; padding: {};",
+                spacing::MD, spacing::LG
+            ),
+            aria_label: "Loading messages",
+            for i in 0..6 {
+                MessageSkeletonItem { key: "{i}", align_right: i % 3 == 0 }
+            }
+        }
+
+        style {
+            r#"
+            @keyframes messagePulse {{
+                0%, 100% {{ opacity: 1; }}
+                50% {{ opacity: 0.5; }}
+            }}
+            "#
+        }
+    }
+}
+
+/// Single message skeleton item.
+#[component]
+fn MessageSkeletonItem(
+    /// Whether the skeleton aligns to the right (own messages).
+    #[props(default = false)]
+    align_right: bool,
+) -> Element {
+    let align = if align_right { "flex-end" } else { "flex-start" };
+    let width = if align_right { "60%" } else { "70%" };
+    rsx! {
+        div {
+            style: format!(
+                "display: flex; flex-direction: column; align-items: {}; max-width: {};",
+                align, width
+            ),
+            // Avatar + name skeleton
+            div {
+                style: format!(
+                    "display: flex; align-items: center; gap: {}; margin-bottom: {};",
+                    spacing::XS, spacing::XXS
+                ),
+                div {
+                    style: format!(
+                        "width: 28px; height: 28px; border-radius: {}; background: {}; \
+                         animation: messagePulse 1.5s ease-in-out infinite;",
+                        radius::FULL, semantic::BG_TERTIARY
+                    ),
+                }
+                div {
+                    style: format!(
+                        "width: 80px; height: 12px; border-radius: {}; background: {}; \
+                         animation: messagePulse 1.5s ease-in-out infinite;",
+                        radius::SM, semantic::BG_TERTIARY
+                    ),
+                }
+            }
+            // Message content skeleton
+            div {
+                style: format!(
+                    "padding: {} {}; border-radius: {}; background: {}; \
+                     animation: messagePulse 1.5s ease-in-out infinite;",
+                    spacing::SM, spacing::MD, radius::LG, semantic::BG_ELEVATED
+                ),
+                div {
+                    style: format!(
+                        "width: 200px; height: 14px; border-radius: {}; background: {}; \
+                         margin-bottom: {};",
+                        radius::SM, semantic::BG_TERTIARY, spacing::XS
+                    ),
+                }
+                div {
+                    style: format!(
+                        "width: 140px; height: 14px; border-radius: {}; background: {};",
+                        radius::SM, semantic::BG_TERTIARY
+                    ),
+                }
+            }
+        }
+    }
+}
+
+/// Empty state when no messages exist.
+#[component]
+fn MessageEmptyState() -> Element {
+    rsx! {
+        div {
+            style: format!(
+                "display: flex; flex-direction: column; align-items: center; \
+                 justify-content: center; height: 100%; padding: {}; text-align: center;",
+                spacing::HUGE
+            ),
+            div {
+                style: format!(
+                    "width: 80px; height: 80px; display: flex; align-items: center; \
+                     justify-content: center; background: {}; border-radius: {}; \
+                     font-size: {}; margin-bottom: {};",
+                    semantic::BG_TERTIARY, radius::XXL, typography::SIZE_4XL, spacing::XL
+                ),
+                "💬"
+            }
+            div {
+                style: format!(
+                    "font-size: {}; font-weight: {}; color: {}; margin-bottom: {};",
+                    typography::SIZE_LG, typography::WEIGHT_SEMIBOLD,
+                    semantic::TEXT_PRIMARY, spacing::XS
+                ),
+                "No messages yet"
+            }
+            div {
+                style: format!(
+                    "font-size: {}; color: {};",
+                    typography::SIZE_SM, semantic::TEXT_MUTED
+                ),
+                "Start the conversation by sending a message below"
+            }
         }
     }
 }

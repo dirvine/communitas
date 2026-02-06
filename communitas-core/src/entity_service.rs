@@ -505,10 +505,8 @@ impl EntityService {
             let target_role =
                 target_data.and_then(|data| CrdtManager::get_map_string(&data, &txn, "role"));
 
-            let needs_role_fallback = match deleted_by_role.as_deref() {
-                Some("owner") | Some("admin") => false,
-                _ => true,
-            };
+            let needs_role_fallback =
+                !matches!(deleted_by_role.as_deref(), Some("owner") | Some("admin"));
 
             if needs_role_fallback {
                 let normalize_id = |id: &str| id.replace('.', "-");
@@ -619,6 +617,7 @@ impl EntityService {
     }
 
     /// Apply a remote membership update without local permission checks.
+    #[allow(clippy::too_many_arguments)]
     pub async fn apply_member_update(
         &self,
         entity_type: EntityType,
@@ -669,10 +668,9 @@ impl EntityService {
                     let resolve_role = |target_id: &str| -> Option<String> {
                         if let Some(data) =
                             CrdtManager::get_nested_map(&members_map, &txn, target_id)
+                            && let Some(role) = CrdtManager::get_map_string(&data, &txn, "role")
                         {
-                            if let Some(role) = CrdtManager::get_map_string(&data, &txn, "role") {
-                                return Some(role);
-                            }
+                            return Some(role);
                         }
 
                         let normalize_id = |id: &str| id.replace('.', "-");
@@ -684,12 +682,10 @@ impl EntityService {
                             }
                             if let Some(member_data) =
                                 CrdtManager::get_nested_map(&members_map, &txn, &member_key)
-                            {
-                                if let Some(role) =
+                                && let Some(role) =
                                     CrdtManager::get_map_string(&member_data, &txn, "role")
-                                {
-                                    return Some(role);
-                                }
+                            {
+                                return Some(role);
                             }
                         }
 

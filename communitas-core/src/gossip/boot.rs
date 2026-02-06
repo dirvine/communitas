@@ -435,10 +435,10 @@ impl GossipBootSequence {
                 continue;
             }
             let normalized = favourite.replace('-', " ");
-            if normalized != favourite {
-                if let Ok(addr) = crate::identity::conn_from_words(&normalized) {
-                    seeds.push(addr.to_string());
-                }
+            if normalized != favourite
+                && let Ok(addr) = crate::identity::conn_from_words(&normalized)
+            {
+                seeds.push(addr.to_string());
             }
         }
 
@@ -675,29 +675,28 @@ impl GossipBootSequence {
                                         || (direct_enabled
                                             && matches!(stream_type, GossipStreamType::Bulk));
                                 let mut handled_direct = false;
-                                if handle_direct {
-                                    if let Ok(envelope) = serde_json::from_slice::<
+                                if handle_direct
+                                    && let Ok(envelope) = serde_json::from_slice::<
                                         super::context::DirectEntityEnvelope,
                                     >(
                                         &data
-                                    ) {
-                                        handled_direct = true;
-                                        if log_transport {
-                                            info!(
-                                                "Received direct entity envelope for {} ({} bytes) from {:?}",
-                                                envelope.entity_id,
-                                                envelope.payload.len(),
-                                                peer_id
-                                            );
-                                        }
-                                        if let Some(handler) = entity_handler.read().await.as_ref()
-                                        {
-                                            handler(
-                                                envelope.entity_id,
-                                                peer_id,
-                                                Bytes::from(envelope.payload),
-                                            );
-                                        }
+                                    )
+                                {
+                                    handled_direct = true;
+                                    if log_transport {
+                                        info!(
+                                            "Received direct entity envelope for {} ({} bytes) from {:?}",
+                                            envelope.entity_id,
+                                            envelope.payload.len(),
+                                            peer_id
+                                        );
+                                    }
+                                    if let Some(handler) = entity_handler.read().await.as_ref() {
+                                        handler(
+                                            envelope.entity_id,
+                                            peer_id,
+                                            Bytes::from(envelope.payload),
+                                        );
                                     }
                                 }
                                 if !handled_direct && matches!(stream_type, GossipStreamType::Bulk)

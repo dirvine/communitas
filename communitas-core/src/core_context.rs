@@ -332,6 +332,10 @@ impl CoreContext {
         );
         info!("CoreContext::initialize: CrdtManager created");
 
+        // Start background compaction task to prevent unbounded disk growth from tombstones
+        crdt_manager.start_compaction_task().await;
+        info!("CoreContext::initialize: CRDT compaction task started");
+
         // Initialize entity service for managing groups, channels, and members
         info!("CoreContext::initialize: creating EntityService");
         let entity_service = Arc::new(crate::EntityService::new(crdt_manager.clone()));
@@ -671,13 +675,11 @@ impl CoreContext {
                                         let presence_records =
                                             presence_guard.get_group_presence(topic_id).await;
                                         if let Some(record) = presence_records.get(&sender_peer_id)
-                                        {
-                                            if record.four_words.as_deref()
+                                            && record.four_words.as_deref()
                                                 == Some(member_id.as_str())
-                                            {
-                                                presence_hint = record.addr_hints.first().cloned();
-                                                break 'groups;
-                                            }
+                                        {
+                                            presence_hint = record.addr_hints.first().cloned();
+                                            break 'groups;
                                         }
                                     }
                                 }
@@ -705,16 +707,15 @@ impl CoreContext {
                                         .parse::<SocketAddr>()
                                         .ok()
                                         .or_else(|| crate::identity::conn_from_words(&hint).ok());
-                                    if let Some(addr) = addr {
-                                        if let Err(err) = gossip_for_contact
+                                    if let Some(addr) = addr
+                                        && let Err(err) = gossip_for_contact
                                             .update_contact_endpoint(&member_id, &addr)
                                             .await
-                                        {
-                                            warn!(
-                                                "Failed to update endpoint for contact {} (peer {:?}): {}",
-                                                member_id, sender_peer_id, err
-                                            );
-                                        }
+                                    {
+                                        warn!(
+                                            "Failed to update endpoint for contact {} (peer {:?}): {}",
+                                            member_id, sender_peer_id, err
+                                        );
                                     }
                                 }
                             });
@@ -1176,16 +1177,15 @@ impl CoreContext {
                     sender_peer_id, request.entity_id, e
                 );
             }
-            if direct_enabled {
-                if let Err(e) = gossip
+            if direct_enabled
+                && let Err(e) = gossip
                     .direct_publish_membership_message(&request.entity_id, bytes)
                     .await
-                {
-                    warn!(
-                        "Direct member sync response failed for {}: {}",
-                        request.entity_id, e
-                    );
-                }
+            {
+                warn!(
+                    "Direct member sync response failed for {}: {}",
+                    request.entity_id, e
+                );
             }
         });
     }

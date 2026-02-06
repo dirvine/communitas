@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_keystore_default() {
-        let keystore = Keystore::default();
+        let keystore = Keystore;
         assert!(matches!(keystore, Keystore));
     }
 

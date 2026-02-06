@@ -935,53 +935,46 @@ impl CommunitasApp {
                             for attempt in 0..3 {
                                 if let Ok(entity) = entity_service.get_entity(&entity_id).await {
                                     let owner_id = entity.created_by.clone();
-                                    if owner_id != deleted_by {
-                                        if let Ok(result) =
+                                    if owner_id != deleted_by
+                                        && let Ok(result) =
                                             gossip.find_contact_with_hints(&owner_id).await
-                                        {
-                                            for hint in &result.addr_hints {
-                                                let addr = hint
-                                                    .parse::<std::net::SocketAddr>()
-                                                    .ok()
-                                                    .or_else(|| {
-                                                        crate::identity::conn_from_words(hint).ok()
-                                                    });
-                                                if let Some(addr) = addr {
-                                                    if let Err(err) =
-                                                        gossip.dial_address(addr).await
-                                                    {
-                                                        debug!(
-                                                            "Dial to owner {} at {} before sync failed for {}: {}",
-                                                            owner_id, addr, entity_id, err
-                                                        );
-                                                    }
-                                                }
+                                    {
+                                        for hint in &result.addr_hints {
+                                            let addr =
+                                                hint.parse::<std::net::SocketAddr>().ok().or_else(
+                                                    || crate::identity::conn_from_words(hint).ok(),
+                                                );
+                                            if let Some(addr) = addr
+                                                && let Err(err) = gossip.dial_address(addr).await
+                                            {
+                                                debug!(
+                                                    "Dial to owner {} at {} before sync failed for {}: {}",
+                                                    owner_id, addr, entity_id, err
+                                                );
                                             }
+                                        }
 
-                                            let request = crate::crdt::MemberSyncRequest {
-                                                entity_id: entity_id.clone(),
-                                                entity_type,
-                                                requester_peer_id: deleted_by.clone(),
-                                            };
-                                            if let Ok(bytes) = serde_json::to_vec(
-                                                &crate::crdt::GossipMessageType::MemberSyncRequest(
-                                                    request,
-                                                ),
-                                            ) {
-                                                if let Err(err) = gossip
-                                                    .direct_send_membership_to_peer(
-                                                        &entity_id,
-                                                        result.peer_id,
-                                                        bytes,
-                                                    )
-                                                    .await
-                                                {
-                                                    warn!(
-                                                        "Direct member sync request to owner {} failed for {}: {}",
-                                                        owner_id, entity_id, err
-                                                    );
-                                                }
-                                            }
+                                        let request = crate::crdt::MemberSyncRequest {
+                                            entity_id: entity_id.clone(),
+                                            entity_type,
+                                            requester_peer_id: deleted_by.clone(),
+                                        };
+                                        if let Ok(bytes) = serde_json::to_vec(
+                                            &crate::crdt::GossipMessageType::MemberSyncRequest(
+                                                request,
+                                            ),
+                                        ) && let Err(err) = gossip
+                                            .direct_send_membership_to_peer(
+                                                &entity_id,
+                                                result.peer_id,
+                                                bytes,
+                                            )
+                                            .await
+                                        {
+                                            warn!(
+                                                "Direct member sync request to owner {} failed for {}: {}",
+                                                owner_id, entity_id, err
+                                            );
                                         }
                                     }
                                 }
@@ -1066,7 +1059,7 @@ impl CommunitasApp {
                             } else {
                                 Err(CommandError {
                                     command_type: command_type.clone(),
-                                    message: format!("{}", last_reason),
+                                    message: last_reason.to_string(),
                                     code: "REMOVE_MEMBER_FAILED".to_string(),
                                 })
                             }
@@ -4846,13 +4839,12 @@ impl CommunitasApp {
                 .as_str(),
             "1" | "true" | "yes"
         );
-        if direct_enabled {
-            if let Err(err) = gossip
+        if direct_enabled
+            && let Err(err) = gossip
                 .direct_publish_member_update(entity_id, bytes.clone())
                 .await
-            {
-                warn!("Direct member update for {} failed: {}", entity_id, err);
-            }
+        {
+            warn!("Direct member update for {} failed: {}", entity_id, err);
         }
 
         let direct_gossip = gossip.clone();
@@ -4889,13 +4881,13 @@ impl CommunitasApp {
                         .parse::<std::net::SocketAddr>()
                         .ok()
                         .or_else(|| crate::identity::conn_from_words(hint).ok());
-                    if let Some(addr) = addr {
-                        if let Err(err) = direct_gossip.dial_address(addr).await {
-                            debug!(
-                                "Dial to member {} at {} before direct update failed: {}",
-                                direct_member_id, addr, err
-                            );
-                        }
+                    if let Some(addr) = addr
+                        && let Err(err) = direct_gossip.dial_address(addr).await
+                    {
+                        debug!(
+                            "Dial to member {} at {} before direct update failed: {}",
+                            direct_member_id, addr, err
+                        );
                     }
                 }
 
@@ -4938,16 +4930,15 @@ impl CommunitasApp {
                         retry_entity_id, err
                     );
                 }
-                if retry_direct_enabled {
-                    if let Err(err) = retry_gossip
+                if retry_direct_enabled
+                    && let Err(err) = retry_gossip
                         .direct_publish_member_update(&retry_entity_id, retry_bytes.clone())
                         .await
-                    {
-                        warn!(
-                            "Retry direct member update failed for {}: {}",
-                            retry_entity_id, err
-                        );
-                    }
+                {
+                    warn!(
+                        "Retry direct member update failed for {}: {}",
+                        retry_entity_id, err
+                    );
                 }
             }
         });
@@ -5006,13 +4997,12 @@ impl CommunitasApp {
                 .as_str(),
             "1" | "true" | "yes"
         );
-        if direct_enabled {
-            if let Err(err) = gossip
+        if direct_enabled
+            && let Err(err) = gossip
                 .direct_publish_membership_message(entity_id, bytes.clone())
                 .await
-            {
-                warn!("Direct member snapshot for {} failed: {}", entity_id, err);
-            }
+        {
+            warn!("Direct member snapshot for {} failed: {}", entity_id, err);
         }
 
         let retry_gossip = gossip.clone();
@@ -5042,16 +5032,15 @@ impl CommunitasApp {
                         retry_entity_id, err
                     );
                 }
-                if retry_direct_enabled {
-                    if let Err(err) = retry_gossip
+                if retry_direct_enabled
+                    && let Err(err) = retry_gossip
                         .direct_publish_membership_message(&retry_entity_id, retry_bytes.clone())
                         .await
-                    {
-                        warn!(
-                            "Retry direct member snapshot failed for {}: {}",
-                            retry_entity_id, err
-                        );
-                    }
+                {
+                    warn!(
+                        "Retry direct member snapshot failed for {}: {}",
+                        retry_entity_id, err
+                    );
                 }
             }
         });
@@ -5091,13 +5080,13 @@ impl CommunitasApp {
                             .parse::<std::net::SocketAddr>()
                             .ok()
                             .or_else(|| crate::identity::conn_from_words(hint).ok());
-                        if let Some(addr) = addr {
-                            if let Err(err) = gossip.dial_address(addr).await {
-                                debug!(
-                                    "Dial to member {} at {} before snapshot failed: {}",
-                                    member_id, addr, err
-                                );
-                            }
+                        if let Some(addr) = addr
+                            && let Err(err) = gossip.dial_address(addr).await
+                        {
+                            debug!(
+                                "Dial to member {} at {} before snapshot failed: {}",
+                                member_id, addr, err
+                            );
                         }
                     }
 

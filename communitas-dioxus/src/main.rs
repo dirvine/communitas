@@ -1044,7 +1044,7 @@ fn RecoverIdentityForm(props: RecoverIdentityFormProps) -> Element {
                         mnemonic: mnemonic().trim().to_string(),
                         display_name: display_name().trim().to_string(),
                         friend_four_words: if friend.is_empty() { None } else { Some(friend) },
-                        temporary: temporary,
+                        temporary,
                     });
                 },
 

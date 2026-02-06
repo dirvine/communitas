@@ -230,12 +230,11 @@ impl AuthController {
 
     async fn load_vault_display_name(&self, four_words: &str) -> Option<String> {
         let vault_meta = self.vault_dir().join(four_words).join("vault.meta");
-        if let Ok(raw) = tokio::fs::read(&vault_meta).await {
-            if let Ok(metadata) = serde_json::from_slice::<VaultMetadata>(&raw) {
-                if !metadata.display_name.is_empty() {
-                    return Some(metadata.display_name);
-                }
-            }
+        if let Ok(raw) = tokio::fs::read(&vault_meta).await
+            && let Ok(metadata) = serde_json::from_slice::<VaultMetadata>(&raw)
+            && !metadata.display_name.is_empty()
+        {
+            return Some(metadata.display_name);
         }
         None
     }

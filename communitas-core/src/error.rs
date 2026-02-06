@@ -85,7 +85,10 @@ mod tests {
     #[test]
     fn test_app_result_type() {
         let success: AppResult<i32> = Ok(42);
-        assert_eq!(success.unwrap(), 42);
+        assert!(success.is_ok());
+        if let Ok(value) = success {
+            assert_eq!(value, 42);
+        }
 
         let failure: AppResult<i32> = Err(AppError::NotFound("missing".to_string()));
         assert!(failure.is_err());

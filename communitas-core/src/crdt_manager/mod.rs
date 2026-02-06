@@ -11,4 +11,4 @@ mod error;
 mod manager;
 
 pub use error::{CrdtError, CrdtResult};
-pub use manager::CrdtManager;
+pub use manager::{CompactionConfig, CompactionResult, CrdtManager};

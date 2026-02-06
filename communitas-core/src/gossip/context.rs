@@ -1566,10 +1566,10 @@ impl GossipContext {
             .await
             .context("Contact not found via FOAF or presence")?;
 
-        if result.addr_hints.is_empty() {
-            if let Some(addr) = self.get_contact_endpoint(four_words).await {
-                result.addr_hints.push(addr.to_string());
-            }
+        if result.addr_hints.is_empty()
+            && let Some(addr) = self.get_contact_endpoint(four_words).await
+        {
+            result.addr_hints.push(addr.to_string());
         }
 
         Ok(result)

@@ -71,6 +71,26 @@ pub type EntityMessageHandler = Arc<dyn Fn(String, PeerId, Bytes) + Send + Sync>
 ///
 /// This replaces CoreContext's DHT-based discovery with a gossip-based
 /// overlay network per SPEC.md.
+///
+/// ## Lock Ordering (MUST follow to prevent deadlock)
+///
+/// When acquiring multiple locks, always acquire in this order:
+///
+/// 1. `pubsub` (highest priority)
+/// 2. `membership`
+/// 3. `groups` / `groups_by_topic` (groups first)
+/// 4. `topics`
+/// 5. `entity_types`
+/// 6. `pending_sync_entities`
+/// 7. `entity_receiver_tasks`
+/// 8. `presence`
+/// 9. `crdt_message_set`
+/// 10. `favourite_contacts`
+/// 11. `entity_message_handler` (lowest priority)
+///
+/// **Rule**: Never hold a lower-priority lock while acquiring a higher-priority one.
+/// **Rule**: Prefer dropping locks before acquiring new ones (clone-and-drop pattern).
+/// **Rule**: Keep lock hold durations as short as possible.
 pub struct GossipContext {
     /// User identity (four-word) → ML-DSA identity + alias
     pub identity: Identity,
@@ -738,6 +758,8 @@ impl GossipContext {
                 .as_str(),
             "1" | "true" | "yes"
         );
+        // Lock hierarchy: Holding multiple read locks simultaneously is safe (no deadlock risk).
+        // topics (#4) and entity_receiver_tasks (#7) - correct order maintained.
         {
             let topics = self.topics.read().await;
             let tasks = self.entity_receiver_tasks.read().await;
@@ -1019,8 +1041,12 @@ impl GossipContext {
         };
 
         // 2. Unsubscribe from topic
-        let pubsub = self.pubsub.write().await;
-        pubsub.unsubscribe(topic_id).await?;
+        // Lock hierarchy: pubsub is highest priority, must be dropped before acquiring other locks
+        {
+            let pubsub = self.pubsub.write().await;
+            pubsub.unsubscribe(topic_id).await?;
+        }
+        // pubsub lock dropped here - safe to acquire lower-priority locks
 
         // 3. Remove MLS group from both maps
         {
@@ -1108,10 +1134,14 @@ impl GossipContext {
         }
 
         // 2. Get MLS group for encryption
-        let groups = self.groups.read().await;
-        let _group_ctx = groups
-            .get(entity_id)
-            .context("MLS group not found, must join first")?;
+        // Lock hierarchy: Scope groups lock to drop before acquiring pubsub (#1 > #3)
+        {
+            let groups = self.groups.read().await;
+            let _group_ctx = groups
+                .get(entity_id)
+                .context("MLS group not found, must join first")?;
+        }
+        // groups lock dropped here - safe to acquire pubsub
 
         // Messages are protected by the QUIC transport. MLS group encryption
         // will wrap this payload once the MLS keying layer is integrated.
@@ -1233,10 +1263,14 @@ impl GossipContext {
                 .context("Entity not found, must join first")?
         };
 
-        let groups = self.groups.read().await;
-        let _group_ctx = groups
-            .get(entity_id)
-            .context("MLS group not found, must join first")?;
+        // Lock hierarchy: Scope groups lock to drop before acquiring pubsub (#1 > #3)
+        {
+            let groups = self.groups.read().await;
+            let _group_ctx = groups
+                .get(entity_id)
+                .context("MLS group not found, must join first")?;
+        }
+        // groups lock dropped here - safe to acquire pubsub
 
         let pubsub = self.pubsub.read().await;
         pubsub.publish(topic_id, message.into()).await?;
@@ -1819,12 +1853,16 @@ impl GossipContext {
 
     /// Check if a peer is online in any shared group
     pub async fn is_peer_online(&self, peer_id: PeerId) -> Result<bool> {
-        let presence = self.presence.read().await;
+        // Lock hierarchy: Acquire groups_by_topic (#3) before presence (#8)
+        let topic_ids: Vec<TopicId> = {
+            let groups_by_topic = self.groups_by_topic.read().await;
+            groups_by_topic.keys().copied().collect()
+        };
+        // groups_by_topic lock dropped here
 
-        // Check all groups we're in
-        let groups_by_topic = self.groups_by_topic.read().await;
-        for topic_id in groups_by_topic.keys() {
-            let online_peers = presence.get_online_peers(*topic_id).await;
+        let presence = self.presence.read().await;
+        for topic_id in topic_ids {
+            let online_peers = presence.get_online_peers(topic_id).await;
             if online_peers.contains(&peer_id) {
                 return Ok(true);
             }

@@ -1065,6 +1065,13 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
     let mut show_archive_confirm = use_signal(|| false);
     let mut show_delete_confirm = use_signal(|| false);
 
+    // Member management states
+    let mut show_add_member = use_signal(|| false);
+    let mut new_member_id = use_signal(String::new);
+    let mut new_member_role = use_signal(|| "member".to_string());
+    let mut member_error: Signal<Option<String>> = use_signal(|| None);
+    let mut show_remove_member_confirm: Signal<Option<String>> = use_signal(|| None);
+
     let type_label = match entity.entity_type {
         UnifiedEntityType::Organization => "Organization",
         UnifiedEntityType::Project => "Project",
@@ -1146,6 +1153,202 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
                         spacing::SM
                     ),
 
+                    // Add member button and form
+                    div {
+                        style: format!(
+                            "display: flex; \
+                             align-items: center; \
+                             gap: {}; \
+                             margin-bottom: {};",
+                            spacing::SM,
+                            spacing::MD
+                        ),
+
+                        button {
+                            style: format!(
+                                "padding: {} {}; \
+                                 background: {}; \
+                                 color: {}; \
+                                 border: 1px solid {}; \
+                                 border-radius: {}; \
+                                 cursor: pointer; \
+                                 font-size: {};",
+                                spacing::XS,
+                                spacing::SM,
+                                if show_add_member() { semantic::BG_SECONDARY } else { "transparent" },
+                                semantic::PRIMARY,
+                                semantic::BORDER_DEFAULT,
+                                radius::SM,
+                                typography::SIZE_SM
+                            ),
+                            onclick: move |_| show_add_member.set(!show_add_member()),
+                            if show_add_member() { "Cancel" } else { "+ Add Member" }
+                        }
+                    }
+
+                    if show_add_member() {
+                        div {
+                            style: format!(
+                                "display: flex; \
+                                 flex-direction: column; \
+                                 gap: {}; \
+                                 padding: {}; \
+                                 background: {}; \
+                                 border-radius: {}; \
+                                 margin-bottom: {};",
+                                spacing::SM,
+                                spacing::MD,
+                                semantic::BG_SECONDARY,
+                                radius::MD,
+                                spacing::MD
+                            ),
+
+                            // Four-word address input
+                            input {
+                                style: format!(
+                                    "padding: {} {}; \
+                                     background: {}; \
+                                     color: {}; \
+                                     border: 1px solid {}; \
+                                     border-radius: {}; \
+                                     font-size: {}; \
+                                     width: 100%%;",
+                                    spacing::SM,
+                                    spacing::MD,
+                                    semantic::BG_PRIMARY,
+                                    semantic::TEXT_PRIMARY,
+                                    semantic::BORDER_DEFAULT,
+                                    radius::MD,
+                                    typography::SIZE_SM
+                                ),
+                                r#type: "text",
+                                placeholder: "Enter four-word address (e.g. ocean-forest-moon-star)",
+                                value: new_member_id(),
+                                oninput: move |evt: FormEvent| new_member_id.set(evt.value()),
+                            }
+
+                            // Role selector
+                            div {
+                                style: format!(
+                                    "display: flex; \
+                                     gap: {};",
+                                    spacing::SM
+                                ),
+
+                                for role_option in ["admin", "member", "viewer"] {
+                                    {
+                                        let role = role_option.to_string();
+                                        let is_selected = new_member_role() == role;
+                                        rsx! {
+                                            button {
+                                                style: format!(
+                                                    "padding: {} {}; \
+                                                     border: 1px solid {}; \
+                                                     border-radius: {}; \
+                                                     background: {}; \
+                                                     color: {}; \
+                                                     font-size: {}; \
+                                                     cursor: pointer;",
+                                                    spacing::XS,
+                                                    spacing::SM,
+                                                    if is_selected { semantic::PRIMARY } else { semantic::BORDER_DEFAULT },
+                                                    radius::SM,
+                                                    if is_selected { semantic::PRIMARY } else { "transparent" },
+                                                    if is_selected { "white" } else { semantic::TEXT_SECONDARY },
+                                                    typography::SIZE_SM
+                                                ),
+                                                onclick: {
+                                                    let role = role.clone();
+                                                    move |_| new_member_role.set(role.clone())
+                                                },
+                                                "{role_option}"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Submit button
+                            button {
+                                style: format!(
+                                    "padding: {} {}; \
+                                     background: {}; \
+                                     color: white; \
+                                     border: none; \
+                                     border-radius: {}; \
+                                     cursor: pointer; \
+                                     font-size: {};",
+                                    spacing::SM,
+                                    spacing::MD,
+                                    semantic::PRIMARY,
+                                    radius::MD,
+                                    typography::SIZE_SM
+                                ),
+                                disabled: new_member_id().trim().is_empty(),
+                                onclick: {
+                                    let services = services.clone();
+                                    let entity_id = entity.id.clone();
+                                    let entity_type = entity.entity_type;
+                                    move |_| {
+                                        let services = services.clone();
+                                        let entity_id = entity_id.clone();
+                                        let member_id = new_member_id().trim().to_string();
+                                        let role = new_member_role();
+                                        if !member_id.is_empty() {
+                                            new_member_id.set(String::new());
+                                            show_add_member.set(false);
+                                            member_error.set(None);
+                                            spawn(async move {
+                                                if let Err(e) = services.directory().add_member(
+                                                    entity_type,
+                                                    &entity_id,
+                                                    &member_id,
+                                                    &role,
+                                                ).await {
+                                                    tracing::error!("Failed to add member: {e}");
+                                                    member_error.set(Some(format!("Failed to add member: {e}")));
+                                                }
+                                            });
+                                        }
+                                    }
+                                },
+                                "Add Member"
+                            }
+                        }
+                    }
+
+                    // Error display
+                    if let Some(err) = member_error() {
+                        div {
+                            style: format!(
+                                "padding: {}; \
+                                 color: {}; \
+                                 font-size: {}; \
+                                 margin-bottom: {};",
+                                spacing::SM,
+                                palette::ROSE_500,
+                                typography::SIZE_SM,
+                                spacing::SM
+                            ),
+                            "{err}"
+                            button {
+                                style: format!(
+                                    "margin-left: {}; \
+                                     background: none; \
+                                     border: none; \
+                                     color: {}; \
+                                     cursor: pointer; \
+                                     font-size: {};",
+                                    spacing::SM,
+                                    semantic::TEXT_MUTED,
+                                    typography::SIZE_XS
+                                ),
+                                onclick: move |_| member_error.set(None),
+                                "dismiss"
+                            }
+                        }
+                    }
+
                     if members.is_empty() {
                         p {
                             style: format!(
@@ -1163,6 +1366,15 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
                             MemberRow {
                                 key: "{member.id}",
                                 contact: member.clone(),
+                                role: "member".to_string(),
+                                on_remove: if is_admin {
+                                    Some(EventHandler::new({
+                                        let member_id = member.id.clone();
+                                        move |_id: String| show_remove_member_confirm.set(Some(member_id.clone()))
+                                    }))
+                                } else {
+                                    None
+                                },
                                 on_message: on_member_message,
                                 on_call: on_member_call,
                             }
@@ -1323,6 +1535,45 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
                             show_delete_confirm.set(false);
                         },
                         on_cancel: move |_| show_delete_confirm.set(false),
+                    }
+                }
+            }
+        }
+
+        // Remove member confirmation
+        if let Some(member_id) = show_remove_member_confirm() {
+            {
+                let services = services.clone();
+                let entity_id = entity.id.clone();
+                let entity_type = entity.entity_type;
+                let member_id_display = member_id.clone();
+                rsx! {
+                    crate::components::ConfirmDialog {
+                        title: "Remove Member".to_string(),
+                        message: format!(
+                            "Are you sure you want to remove \"{}\" from this {}?",
+                            member_id_display,
+                            type_label.to_lowercase()
+                        ),
+                        confirm_text: "Remove".to_string(),
+                        cancel_text: "Cancel".to_string(),
+                        destructive: true,
+                        on_confirm: move |_| {
+                            let services = services.clone();
+                            let entity_id = entity_id.clone();
+                            let member_id = member_id.clone();
+                            show_remove_member_confirm.set(None);
+                            spawn(async move {
+                                if let Err(e) = services.directory().remove_member(
+                                    entity_type,
+                                    &entity_id,
+                                    &member_id,
+                                ).await {
+                                    tracing::error!("Failed to remove member: {e}");
+                                }
+                            });
+                        },
+                        on_cancel: move |_| show_remove_member_confirm.set(None),
                     }
                 }
             }
@@ -3313,12 +3564,19 @@ pub fn SkeletonAvatar(
 #[component]
 fn MemberRow(
     contact: UnifiedContact,
+    /// Role label to display (e.g. "admin", "member"). Empty string hides the badge.
+    #[props(default = String::new())]
+    role: String,
+    /// Callback when the remove button is clicked. When `None`, the remove button is hidden.
+    #[props(default)]
+    on_remove: Option<EventHandler<String>>,
     on_message: EventHandler<String>,
     on_call: EventHandler<String>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
     let contact_id_for_message = contact.id.clone();
     let contact_id_for_call = contact.id.clone();
+    let contact_id_for_remove = contact.id.clone();
 
     let presence_color = match contact.presence {
         PresenceStatus::Online => semantic::PRESENCE_ONLINE,
@@ -3410,6 +3668,27 @@ fn MemberRow(
                     "{contact.display_name}"
                 }
 
+                // Role badge
+                if !role.is_empty() {
+                    span {
+                        style: format!(
+                            "display: inline-block; \
+                             font-size: {}; \
+                             padding: 1px {}; \
+                             border-radius: {}; \
+                             background: {}; \
+                             color: {}; \
+                             margin-top: 2px;",
+                            typography::SIZE_XXS,
+                            spacing::XS,
+                            radius::FULL,
+                            if role == "admin" { format!("{}20", palette::JADE_500) } else { semantic::BG_TERTIARY.to_string() },
+                            if role == "admin" { palette::JADE_500 } else { semantic::TEXT_MUTED }
+                        ),
+                        "{role}"
+                    }
+                }
+
                 p {
                     style: format!(
                         "font-size: {}; \
@@ -3444,6 +3723,19 @@ fn MemberRow(
                         icon: "📞".to_string(),
                         tooltip: "Start Call".to_string(),
                         onclick: move |_| on_call.call(contact_id_for_call.clone()),
+                    }
+
+                    // Remove button (only when handler is provided)
+                    if let Some(ref handler) = on_remove {
+                        ContactActionButton {
+                            icon: "\u{2715}".to_string(),
+                            tooltip: "Remove Member".to_string(),
+                            onclick: {
+                                let contact_id = contact_id_for_remove.clone();
+                                let handler = *handler;
+                                move |_| handler.call(contact_id.clone())
+                            },
+                        }
                     }
                 }
             }

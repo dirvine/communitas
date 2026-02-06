@@ -221,6 +221,63 @@ impl DirectoryService {
         self.refresh_all().await
     }
 
+    /// Add a member to an entity with a given role.
+    #[instrument(name = "ui.directory.add_member", skip(self))]
+    pub async fn add_member(
+        &self,
+        entity_type: UnifiedEntityType,
+        entity_id: &str,
+        member_id: &str,
+        role: &str,
+    ) -> Result<(), DirectoryError> {
+        let api = self
+            .auth
+            .api_async()
+            .await
+            .ok_or(DirectoryError::NotAuthenticated)?;
+        api.entity_add_member(
+            Self::to_ui_entity_type(entity_type),
+            entity_id.to_string(),
+            member_id.to_string(),
+            role.to_string(),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Remove a member from an entity.
+    #[instrument(name = "ui.directory.remove_member", skip(self))]
+    pub async fn remove_member(
+        &self,
+        entity_type: UnifiedEntityType,
+        entity_id: &str,
+        member_id: &str,
+    ) -> Result<(), DirectoryError> {
+        let api = self
+            .auth
+            .api_async()
+            .await
+            .ok_or(DirectoryError::NotAuthenticated)?;
+        api.entity_remove_member(
+            Self::to_ui_entity_type(entity_type),
+            entity_id.to_string(),
+            member_id.to_string(),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Convert a [`UnifiedEntityType`] to its core [`UiEntityType`] counterpart.
+    fn to_ui_entity_type(entity_type: UnifiedEntityType) -> UiEntityType {
+        match entity_type {
+            UnifiedEntityType::Organization => UiEntityType::Organisation,
+            UnifiedEntityType::Project => UiEntityType::Project,
+            UnifiedEntityType::Group => UiEntityType::Group,
+            UnifiedEntityType::Channel => UiEntityType::Channel,
+            UnifiedEntityType::Person => UiEntityType::Person,
+        }
+    }
+
     pub fn subscribe(&self) -> watch::Receiver<DirectorySnapshot> {
         self.tx.subscribe()
     }

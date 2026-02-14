@@ -834,20 +834,21 @@ pub fn Toast(props: ToastProps) -> Element {
     let toast_id_for_dismiss = toast_id.clone();
     let toast_id_for_action = toast_id.clone();
 
-    // Auto-dismiss timer
-    if variant.auto_dismiss() {
-        let duration = variant.dismiss_duration_ms();
-        let toast_id_for_timer = toast_id.clone();
-        let on_dismiss_timer = on_dismiss;
+    // Auto-dismiss timer (hook must be called unconditionally per Dioxus rules)
+    let auto_dismiss = variant.auto_dismiss();
+    let duration = variant.dismiss_duration_ms();
+    let toast_id_for_timer = toast_id.clone();
+    let on_dismiss_timer = on_dismiss;
 
-        use_future(move || {
-            let toast_id = toast_id_for_timer.clone();
-            async move {
+    use_future(move || {
+        let toast_id = toast_id_for_timer.clone();
+        async move {
+            if auto_dismiss {
                 tokio::time::sleep(std::time::Duration::from_millis(duration as u64)).await;
                 on_dismiss_timer.call(toast_id);
             }
-        });
-    }
+        }
+    });
 
     let bg_color = variant.bg_color();
     let text_color = variant.text_color();

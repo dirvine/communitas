@@ -535,10 +535,11 @@ fn CreateIdentityRoute() -> Element {
         navigator.replace(Route::DashboardRoute {});
     }
 
+    let mut acknowledged = use_signal(|| false);
+
     if matches!(auth.read().phase, AuthPhase::PendingMnemonic) {
         let mnemonic = auth.read().pending_mnemonic.clone().unwrap_or_default();
         let words: Vec<&str> = mnemonic.split_whitespace().collect();
-        let mut acknowledged = use_signal(|| false);
 
         return rsx! {
             AuthLayoutV2 {

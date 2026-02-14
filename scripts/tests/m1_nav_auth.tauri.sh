@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_BINARY="${APP_BINARY:-$ROOT_DIR/target/debug/communitas-dioxus}"
 DRIVER_PORT="${TAURI_DRIVER_PORT:-4444}"
 NATIVE_PORT="${TAURI_DRIVER_NATIVE_PORT:-4445}"

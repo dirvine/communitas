@@ -28,18 +28,18 @@ saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.4.0"
 
-# Saorsa Gossip ecosystem - updated to 0.5.0
-saorsa-gossip-types = "0.5.0"
-saorsa-gossip-identity = "0.5.0"
-saorsa-gossip-crdt-sync = "0.5.0"
-saorsa-gossip-groups = "0.5.0"
-saorsa-gossip-presence = "0.5.0"
-saorsa-gossip-transport = "0.5.0"
-saorsa-gossip-membership = "0.5.0"
-saorsa-gossip-pubsub = "0.5.0"
-saorsa-gossip-coordinator = "0.5.0"
-saorsa-gossip-rendezvous = "0.5.0"
-saorsa-gossip-runtime = "0.5.0"
+# Saorsa Gossip ecosystem - updated to 0.5.1
+saorsa-gossip-types = "0.5.1"
+saorsa-gossip-identity = "0.5.1"
+saorsa-gossip-crdt-sync = "0.5.1"
+saorsa-gossip-groups = "0.5.1"
+saorsa-gossip-presence = "0.5.1"
+saorsa-gossip-transport = "0.5.1"
+saorsa-gossip-membership = "0.5.1"
+saorsa-gossip-pubsub = "0.5.1"
+saorsa-gossip-coordinator = "0.5.1"
+saorsa-gossip-rendezvous = "0.5.1"
+saorsa-gossip-runtime = "0.5.1"
 # Security: openh264-sys2 0.9.x requires rustc 1.88+, using 0.8.0 until CI upgrades
 openh264-sys2 = "0.8.0"
 
@@ -111,16 +111,5 @@ strip = true
 [profile.dev]
 opt-level = 0
 
-[patch.crates-io]
-saorsa-gossip-types = { path = "../saorsa-gossip/crates/types" }
-saorsa-gossip-identity = { path = "../saorsa-gossip/crates/identity" }
-saorsa-gossip-crdt-sync = { path = "../saorsa-gossip/crates/crdt-sync" }
-saorsa-gossip-groups = { path = "../saorsa-gossip/crates/groups" }
-saorsa-gossip-presence = { path = "../saorsa-gossip/crates/presence" }
-saorsa-gossip-transport = { path = "../saorsa-gossip/crates/transport" }
-saorsa-gossip-membership = { path = "../saorsa-gossip/crates/membership" }
-saorsa-gossip-pubsub = { path = "../saorsa-gossip/crates/pubsub" }
-saorsa-gossip-coordinator = { path = "../saorsa-gossip/crates/coordinator" }
-saorsa-gossip-rendezvous = { path = "../saorsa-gossip/crates/rendezvous" }
-saorsa-gossip-runtime = { path = "../saorsa-gossip/crates/runtime" }
-ant-quic = { path = "../ant-quic" }
+# [patch.crates-io] removed — all dependencies use published crates.io versions
+# saorsa-gossip-* 0.5.1 and ant-quic 0.21.8 are published and match local

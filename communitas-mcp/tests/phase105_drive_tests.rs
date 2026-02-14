@@ -69,8 +69,10 @@ impl TestNode {
             .spawn()
             .expect("Failed to start MCP server");
 
+        // 55 tests each spawn a server; give CI more time under load
+        let max_attempts: u32 = 100;
         let client = reqwest::Client::new();
-        for attempt in 0..50 {
+        for attempt in 0..max_attempts {
             sleep(Duration::from_millis(100)).await;
 
             // Attempt to connect and validate JSON-RPC response
@@ -97,12 +99,12 @@ impl TestNode {
                 }
             }
 
-            if attempt == 49 {
+            if attempt == max_attempts - 1 {
                 let _ = process.kill();
                 let _ = process.wait();
                 panic!(
-                    "Node {} failed to start after 50 attempts on port {}",
-                    name, port
+                    "Node {} failed to start after {} attempts on port {}",
+                    name, max_attempts, port
                 );
             }
         }

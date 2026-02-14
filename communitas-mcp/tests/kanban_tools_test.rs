@@ -1465,88 +1465,95 @@ async fn test_full_kanban_workflow() {
     let card2_id = r.get_str("id").unwrap();
 
     // 6. Tag cards
-    let r6a = node.call_tool(
-        "tag_card",
-        json!({
-            "board_id": board_id,
-            "card_id": card1_id,
-            "tag_id": bug_tag
-        }),
-    )
-    .await;
+    let r6a = node
+        .call_tool(
+            "tag_card",
+            json!({
+                "board_id": board_id,
+                "card_id": card1_id,
+                "tag_id": bug_tag
+            }),
+        )
+        .await;
     r6a.assert_success();
 
-    let r6b = node.call_tool(
-        "tag_card",
-        json!({
-            "board_id": board_id,
-            "card_id": card2_id,
-            "tag_id": feature_tag
-        }),
-    )
-    .await;
+    let r6b = node
+        .call_tool(
+            "tag_card",
+            json!({
+                "board_id": board_id,
+                "card_id": card2_id,
+                "tag_id": feature_tag
+            }),
+        )
+        .await;
     r6b.assert_success();
 
     // 7. Move card through workflow
-    let r7 = node.call_tool(
-        "move_kanban_card",
-        json!({
-            "board_id": board_id,
-            "card_id": card1_id,
-            "target_column_id": progress_col,
-            "new_position": 0
-        }),
-    )
-    .await;
+    let r7 = node
+        .call_tool(
+            "move_kanban_card",
+            json!({
+                "board_id": board_id,
+                "card_id": card1_id,
+                "target_column_id": progress_col,
+                "new_position": 0
+            }),
+        )
+        .await;
     r7.assert_success();
 
     // 8. Update card
-    let r8 = node.call_tool(
-        "update_kanban_card",
-        json!({
-            "board_id": board_id,
-            "card_id": card1_id,
-            "title": "Fix login bug - in progress",
-            "description": "Working on special character handling"
-        }),
-    )
-    .await;
+    let r8 = node
+        .call_tool(
+            "update_kanban_card",
+            json!({
+                "board_id": board_id,
+                "card_id": card1_id,
+                "title": "Fix login bug - in progress",
+                "description": "Working on special character handling"
+            }),
+        )
+        .await;
     r8.assert_success();
 
     // 9. Change card state (Open -> Closed)
-    let r9 = node.call_tool(
-        "change_card_state",
-        json!({
-            "board_id": board_id,
-            "card_id": card1_id,
-            "state": "Closed"
-        }),
-    )
-    .await;
+    let r9 = node
+        .call_tool(
+            "change_card_state",
+            json!({
+                "board_id": board_id,
+                "card_id": card1_id,
+                "state": "Closed"
+            }),
+        )
+        .await;
     r9.assert_success();
 
     // 10. Complete card - move to done column and archive
-    let r10a = node.call_tool(
-        "move_kanban_card",
-        json!({
-            "board_id": board_id,
-            "card_id": card1_id,
-            "target_column_id": done_col,
-            "new_position": 0
-        }),
-    )
-    .await;
+    let r10a = node
+        .call_tool(
+            "move_kanban_card",
+            json!({
+                "board_id": board_id,
+                "card_id": card1_id,
+                "target_column_id": done_col,
+                "new_position": 0
+            }),
+        )
+        .await;
     r10a.assert_success();
 
-    let r10b = node.call_tool(
-        "change_card_state",
-        json!({
-            "board_id": board_id,
-            "card_id": card1_id,
-            "state": "Archived"
-        }),
-    )
-    .await;
+    let r10b = node
+        .call_tool(
+            "change_card_state",
+            json!({
+                "board_id": board_id,
+                "card_id": card1_id,
+                "state": "Archived"
+            }),
+        )
+        .await;
     r10b.assert_success();
 
     // Verify workflow completed

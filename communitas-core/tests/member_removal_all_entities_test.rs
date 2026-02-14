@@ -442,7 +442,12 @@ async fn test_remove_preserves_tombstone_for_sync() {
 
     // Remove member
     service
-        .remove_member(EntityType::Group, &group_id, "member-to-remove", "admin-user")
+        .remove_member(
+            EntityType::Group,
+            &group_id,
+            "member-to-remove",
+            "admin-user",
+        )
         .await
         .unwrap();
 

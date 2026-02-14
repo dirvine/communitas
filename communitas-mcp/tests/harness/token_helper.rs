@@ -104,22 +104,14 @@ impl TokenTestHelper {
 
     /// Create a network token (can manage network operations)
     pub fn create_network_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        self.manager.create_token(
-            &self.issuer,
-            delegate_name,
-            vec![Scope::ManageNetwork],
-            24,
-        )
+        self.manager
+            .create_token(&self.issuer, delegate_name, vec![Scope::ManageNetwork], 24)
     }
 
     /// Create a contacts token (can manage contacts)
     pub fn create_contacts_token(&self, delegate_name: &str) -> Result<String, anyhow::Error> {
-        self.manager.create_token(
-            &self.issuer,
-            delegate_name,
-            vec![Scope::ManageContacts],
-            24,
-        )
+        self.manager
+            .create_token(&self.issuer, delegate_name, vec![Scope::ManageContacts], 24)
     }
 
     /// Create a full-access token (all permissions)

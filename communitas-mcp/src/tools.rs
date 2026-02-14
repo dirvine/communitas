@@ -5596,7 +5596,10 @@ async fn execute_toggle_step(services: &UiServices, args: Value) -> ToolCallResu
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.toggle_step(&board_id, &card_id, &step_id) {
+    match ctx
+        .kanban_service
+        .toggle_step(&board_id, &card_id, &step_id)
+    {
         Ok(step) => json_result(&json!({
             "id": step.id,
             "title": step.text,
@@ -6045,7 +6048,10 @@ async fn execute_workspace_init(
                 }));
             }
             Err(e) => {
-                return error_result(&format!("Failed to create column '{column_name}': {}", e.message));
+                return error_result(&format!(
+                    "Failed to create column '{column_name}': {}",
+                    e.message
+                ));
             }
         }
     }

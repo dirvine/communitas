@@ -512,7 +512,8 @@ async fn test_pin_thread() {
     if let Some(ids) = pinned.get_array("pinned_threads") {
         for id_val in ids {
             if let Some(id) = id_val.as_str() {
-                node.call_tool("unpin_thread", json!({"thread_id": id})).await;
+                node.call_tool("unpin_thread", json!({"thread_id": id}))
+                    .await;
             }
         }
     }
@@ -563,7 +564,8 @@ async fn test_unpin_thread() {
     if let Some(ids) = pinned.get_array("pinned_threads") {
         for id_val in ids {
             if let Some(id) = id_val.as_str() {
-                node.call_tool("unpin_thread", json!({"thread_id": id})).await;
+                node.call_tool("unpin_thread", json!({"thread_id": id}))
+                    .await;
             }
         }
     }
@@ -623,7 +625,8 @@ async fn test_get_pinned_threads() {
     if let Some(ids) = existing.get_array("pinned_threads") {
         for id_val in ids {
             if let Some(id) = id_val.as_str() {
-                node.call_tool("unpin_thread", json!({"thread_id": id})).await;
+                node.call_tool("unpin_thread", json!({"thread_id": id}))
+                    .await;
             }
         }
     }
@@ -639,9 +642,7 @@ async fn test_get_pinned_threads() {
     .assert_success();
 
     // Get pinned threads (no args needed)
-    let r = node
-        .call_tool("get_pinned_threads", json!({}))
-        .await;
+    let r = node.call_tool("get_pinned_threads", json!({})).await;
 
     r.assert_success();
 }
@@ -957,9 +958,7 @@ async fn test_get_pending_messages() {
     .assert_success();
 
     // Get pending messages
-    let r = node
-        .call_tool("get_pending_messages", json!({}))
-        .await;
+    let r = node.call_tool("get_pending_messages", json!({})).await;
 
     r.assert_success();
 }
@@ -990,9 +989,7 @@ async fn test_retry_pending_messages() {
     .assert_success();
 
     // Retry pending messages
-    let r = node
-        .call_tool("retry_pending_messages", json!({}))
-        .await;
+    let r = node.call_tool("retry_pending_messages", json!({})).await;
 
     r.assert_success();
 }

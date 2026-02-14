@@ -64,9 +64,7 @@ mod offline_message_queue {
         println!("Queue message: {:?}", queue);
 
         // Verify message is in pending queue
-        let pending = client
-            .call_tool("get_pending_messages", json!({}))
-            .await;
+        let pending = client.call_tool("get_pending_messages", json!({})).await;
 
         println!("Pending messages: {:?}", pending);
 
@@ -91,9 +89,7 @@ mod offline_message_queue {
         println!("Enable network: {:?}", enable);
 
         // Trigger sync of pending messages
-        let retry = client
-            .call_tool("retry_pending_messages", json!({}))
-            .await;
+        let retry = client.call_tool("retry_pending_messages", json!({})).await;
 
         println!("Retry pending: {:?}", retry);
 
@@ -143,9 +139,7 @@ mod offline_message_queue {
             println!("Cancel result: {:?}", cancel);
 
             // Verify message is no longer pending
-            let pending = client
-                .call_tool("get_pending_messages", json!({}))
-                .await;
+            let pending = client.call_tool("get_pending_messages", json!({})).await;
 
             if pending.success
                 && let Some(messages) = pending.get_array("pending_messages")
@@ -209,9 +203,7 @@ mod offline_message_queue {
         }
 
         // Verify all messages are queued
-        let pending = client
-            .call_tool("get_pending_messages", json!({}))
-            .await;
+        let pending = client.call_tool("get_pending_messages", json!({})).await;
 
         if pending.success {
             let count = pending

@@ -133,9 +133,7 @@ async fn test_complete_messaging_workflow() {
         .await;
 
     let content = TestNode::extract_content(&send_result).expect("Should have content");
-    let msg_id = content["id"]
-        .as_str()
-        .expect("Message should have ID");
+    let msg_id = content["id"].as_str().expect("Message should have ID");
     println!("Message sent: {}", msg_id);
 
     // 2. User B receives message via get_messages
@@ -151,10 +149,7 @@ async fn test_complete_messaging_workflow() {
         .await;
 
     let list_content = TestNode::extract_content(&list_result);
-    assert!(
-        list_content.is_some(),
-        "Should retrieve messages"
-    );
+    assert!(list_content.is_some(), "Should retrieve messages");
     println!("Messages listed successfully");
 
     // 3. User B replies, creating thread
@@ -171,9 +166,7 @@ async fn test_complete_messaging_workflow() {
 
     let thread_content = TestNode::extract_content(&thread_result)
         .unwrap_or_else(|| json!({"thread_id": "unknown"}));
-    let thread_id = thread_content["thread_id"]
-        .as_str()
-        .unwrap_or("unknown");
+    let thread_id = thread_content["thread_id"].as_str().unwrap_or("unknown");
     println!("Thread created: {}", thread_id);
 
     // 4. User A reacts to original message
@@ -190,20 +183,14 @@ async fn test_complete_messaging_workflow() {
         .await;
 
     let reaction_content = TestNode::extract_content(&reaction_result);
-    assert!(
-        reaction_content.is_some(),
-        "Reaction should be added"
-    );
+    assert!(reaction_content.is_some(), "Reaction should be added");
     println!("Reaction added");
 
     // 5. User B marks thread as read
     println!("Step 5: User B marks thread as read");
     // First populate the thread in the messaging service
     let _ = node
-        .call_tool(
-            "list_messages",
-            json!({ "thread_id": channel }),
-        )
+        .call_tool("list_messages", json!({ "thread_id": channel }))
         .await;
 
     let read_result = node
@@ -216,7 +203,10 @@ async fn test_complete_messaging_workflow() {
         .await;
 
     // mark_thread_read may fail if thread not fully registered; this is OK in integration test
-    println!("Mark thread read result: {:?}", read_result.get("result").is_some());
+    println!(
+        "Mark thread read result: {:?}",
+        read_result.get("result").is_some()
+    );
 
     // 6. User A edits original message
     println!("Step 6: User A edits message");
@@ -232,10 +222,7 @@ async fn test_complete_messaging_workflow() {
         .await;
 
     let edit_content = TestNode::extract_content(&edit_result);
-    assert!(
-        edit_content.is_some(),
-        "Message should be edited"
-    );
+    assert!(edit_content.is_some(), "Message should be edited");
     println!("Message edited");
 
     // 7. Verify all state synchronized
@@ -271,7 +258,10 @@ async fn test_complete_messaging_workflow() {
         )
         .await;
 
-    println!("Thread verified: {:?}", verify_thread.get("result").is_some());
+    println!(
+        "Thread verified: {:?}",
+        verify_thread.get("result").is_some()
+    );
 
     // Check reaction persists
     let verify_reactions = node
@@ -284,7 +274,10 @@ async fn test_complete_messaging_workflow() {
         )
         .await;
 
-    println!("Reactions verified: {:?}", verify_reactions.get("result").is_some());
+    println!(
+        "Reactions verified: {:?}",
+        verify_reactions.get("result").is_some()
+    );
 
     println!("✓ Complete workflow verified successfully!");
     println!("Full flow: Message → Thread → Reactions → Edits → State Sync all working");
@@ -323,10 +316,7 @@ async fn test_messaging_with_search() {
         .await;
 
     let search_content = TestNode::extract_content(&search_result);
-    assert!(
-        search_content.is_some(),
-        "Search should work in workflow"
-    );
+    assert!(search_content.is_some(), "Search should work in workflow");
 
     // Verify found messages
     if let Some(sc) = &search_content

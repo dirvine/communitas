@@ -14,12 +14,8 @@
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
-
-/// Atomic counter for unique port assignment across parallel tests
-static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 /// Test server handle that cleans up on drop
 struct TestServer {
@@ -30,9 +26,10 @@ struct TestServer {
 impl TestServer {
     /// Start MCP server in HTTP demo mode on a random port
     async fn start() -> Self {
-        // Use atomic counter + process ID for unique port per test
-        let counter = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let port = 30000 + (std::process::id() % 1000) as u16 * 10 + counter;
+        // Use OS-assigned port to avoid collisions between concurrent test binaries
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
 
         let mut process = Command::new(env!("CARGO_BIN_EXE_communitas-mcp"))
             .args([

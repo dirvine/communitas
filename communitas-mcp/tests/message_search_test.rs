@@ -5,14 +5,10 @@
 
 use serde_json::json;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU16, Ordering};
 use tokio::time::sleep;
-
-static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 /// Test node that spawns an MCP server process
 struct TestNode {
-    #[allow(dead_code)]
     #[allow(dead_code)]
     name: String,
     process: std::process::Child,
@@ -21,8 +17,10 @@ struct TestNode {
 
 impl TestNode {
     async fn start(name: &str) -> Self {
-        let counter = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let port = 34000 + (std::process::id() % 1000) as u16 * 10 + counter;
+        // Use OS-assigned port to avoid collisions between concurrent test binaries
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
 
         let mut process = Command::new(env!("CARGO_BIN_EXE_communitas-mcp"))
             .args([

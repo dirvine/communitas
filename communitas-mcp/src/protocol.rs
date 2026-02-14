@@ -131,6 +131,7 @@ pub enum ProtocolError {
 ///
 /// # Examples
 /// ```
+/// use communitas_mcp::protocol::validate_identifier;
 /// assert!(validate_identifier("ui://communitas/contacts", "resource_uri").is_ok());
 /// assert!(validate_identifier("../../../etc/passwd", "resource_uri").is_err());
 /// ```
@@ -204,6 +205,7 @@ pub fn validate_identifier(id: &str, identifier_type: &str) -> Result<(), Protoc
 ///
 /// # Examples
 /// ```
+/// use communitas_mcp::protocol::validate_origin;
 /// assert!(validate_origin("https://localhost:8443").is_ok());
 /// assert!(validate_origin("javascript:alert('xss')").is_err());
 /// ```

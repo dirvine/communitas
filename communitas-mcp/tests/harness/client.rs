@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
@@ -26,8 +25,6 @@ use communitas_core::app::CommunitasApp;
 use communitas_mcp::tools::call_tool;
 use communitas_ui_service::UiServices;
 use communitas_ui_service::storage::UiStorage;
-
-static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 /// Transport type for MCP communication
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -399,8 +396,10 @@ impl McpTestNode {
 
     /// Start with additional CLI arguments
     pub async fn start_with_options(name: &str, extra_args: &[&str]) -> Self {
-        let counter = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let port = 31000 + (std::process::id() % 1000) as u16 * 10 + counter;
+        // Use OS-assigned port to avoid collisions between concurrent test binaries
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
 
         let mut args = vec![
             "--http".to_string(),

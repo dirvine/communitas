@@ -5,10 +5,7 @@
 
 use serde_json::json;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU16, Ordering};
 use tokio::time::{Duration, sleep, timeout};
-
-static PORT_COUNTER: AtomicU16 = AtomicU16::new(0);
 
 /// Represents the result of a tool call with full validation.
 ///
@@ -55,13 +52,10 @@ struct TestNode {
 
 impl TestNode {
     async fn start(name: &str) -> Self {
-        let counter = PORT_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let pid = std::process::id();
-        // Use PID offset + counter to minimize port collisions
-        // Base: 34000, PID offset: 0-999, counter spacing: 2 → range: 34000-35998
-        // Bounds check: cap counter at 999 to prevent wraparound (34000 + 999 + 999*2 = 36997)
-        let capped_counter = std::cmp::min(counter, 999);
-        let port = 34000 + (pid % 1000) as u16 + (capped_counter * 2);
+        // Use OS-assigned port to avoid collisions between concurrent test binaries
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
 
         let mut process = Command::new(env!("CARGO_BIN_EXE_communitas-mcp"))
             .args([

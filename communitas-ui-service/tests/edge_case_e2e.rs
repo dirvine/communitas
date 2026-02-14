@@ -53,6 +53,9 @@ async fn make_authenticated_services(temp: &TempDir) -> UiServices {
 
     // Enable demo mode to authenticate
     services.auth().enable_demo_mode();
+    // Allow the background auth watcher to reinitialize CoreKanbanService
+    // with the authenticated peer_id, preventing BoardNotFound race conditions.
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     services
 }

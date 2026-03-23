@@ -29,17 +29,17 @@ saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.4.0"
 
 # Saorsa Gossip ecosystem - updated to 0.5.1
-saorsa-gossip-types = "0.5.1"
-saorsa-gossip-identity = "0.5.1"
-saorsa-gossip-crdt-sync = "0.5.1"
-saorsa-gossip-groups = "0.5.1"
-saorsa-gossip-presence = "0.5.1"
-saorsa-gossip-transport = "0.5.1"
-saorsa-gossip-membership = "0.5.1"
-saorsa-gossip-pubsub = "0.5.1"
-saorsa-gossip-coordinator = "0.5.1"
-saorsa-gossip-rendezvous = "0.5.1"
-saorsa-gossip-runtime = "0.5.1"
+saorsa-gossip-types = "0.5.5"
+saorsa-gossip-identity = "0.5.5"
+saorsa-gossip-crdt-sync = "0.5.5"
+saorsa-gossip-groups = "0.5.5"
+saorsa-gossip-presence = "0.5.5"
+saorsa-gossip-transport = "0.5.5"
+saorsa-gossip-membership = "0.5.5"
+saorsa-gossip-pubsub = "0.5.5"
+saorsa-gossip-coordinator = "0.5.5"
+saorsa-gossip-rendezvous = "0.5.5"
+saorsa-gossip-runtime = "0.5.5"
 # Security: openh264-sys2 0.9.x requires rustc 1.88+, using 0.8.0 until CI upgrades
 openh264-sys2 = "0.8.0"
 
@@ -112,4 +112,4 @@ strip = true
 opt-level = 0
 
 # [patch.crates-io] removed — all dependencies use published crates.io versions
-# saorsa-gossip-* 0.5.1 and ant-quic 0.21.8 are published and match local
+# saorsa-gossip-* 0.5.1 and ant-quic 0.22.2 are published and match local

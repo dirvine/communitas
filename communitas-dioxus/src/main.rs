@@ -25,7 +25,7 @@ use std::sync::{Arc, OnceLock};
 use tracing::{error, info};
 
 use communitas_ui_service::auth::AuthSession;
-use components::{ContactEntry, GroupEntry};
+use components::{ContactEntry, DetailContent, GroupEntry, SpaceModalTab};
 use tokens::colors;
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
@@ -243,11 +243,24 @@ fn App() -> Element {
 
 // ── App shell (sidebar + content + status bar) ──────────────────────────────
 
-/// Shared layout: sidebar | content | status bar.
+/// Shared layout: sidebar | content | detail panel | status bar.
 #[component]
 fn AppShell(children: Element) -> Element {
     let navigator = use_navigator();
     let route: Route = use_route();
+
+    // Detail panel state
+    let mut detail_content = use_signal(|| DetailContent::None);
+
+    // Create/join space modal state
+    let mut show_space_modal = use_signal(|| false);
+    let mut space_modal_tab = use_signal(|| SpaceModalTab::Create);
+    let mut space_name = use_signal(String::new);
+    let mut space_description = use_signal(String::new);
+    let mut space_invite_link = use_signal(String::new);
+    let mut space_display_name = use_signal(String::new);
+    let mut space_submitting = use_signal(|| false);
+    let mut space_error = use_signal(|| None::<String>);
 
     // Gather sidebar data from x0x daemon
     let mut groups = use_signal(Vec::<GroupEntry>::new);
@@ -319,7 +332,7 @@ fn AppShell(children: Element) -> Element {
         div {
             style: "display: flex; flex-direction: column; height: 100vh; overflow: hidden;",
 
-            // Main area: sidebar + content
+            // Main area: sidebar + content + detail panel
             div {
                 style: "display: flex; flex: 1; overflow: hidden;",
 
@@ -351,6 +364,21 @@ fn AppShell(children: Element) -> Element {
                         };
                         navigator.push(route);
                     },
+                    on_contact_click: move |aid: String| {
+                        detail_content.set(DetailContent::AgentProfile { agent_id: aid });
+                    },
+                    on_space_info: move |gid: String| {
+                        detail_content.set(DetailContent::SpaceInfo { group_id: gid });
+                    },
+                    on_create_space: move |_: ()| {
+                        show_space_modal.set(true);
+                        space_modal_tab.set(SpaceModalTab::Create);
+                        space_name.set(String::new());
+                        space_description.set(String::new());
+                        space_invite_link.set(String::new());
+                        space_display_name.set(String::new());
+                        space_error.set(None);
+                    },
                 }
 
                 // Content area
@@ -361,10 +389,90 @@ fn AppShell(children: Element) -> Element {
                     ),
                     {children}
                 }
+
+                // Detail panel (right column)
+                components::DetailPanel {
+                    content: detail_content,
+                }
             }
 
             // Status bar
             components::StatusBar {}
+        }
+
+        // Create/join space modal
+        if show_space_modal() {
+            components::CreateSpaceModal {
+                active_tab: space_modal_tab(),
+                space_name: space_name(),
+                space_description: space_description(),
+                invite_link: space_invite_link(),
+                display_name: space_display_name(),
+                submitting: space_submitting(),
+                error: space_error(),
+                on_tab_change: move |tab: SpaceModalTab| space_modal_tab.set(tab),
+                on_name_change: move |val: String| space_name.set(val),
+                on_description_change: move |val: String| space_description.set(val),
+                on_invite_change: move |val: String| space_invite_link.set(val),
+                on_display_name_change: move |val: String| space_display_name.set(val),
+                on_cancel: move |_| {
+                    if !space_submitting() {
+                        show_space_modal.set(false);
+                    }
+                },
+                on_create: move |_| {
+                    let name = space_name().trim().to_string();
+                    if name.is_empty() {
+                        space_error.set(Some("Space name is required.".to_string()));
+                        return;
+                    }
+                    let desc = space_description().trim().to_string();
+                    let display = space_display_name().trim().to_string();
+                    space_submitting.set(true);
+                    space_error.set(None);
+                    spawn(async move {
+                        let client = communitas_x0x_client::X0xClient::new();
+                        let desc_opt = if desc.is_empty() { None } else { Some(desc.as_str()) };
+                        let display_opt = if display.is_empty() { None } else { Some(display.as_str()) };
+                        match client.create_group(&name, desc_opt, display_opt).await {
+                            Ok(created) => {
+                                info!(target: "ui.app_shell", "Created space {} ({})", created.name, created.group_id);
+                                show_space_modal.set(false);
+                                navigator.push(Route::SpaceView { space_id: created.group_id });
+                            }
+                            Err(e) => {
+                                space_error.set(Some(format!("Failed to create space: {e}")));
+                            }
+                        }
+                        space_submitting.set(false);
+                    });
+                },
+                on_join: move |_| {
+                    let invite = space_invite_link().trim().to_string();
+                    if invite.is_empty() {
+                        space_error.set(Some("Invite link is required.".to_string()));
+                        return;
+                    }
+                    let display = space_display_name().trim().to_string();
+                    space_submitting.set(true);
+                    space_error.set(None);
+                    spawn(async move {
+                        let client = communitas_x0x_client::X0xClient::new();
+                        let display_opt = if display.is_empty() { None } else { Some(display.as_str()) };
+                        match client.join_group(&invite, display_opt).await {
+                            Ok(joined) => {
+                                info!(target: "ui.app_shell", "Joined space {} ({})", joined.group_name, joined.group_id);
+                                show_space_modal.set(false);
+                                navigator.push(Route::SpaceView { space_id: joined.group_id });
+                            }
+                            Err(e) => {
+                                space_error.set(Some(format!("Failed to join space: {e}")));
+                            }
+                        }
+                        space_submitting.set(false);
+                    });
+                },
+            }
         }
     }
 }

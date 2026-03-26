@@ -15,6 +15,8 @@ mod composer;
 #[allow(dead_code)]
 pub mod confirm_dialog;
 pub mod create_channel_modal;
+pub mod create_space_modal;
+pub mod detail_panel;
 #[allow(dead_code)]
 pub mod daemon_status;
 pub mod dashboard;
@@ -25,6 +27,7 @@ pub mod drive;
 pub mod entity_view;
 #[allow(dead_code)]
 pub mod error_boundary;
+pub mod feed_view;
 pub mod files_view;
 #[allow(dead_code)]
 pub mod filter_chips;
@@ -55,6 +58,9 @@ pub mod sidebar;
 pub mod skeleton;
 pub mod space_view;
 pub mod status_bar;
+pub mod swarm_view;
+pub mod web_view;
+pub mod wiki_view;
 #[allow(dead_code)]
 mod thread_list;
 pub mod thread_panel;
@@ -186,16 +192,26 @@ pub use daemon_status::DaemonStatusBar;
 pub use channel_chat::ChannelChatView;
 pub use channel_sidebar::ChannelSidebar;
 pub use create_channel_modal::CreateChannelModal;
+pub use create_space_modal::{CreateSpaceModal, SpaceModalTab};
+pub use detail_panel::{DetailContent, DetailPanel};
 pub use thread_panel::ThreadPanel;
 
 // Re-export new Deep Space components
 pub use app_sidebar::{AppSidebar, ContactEntry, GroupEntry};
 pub use dashboard::Dashboard;
 #[allow(unused_imports)]
+pub use feed_view::FeedView;
+#[allow(unused_imports)]
 pub use files_view::FilesView;
 pub use network_view::NetworkView;
 pub use people_view::PeopleView;
 pub use settings_view::SettingsView;
 pub use space_view::SpaceView;
+#[allow(unused_imports)]
+pub use swarm_view::SwarmView;
+#[allow(unused_imports)]
+pub use web_view::WebView;
+#[allow(unused_imports)]
+pub use wiki_view::WikiView;
 pub use dm_view::DmView;
 pub use status_bar::StatusBar;

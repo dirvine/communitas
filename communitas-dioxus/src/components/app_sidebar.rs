@@ -2,8 +2,8 @@
 //!
 //! Sections:
 //! 1. Identity header (agent_id, status dot)
-//! 2. Spaces section (groups list)
-//! 3. Direct Messages section (contacts)
+//! 2. Spaces section (groups list with create button and info icons)
+//! 3. Direct Messages section (contacts with profile click)
 //! 4. System section (People, Network, Settings)
 //! 5. Collapse toggle
 
@@ -30,6 +30,15 @@ pub struct AppSidebarProps {
     pub connected: bool,
     /// Callback when a navigation item is clicked.
     pub on_navigate: EventHandler<String>,
+    /// Callback when a contact is clicked for profile view.
+    #[props(default)]
+    pub on_contact_click: Option<EventHandler<String>>,
+    /// Callback when space info icon is clicked.
+    #[props(default)]
+    pub on_space_info: Option<EventHandler<String>>,
+    /// Callback to open the create/join space modal.
+    #[props(default)]
+    pub on_create_space: Option<EventHandler<()>>,
 }
 
 /// A group entry for the sidebar.
@@ -63,6 +72,20 @@ fn short_id(id: &str) -> String {
     }
 }
 
+/// Small icon button style used for info and add buttons.
+fn icon_button_style() -> String {
+    format!(
+        "display: flex; align-items: center; justify-content: center; \
+         width: 20px; height: 20px; border-radius: {}; \
+         background: none; border: none; cursor: pointer; \
+         color: {}; font-size: {}; flex-shrink: 0; \
+         transition: color 150ms ease;",
+        radius::SM,
+        colors::TEXT_MUTED,
+        typography::TEXT_XS,
+    )
+}
+
 /// The main application sidebar.
 #[component]
 pub fn AppSidebar(props: AppSidebarProps) -> Element {
@@ -87,7 +110,8 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
     let section_header_style = format!(
         "font-size: {}; color: {}; font-weight: 600; \
          text-transform: uppercase; letter-spacing: 0.08em; \
-         padding: {} {}; white-space: nowrap;",
+         padding: {} {}; white-space: nowrap; \
+         display: flex; align-items: center; justify-content: space-between;",
         typography::TEXT_XS,
         colors::TEXT_MUTED,
         spacing::SM,
@@ -233,7 +257,26 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                 if !is_collapsed {
                     div {
                         style: format!("margin-top: {};", spacing::MD),
-                        div { style: "{section_header_style}", "Spaces" }
+                        div {
+                            style: "{section_header_style}",
+                            span { "Spaces" }
+
+                            // Create space button
+                            if let Some(on_create) = &props.on_create_space {
+                                {
+                                    let on_create = *on_create;
+                                    rsx! {
+                                        button {
+                                            style: icon_button_style(),
+                                            title: "Create or join a space",
+                                            "aria-label": "Create or join a space",
+                                            onclick: move |_| on_create.call(()),
+                                            "+"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -257,23 +300,57 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                             let on_nav = props.on_navigate;
                             let path_clone = path.clone();
                             let group_name = group.name.clone();
+                            let group_id = group.id.clone();
+                            let on_info = props.on_space_info;
                             rsx! {
-                                button {
+                                div {
                                     key: "{path}",
-                                    style: nav_item_style(&path),
-                                    onclick: move |_| on_nav.call(path_clone.clone()),
-                                    span {
+                                    style: "display: flex; align-items: center;",
+
+                                    button {
                                         style: format!(
-                                            "font-size: {}; flex-shrink: 0; width: 20px; text-align: center; color: {};",
-                                            typography::TEXT_SM,
-                                            colors::SECONDARY,
+                                            "{}flex: 1;",
+                                            nav_item_style(&path),
                                         ),
-                                        "#"
-                                    }
-                                    if !is_collapsed {
+                                        onclick: move |_| on_nav.call(path_clone.clone()),
                                         span {
-                                            style: "overflow: hidden; text-overflow: ellipsis;",
-                                            "{group_name}"
+                                            style: format!(
+                                                "font-size: {}; flex-shrink: 0; width: 20px; text-align: center; color: {};",
+                                                typography::TEXT_SM,
+                                                colors::SECONDARY,
+                                            ),
+                                            "#"
+                                        }
+                                        if !is_collapsed {
+                                            span {
+                                                style: "overflow: hidden; text-overflow: ellipsis;",
+                                                "{group_name}"
+                                            }
+                                        }
+                                    }
+
+                                    // Info button (only when expanded)
+                                    if !is_collapsed {
+                                        if let Some(on_info) = on_info {
+                                            {
+                                                let gid = group_id.clone();
+                                                rsx! {
+                                                    button {
+                                                        style: format!(
+                                                            "{}margin-right: {};",
+                                                            icon_button_style(),
+                                                            spacing::XS,
+                                                        ),
+                                                        title: "Space info",
+                                                        "aria-label": "Space info",
+                                                        onclick: move |evt| {
+                                                            evt.stop_propagation();
+                                                            on_info.call(gid.clone());
+                                                        },
+                                                        "i"
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -311,16 +388,50 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                             let path_clone = path.clone();
                             let label = contact.label.clone();
                             let online = contact.online;
+                            let contact_aid = contact.agent_id.clone();
+                            let on_profile = props.on_contact_click;
                             rsx! {
-                                button {
+                                div {
                                     key: "{path}",
-                                    style: nav_item_style(&path),
-                                    onclick: move |_| on_nav.call(path_clone.clone()),
-                                    span { style: dot_style(online) }
+                                    style: "display: flex; align-items: center;",
+
+                                    button {
+                                        style: format!(
+                                            "{}flex: 1;",
+                                            nav_item_style(&path),
+                                        ),
+                                        onclick: move |_| on_nav.call(path_clone.clone()),
+                                        span { style: dot_style(online) }
+                                        if !is_collapsed {
+                                            span {
+                                                style: "overflow: hidden; text-overflow: ellipsis;",
+                                                "{label}"
+                                            }
+                                        }
+                                    }
+
+                                    // Profile button (only when expanded)
                                     if !is_collapsed {
-                                        span {
-                                            style: "overflow: hidden; text-overflow: ellipsis;",
-                                            "{label}"
+                                        if let Some(on_profile) = on_profile {
+                                            {
+                                                let aid = contact_aid.clone();
+                                                rsx! {
+                                                    button {
+                                                        style: format!(
+                                                            "{}margin-right: {};",
+                                                            icon_button_style(),
+                                                            spacing::XS,
+                                                        ),
+                                                        title: "View profile",
+                                                        "aria-label": "View contact profile",
+                                                        onclick: move |evt| {
+                                                            evt.stop_propagation();
+                                                            on_profile.call(aid.clone());
+                                                        },
+                                                        "@"
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }

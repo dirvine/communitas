@@ -1,7 +1,8 @@
-//! Space view with tab bar (Chat, Board, Files, Swarm).
+//! Space view with tab bar (Chat, Board, Files, Swarm, Feed).
 //!
 //! Each space is a group. The Chat tab shows channel sidebar + channel chat.
-//! Board reuses the kanban system. Files uses the files view.
+//! Board reuses the kanban system. Files uses the files view. Swarm provides
+//! agent task delegation. Feed is a social post stream per space.
 
 use dioxus::prelude::*;
 use tracing::info;
@@ -17,6 +18,10 @@ pub enum SpaceTab {
     Chat,
     Board,
     Files,
+    Swarm,
+    Feed,
+    Wiki,
+    Web,
 }
 
 /// Props for the space view.
@@ -36,6 +41,10 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
         match props.initial_tab.as_deref() {
             Some("board") => SpaceTab::Board,
             Some("files") => SpaceTab::Files,
+            Some("swarm") => SpaceTab::Swarm,
+            Some("feed") => SpaceTab::Feed,
+            Some("wiki") => SpaceTab::Wiki,
+            Some("web") => SpaceTab::Web,
             _ => SpaceTab::Chat,
         }
     });
@@ -114,6 +123,34 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
                     "aria-selected": current_tab == SpaceTab::Files,
                     onclick: move |_| active_tab.set(SpaceTab::Files),
                     "Files"
+                }
+                button {
+                    style: tab_btn(SpaceTab::Swarm, "Swarm"),
+                    role: "tab",
+                    "aria-selected": current_tab == SpaceTab::Swarm,
+                    onclick: move |_| active_tab.set(SpaceTab::Swarm),
+                    "Swarm"
+                }
+                button {
+                    style: tab_btn(SpaceTab::Feed, "Feed"),
+                    role: "tab",
+                    "aria-selected": current_tab == SpaceTab::Feed,
+                    onclick: move |_| active_tab.set(SpaceTab::Feed),
+                    "Feed"
+                }
+                button {
+                    style: tab_btn(SpaceTab::Wiki, "Wiki"),
+                    role: "tab",
+                    "aria-selected": current_tab == SpaceTab::Wiki,
+                    onclick: move |_| active_tab.set(SpaceTab::Wiki),
+                    "Wiki"
+                }
+                button {
+                    style: tab_btn(SpaceTab::Web, "Web"),
+                    role: "tab",
+                    "aria-selected": current_tab == SpaceTab::Web,
+                    onclick: move |_| active_tab.set(SpaceTab::Web),
+                    "Web"
                 }
             }
 
@@ -256,6 +293,42 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
                                 crate::components::files_view::FilesView {
                                     space_id: sid,
                                 }
+                            }
+                        }
+                    }
+
+                    SpaceTab::Swarm => {
+                        let sid = space_id.clone();
+                        rsx! {
+                            crate::components::swarm_view::SwarmView {
+                                space_id: sid,
+                            }
+                        }
+                    }
+
+                    SpaceTab::Feed => {
+                        let sid = space_id.clone();
+                        rsx! {
+                            crate::components::feed_view::FeedView {
+                                space_id: sid,
+                            }
+                        }
+                    }
+
+                    SpaceTab::Wiki => {
+                        let sid = space_id.clone();
+                        rsx! {
+                            crate::components::WikiView {
+                                group_id: sid,
+                            }
+                        }
+                    }
+
+                    SpaceTab::Web => {
+                        let sid = space_id.clone();
+                        rsx! {
+                            crate::components::WebView {
+                                group_id: sid,
                             }
                         }
                     }

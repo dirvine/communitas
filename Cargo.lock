@@ -883,19 +883,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "communitas-headless"
-version = "0.8.6"
-dependencies = [
- "anyhow",
- "clap",
- "communitas-workspace-hack",
- "communitas-x0x-client",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "communitas-kanban"
 version = "0.8.6"
 dependencies = [

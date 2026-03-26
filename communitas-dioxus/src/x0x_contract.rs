@@ -416,7 +416,10 @@ mod tests {
             member_count: Some(1),
             chat_topic: Some("x0x.group.1234567890abcdef.chat/general".to_string()),
             metadata_topic: Some("x0x.group.1234567890abcdef.meta".to_string()),
-            members: vec!["agent-1".to_string()],
+            members: vec![communitas_x0x_client::GroupMember {
+                agent_id: "agent-1".to_string(),
+                display_name: None,
+            }],
         }
     }
 

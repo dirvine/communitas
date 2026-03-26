@@ -56,27 +56,6 @@ jobs:
           target
         key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Build binaries
-      run: |
-        cargo build --release -p communitas-headless --bin communitas-headless
-
-    - name: Strip binaries
-      run: |
-        strip target/release/communitas-headless || true
-
-    - name: Create release archives (Linux target triple)
-      run: |
-        cd target/release
-        tar -czf communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
-          communitas-headless
-
-    - name: Upload Linux binaries
-      uses: actions/upload-artifact@v4
-      with:
-        name: communitas-linux-x86_64
-        path: |
-          target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
-
     - name: Build communitas-dioxus
       run: |
         cargo build --release -p communitas-dioxus
@@ -107,33 +86,8 @@ jobs:
       with:
         targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-    - name: Build x86_64 binaries
-      run: |
-        cd communitas-headless
-        cargo build --release --target x86_64-apple-darwin --bin communitas-headless
-
-    - name: Build aarch64 binaries
-      run: |
-        cd communitas-headless
-        cargo build --release --target aarch64-apple-darwin --bin communitas-headless
-
-    - name: Create universal binaries
-      run: |
-        cd target
-        mkdir -p universal-apple-darwin
-        lipo x86_64-apple-darwin/release/communitas-headless aarch64-apple-darwin/release/communitas-headless -create -output universal-apple-darwin/communitas-headless
-
-    - name: Create macOS archive
-      run: |
-        cd target/universal-apple-darwin
-        tar -czf communitas-headless-macos-universal.tar.gz \
-          communitas-headless
-
-    - name: Upload macOS binaries
-      uses: actions/upload-artifact@v4
-      with:
-        name: communitas-headless-macos-universal
-        path: target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
+    - name: Create universal binary directory
+      run: mkdir -p target/universal-apple-darwin
 
     - name: Build x86_64 Dioxus
       run: cargo build --release -p communitas-dioxus --target x86_64-apple-darwin
@@ -169,22 +123,6 @@ jobs:
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@1.88.0
 
-    - name: Build binaries
-      run: |
-        cd communitas-headless
-        cargo build --release --bin communitas-headless
-
-    - name: Create Windows archive
-      run: |
-        cd target/release
-        Compress-Archive -Path communitas-headless.exe -DestinationPath communitas-headless-windows-x86_64.zip
-
-    - name: Upload Windows binaries
-      uses: actions/upload-artifact@v4
-      with:
-        name: communitas-headless-windows-x86_64
-        path: target/release/communitas-headless-windows-x86_64.zip
-
     - name: Build communitas-dioxus
       run: |
         cargo build --release -p communitas-dioxus
@@ -199,5 +137,3 @@ jobs:
       with:
         name: communitas-dioxus-windows-x86_64
         path: target/release/communitas-dioxus-windows-x86_64.zip
-
-  # Note: No release publishing here. Use release-headless.yml for releases.

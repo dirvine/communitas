@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "communitas-core",
     "communitas-dioxus",
-    "communitas-headless",
     "communitas-kanban",
     "communitas-ui-api",
     "communitas-ui-service",

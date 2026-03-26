@@ -5,7 +5,9 @@
 //! - Space info (when clicking info on a space header)
 //! - Delegates to ThreadPanel for thread views
 
-use crate::design_tokens::{layout, motion, palette, radius, semantic, shadow, spacing, typography};
+use crate::design_tokens::{
+    layout, motion, palette, radius, semantic, shadow, spacing, typography,
+};
 use communitas_x0x_client::{MachineRecord, TrustLevel, X0xClient};
 use dioxus::prelude::*;
 use tracing::{error, warn};
@@ -13,9 +15,7 @@ use tracing::{error, warn};
 /// Copy text to clipboard via JS eval (works in Tauri WebView).
 fn copy_text(value: &str) {
     let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
-    let script = format!(
-        "navigator.clipboard.writeText(\"{escaped}\").catch(()=>{{}});",
-    );
+    let script = format!("navigator.clipboard.writeText(\"{escaped}\").catch(()=>{{}});",);
     spawn(async move {
         let _ = dioxus::document::eval(&script);
     });
@@ -182,18 +182,16 @@ fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
             // Load machine records
             match client.list_machines(&aid).await {
                 Ok(m) => machines.set(m),
-                Err(e) => warn!(target: "ui.detail_panel", "Failed to load machines for {aid}: {e}"),
+                Err(e) => {
+                    warn!(target: "ui.detail_panel", "Failed to load machines for {aid}: {e}")
+                }
             }
 
             loading.set(false);
         }
     });
 
-    let initials = agent_id
-        .chars()
-        .take(2)
-        .collect::<String>()
-        .to_uppercase();
+    let initials = agent_id.chars().take(2).collect::<String>().to_uppercase();
 
     let short_id = if agent_id.len() > 16 {
         format!("{}...{}", &agent_id[..8], &agent_id[agent_id.len() - 6..])
@@ -546,12 +544,20 @@ fn TrustButton(
     let (bg, border, fg) = if active {
         match level {
             TrustLevel::Blocked => (palette::ROSE_500, palette::ROSE_500, semantic::TEXT_INVERSE),
-            TrustLevel::Unknown => (semantic::BG_ELEVATED, semantic::BORDER_STRONG, semantic::TEXT_PRIMARY),
+            TrustLevel::Unknown => (
+                semantic::BG_ELEVATED,
+                semantic::BORDER_STRONG,
+                semantic::TEXT_PRIMARY,
+            ),
             TrustLevel::Known => (palette::JADE_700, palette::JADE_600, semantic::TEXT_PRIMARY),
             TrustLevel::Trusted => (palette::JADE_500, palette::JADE_400, semantic::TEXT_INVERSE),
         }
     } else {
-        (semantic::BG_TERTIARY, semantic::BORDER_SUBTLE, semantic::TEXT_MUTED)
+        (
+            semantic::BG_TERTIARY,
+            semantic::BORDER_SUBTLE,
+            semantic::TEXT_MUTED,
+        )
     };
 
     rsx! {
@@ -608,12 +614,8 @@ fn MachineRow(
         .clone()
         .unwrap_or_else(|| "Unnamed machine".to_string());
 
-    let first_seen_text = first_seen
-        .map(format_timestamp)
-        .unwrap_or_default();
-    let last_seen_text = last_seen
-        .map(format_timestamp)
-        .unwrap_or_default();
+    let first_seen_text = first_seen.map(format_timestamp).unwrap_or_default();
+    let last_seen_text = last_seen.map(format_timestamp).unwrap_or_default();
 
     let is_pinned = pinned;
 

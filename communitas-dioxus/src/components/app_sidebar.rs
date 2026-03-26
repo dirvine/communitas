@@ -28,6 +28,15 @@ pub struct AppSidebarProps {
     /// Whether the daemon is connected.
     #[props(default)]
     pub connected: bool,
+    /// Primary identity label shown in the local x0x header.
+    #[props(default)]
+    pub identity_label: Option<String>,
+    /// Secondary identity label (short agent/machine details).
+    #[props(default)]
+    pub identity_secondary: Option<String>,
+    /// Callback when the local identity header is clicked.
+    #[props(default)]
+    pub on_identity_click: Option<EventHandler<()>>,
     /// Callback when a navigation item is clicked.
     pub on_navigate: EventHandler<String>,
     /// Callback when a contact is clicked for profile view.
@@ -144,10 +153,7 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                 colors::PRIMARY,
             )
         } else {
-            format!(
-                "{nav_item_base} color: {};",
-                colors::TEXT_SECONDARY,
-            )
+            format!("{nav_item_base} color: {};", colors::TEXT_SECONDARY,)
         }
     };
 
@@ -168,6 +174,24 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
     } else {
         colors::DANGER
     };
+    let identity_label = props
+        .identity_label
+        .clone()
+        .unwrap_or_else(|| "Local x0x".to_string());
+    let identity_secondary = props
+        .identity_secondary
+        .clone()
+        .or_else(|| props.agent_id.as_deref().map(short_id));
+    let identity_click = props.on_identity_click;
+    let identity_button_style = format!(
+        "display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; \
+         background: none; border: none; text-align: left; cursor: {}; color: inherit;",
+        if identity_click.is_some() {
+            "pointer"
+        } else {
+            "default"
+        }
+    );
 
     // System nav items
     let system_items = vec![
@@ -192,8 +216,14 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                     colors::BORDER_DEFAULT,
                 ),
 
-                div {
-                    style: "display: flex; align-items: center; gap: 8px;",
+                button {
+                    style: "{identity_button_style}",
+                    aria_label: "Open local x0x identity details",
+                    onclick: move |_| {
+                        if let Some(on_identity_click) = identity_click {
+                            on_identity_click.call(());
+                        }
+                    },
 
                     // Status dot
                     span {
@@ -214,9 +244,9 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                                     typography::TEXT_SM,
                                     colors::TEXT_PRIMARY,
                                 ),
-                                "Communitas"
+                                "{identity_label}"
                             }
-                            if let Some(ref id) = props.agent_id {
+                            if let Some(secondary) = identity_secondary.clone() {
                                 div {
                                     style: format!(
                                         "font-size: {}; font-family: {}; color: {}; \
@@ -225,7 +255,7 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                                         typography::FONT_MONO,
                                         colors::TEXT_MUTED,
                                     ),
-                                    "{short_id(id)}"
+                                    "{secondary}"
                                 }
                             }
                         }
@@ -237,7 +267,7 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
             div {
                 style: "flex: 1; overflow-y: auto; overflow-x: hidden; padding-top: 8px;",
 
-                // Dashboard
+                // Home
                 button {
                     style: nav_item_style("/"),
                     onclick: {
@@ -249,7 +279,7 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                         "~"
                     }
                     if !is_collapsed {
-                        span { "Dashboard" }
+                        span { "Home" }
                     }
                 }
 

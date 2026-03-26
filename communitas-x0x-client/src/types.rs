@@ -531,7 +531,15 @@ pub struct GroupInfo {
     #[serde(default)]
     pub metadata_topic: Option<String>,
     #[serde(default)]
-    pub members: Vec<String>,
+    pub members: Vec<GroupMember>,
+}
+
+/// A member within a named group.
+#[derive(Debug, Clone, Deserialize)]
+pub struct GroupMember {
+    pub agent_id: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
 }
 
 /// Request body for `POST /groups/:id/invite`.

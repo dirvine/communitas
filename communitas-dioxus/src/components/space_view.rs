@@ -37,16 +37,14 @@ pub struct SpaceViewProps {
 /// Space view component with tab bar.
 #[component]
 pub fn SpaceView(props: SpaceViewProps) -> Element {
-    let mut active_tab = use_signal(|| {
-        match props.initial_tab.as_deref() {
-            Some("board") => SpaceTab::Board,
-            Some("files") => SpaceTab::Files,
-            Some("swarm") => SpaceTab::Swarm,
-            Some("feed") => SpaceTab::Feed,
-            Some("wiki") => SpaceTab::Wiki,
-            Some("web") => SpaceTab::Web,
-            _ => SpaceTab::Chat,
-        }
+    let mut active_tab = use_signal(|| match props.initial_tab.as_deref() {
+        Some("board") => SpaceTab::Board,
+        Some("files") => SpaceTab::Files,
+        Some("swarm") => SpaceTab::Swarm,
+        Some("feed") => SpaceTab::Feed,
+        Some("wiki") => SpaceTab::Wiki,
+        Some("web") => SpaceTab::Web,
+        _ => SpaceTab::Chat,
     });
 
     let mut selected_channel =
@@ -87,8 +85,16 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
             spacing::MD,
             typography::TEXT_SM,
             if active { "600" } else { "400" },
-            if active { colors::PRIMARY } else { colors::TEXT_MUTED },
-            if active { colors::PRIMARY } else { "transparent" },
+            if active {
+                colors::PRIMARY
+            } else {
+                colors::TEXT_MUTED
+            },
+            if active {
+                colors::PRIMARY
+            } else {
+                "transparent"
+            },
         )
     };
 

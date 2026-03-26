@@ -151,9 +151,7 @@ pub fn SwarmView(props: SwarmViewProps) -> Element {
             while let Some(inbound) = ws.recv().await {
                 match inbound {
                     communitas_x0x_client::WsInbound::Message {
-                        topic: _,
-                        payload,
-                        ..
+                        topic: _, payload, ..
                     } => {
                         if let Ok(bytes) =
                             base64::engine::general_purpose::STANDARD.decode(&payload)
@@ -161,9 +159,10 @@ pub fn SwarmView(props: SwarmViewProps) -> Element {
                             match serde_json::from_slice::<SwarmEvent>(&bytes) {
                                 Ok(evt) => {
                                     events.with_mut(|list| {
-                                        if !list.iter().any(|e| {
-                                            e.task_id == evt.task_id && e.kind == evt.kind
-                                        }) {
+                                        if !list
+                                            .iter()
+                                            .any(|e| e.task_id == evt.task_id && e.kind == evt.kind)
+                                        {
                                             list.insert(0, evt);
                                         }
                                     });

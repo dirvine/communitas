@@ -165,7 +165,12 @@ pub fn WebView(props: WebViewProps) -> Element {
                 match serde_json::to_vec(&current_paths) {
                     Ok(index_bytes) => {
                         if let Err(e) = client
-                            .put(&store_id, "web:index", &index_bytes, Some("application/json"))
+                            .put(
+                                &store_id,
+                                "web:index",
+                                &index_bytes,
+                                Some("application/json"),
+                            )
                             .await
                         {
                             warn!(target: "ui.web", "failed to update web index: {e}");
@@ -181,10 +186,7 @@ pub fn WebView(props: WebViewProps) -> Element {
 
                 // Create empty page
                 let key = format!("web:{path}");
-                if let Err(e) = client
-                    .put(&store_id, &key, b"", Some("text/html"))
-                    .await
-                {
+                if let Err(e) = client.put(&store_id, &key, b"", Some("text/html")).await {
                     warn!(target: "ui.web", "failed to create web page {path}: {e}");
                 }
 

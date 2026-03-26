@@ -36,10 +36,7 @@ pub struct FeedPost {
 // ---------------------------------------------------------------------------
 
 fn feed_topic(group_id: &str) -> String {
-    format!(
-        "x0x.group.{}.feed",
-        x0x_contract::group_prefix(group_id)
-    )
+    format!("x0x.group.{}.feed", x0x_contract::group_prefix(group_id))
 }
 
 // ---------------------------------------------------------------------------

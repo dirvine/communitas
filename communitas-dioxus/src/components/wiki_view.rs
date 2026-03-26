@@ -161,7 +161,12 @@ pub fn WikiView(props: WikiViewProps) -> Element {
                 match serde_json::to_vec(&current_pages) {
                     Ok(index_bytes) => {
                         if let Err(e) = client
-                            .put(&store_id, "wiki:index", &index_bytes, Some("application/json"))
+                            .put(
+                                &store_id,
+                                "wiki:index",
+                                &index_bytes,
+                                Some("application/json"),
+                            )
                             .await
                         {
                             warn!(target: "ui.wiki", "failed to update wiki index: {e}");
@@ -177,10 +182,7 @@ pub fn WikiView(props: WikiViewProps) -> Element {
 
                 // Create empty page content
                 let key = format!("wiki:{slug}");
-                if let Err(e) = client
-                    .put(&store_id, &key, b"", Some("text/plain"))
-                    .await
-                {
+                if let Err(e) = client.put(&store_id, &key, b"", Some("text/plain")).await {
                     warn!(target: "ui.wiki", "failed to create wiki page {slug}: {e}");
                 }
 

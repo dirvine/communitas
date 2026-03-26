@@ -63,9 +63,7 @@ pub fn DmView(
             loop {
                 match client.direct_connections().await {
                     Ok(connections) => {
-                        let is_connected = connections
-                            .iter()
-                            .any(|c| c.agent_id == peer_id);
+                        let is_connected = connections.iter().any(|c| c.agent_id == peer_id);
                         peer_connected.set(is_connected);
                     }
                     Err(e) => {
@@ -122,9 +120,7 @@ pub fn DmView(
             while let Some(inbound) = ws.recv().await {
                 match inbound {
                     communitas_x0x_client::WsInbound::DirectMessage {
-                        sender,
-                        payload,
-                        ..
+                        sender, payload, ..
                     } => {
                         // Only show messages from our conversation peer
                         if sender != peer_id {
@@ -132,28 +128,23 @@ pub fn DmView(
                         }
 
                         match base64::engine::general_purpose::STANDARD.decode(&payload) {
-                            Ok(bytes) => {
-                                match serde_json::from_slice::<ChatMessage>(&bytes) {
-                                    Ok(msg) => {
-                                        let history_msg = msg.clone();
-                                        let history_peer = peer_id.clone();
-                                        messages.with_mut(|msgs| {
-                                            if !msgs.iter().any(|m| m.id == history_msg.id) {
-                                                msgs.push(msg);
-                                                msgs.sort_by_key(|m| m.timestamp);
-                                            }
-                                        });
-                                        x0x_contract::append_dm_history(
-                                            &history_peer,
-                                            &history_msg,
-                                        )
+                            Ok(bytes) => match serde_json::from_slice::<ChatMessage>(&bytes) {
+                                Ok(msg) => {
+                                    let history_msg = msg.clone();
+                                    let history_peer = peer_id.clone();
+                                    messages.with_mut(|msgs| {
+                                        if !msgs.iter().any(|m| m.id == history_msg.id) {
+                                            msgs.push(msg);
+                                            msgs.sort_by_key(|m| m.timestamp);
+                                        }
+                                    });
+                                    x0x_contract::append_dm_history(&history_peer, &history_msg)
                                         .await;
-                                    }
-                                    Err(e) => {
-                                        warn!(target: "ui.dm_view", "Failed to parse DM payload: {e}");
-                                    }
                                 }
-                            }
+                                Err(e) => {
+                                    warn!(target: "ui.dm_view", "Failed to parse DM payload: {e}");
+                                }
+                            },
                             Err(e) => {
                                 warn!(target: "ui.dm_view", "Failed to decode DM base64: {e}");
                             }
@@ -250,11 +241,7 @@ pub fn DmView(
         }
     });
 
-    let header_label = peer_label
-        .read()
-        .as_ref()
-        .cloned()
-        .unwrap_or_default();
+    let header_label = peer_label.read().as_ref().cloned().unwrap_or_default();
     let header_name = if header_label.is_empty() {
         peer_display.clone()
     } else {

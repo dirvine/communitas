@@ -9,9 +9,7 @@ use crate::tokens::{colors, radius, spacing, typography};
 /// Copy to clipboard.
 fn copy_text(value: &str) {
     let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
-    let script = format!(
-        "navigator.clipboard.writeText(\"{escaped}\").catch(()=>{{}});",
-    );
+    let script = format!("navigator.clipboard.writeText(\"{escaped}\").catch(()=>{{}});",);
     spawn(async move {
         let _ = dioxus::document::eval(&script);
     });

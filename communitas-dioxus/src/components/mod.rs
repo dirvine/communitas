@@ -16,10 +16,10 @@ mod composer;
 pub mod confirm_dialog;
 pub mod create_channel_modal;
 pub mod create_space_modal;
-pub mod detail_panel;
 #[allow(dead_code)]
 pub mod daemon_status;
 pub mod dashboard;
+pub mod detail_panel;
 pub mod dm_view;
 #[allow(dead_code)]
 pub mod drive;
@@ -35,6 +35,7 @@ pub mod filter_chips;
 pub mod kanban;
 #[allow(dead_code)]
 pub mod layout;
+pub mod local_x0x_profile_view;
 #[allow(dead_code)]
 mod message_list;
 #[allow(dead_code)]
@@ -59,13 +60,13 @@ pub mod skeleton;
 pub mod space_view;
 pub mod status_bar;
 pub mod swarm_view;
-pub mod web_view;
-pub mod wiki_view;
 #[allow(dead_code)]
 mod thread_list;
 pub mod thread_panel;
 #[allow(dead_code)]
 pub mod virtual_list;
+pub mod web_view;
+pub mod wiki_view;
 
 // Re-export canvas components (will be used when canvas UI is integrated into routes)
 #[allow(unused_imports)]
@@ -199,19 +200,20 @@ pub use thread_panel::ThreadPanel;
 // Re-export new Deep Space components
 pub use app_sidebar::{AppSidebar, ContactEntry, GroupEntry};
 pub use dashboard::Dashboard;
+pub use dm_view::DmView;
 #[allow(unused_imports)]
 pub use feed_view::FeedView;
 #[allow(unused_imports)]
 pub use files_view::FilesView;
+pub use local_x0x_profile_view::LocalX0xProfileView;
 pub use network_view::NetworkView;
 pub use people_view::PeopleView;
 pub use settings_view::SettingsView;
 pub use space_view::SpaceView;
+pub use status_bar::StatusBar;
 #[allow(unused_imports)]
 pub use swarm_view::SwarmView;
 #[allow(unused_imports)]
 pub use web_view::WebView;
 #[allow(unused_imports)]
 pub use wiki_view::WikiView;
-pub use dm_view::DmView;
-pub use status_bar::StatusBar;

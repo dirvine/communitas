@@ -147,9 +147,8 @@ pub fn StatusBar() -> Element {
             let id_clone = id.clone();
             spawn(async move {
                 let escaped = id_clone.replace('\\', "\\\\").replace('"', "\\\"");
-                let script = format!(
-                    "navigator.clipboard.writeText(\"{escaped}\").catch(()=>{{}});",
-                );
+                let script =
+                    format!("navigator.clipboard.writeText(\"{escaped}\").catch(()=>{{}});",);
                 let _ = dioxus::document::eval(&script);
                 copied.set(true);
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;

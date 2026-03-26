@@ -266,6 +266,8 @@ fn AppShell(children: Element) -> Element {
     let mut groups = use_signal(Vec::<GroupEntry>::new);
     let mut contacts = use_signal(Vec::<ContactEntry>::new);
     let mut agent_id = use_signal(|| None::<String>);
+    let mut identity_label = use_signal(|| "Local x0x".to_string());
+    let mut identity_secondary = use_signal(|| None::<String>);
     let mut connected = use_signal(|| false);
 
     // Poll groups, contacts, agent
@@ -279,7 +281,28 @@ fn AppShell(children: Element) -> Element {
             }
 
             if let Ok(agent) = client.agent().await {
-                agent_id.set(Some(agent.agent_id));
+                let short_agent = x0x_contract::fallback_sender_name(&agent.agent_id);
+                let secondary = format!(
+                    "agent:{} · machine:{}",
+                    short_agent,
+                    x0x_contract::fallback_sender_name(&agent.machine_id)
+                );
+                let fallback_label = agent
+                    .user_id
+                    .clone()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| format!("agent:{short_agent}"));
+
+                agent_id.set(Some(agent.agent_id.clone()));
+                identity_secondary.set(Some(secondary));
+
+                match client.agent_card(None, Some(false)).await {
+                    Ok(card_resp) if !card_resp.card.display_name.trim().is_empty() => {
+                        identity_label.set(card_resp.card.display_name.trim().to_string());
+                    }
+                    Ok(_) => identity_label.set(fallback_label),
+                    Err(_) => identity_label.set(fallback_label),
+                }
             }
 
             if let Ok(group_list) = client.list_groups().await {
@@ -301,7 +324,11 @@ fn AppShell(children: Element) -> Element {
                         agent_id: c.agent_id.clone(),
                         label: c.label.unwrap_or_else(|| {
                             if c.agent_id.len() > 12 {
-                                format!("{}..{}", &c.agent_id[..6], &c.agent_id[c.agent_id.len() - 4..])
+                                format!(
+                                    "{}..{}",
+                                    &c.agent_id[..6],
+                                    &c.agent_id[c.agent_id.len() - 4..]
+                                )
                             } else {
                                 c.agent_id.clone()
                             }
@@ -324,6 +351,7 @@ fn AppShell(children: Element) -> Element {
         Route::People {} => "/people".to_string(),
         Route::Network {} => "/network".to_string(),
         Route::Settings {} => "/settings".to_string(),
+        Route::MoreRoute {} => "/more".to_string(),
         // Legacy routes all map to "/"
         _ => "/".to_string(),
     };
@@ -342,6 +370,11 @@ fn AppShell(children: Element) -> Element {
                     contacts: contacts().clone(),
                     agent_id: agent_id().clone(),
                     connected: connected(),
+                    identity_label: Some(identity_label()),
+                    identity_secondary: identity_secondary(),
+                    on_identity_click: move |_| {
+                        navigator.push(Route::MoreRoute {});
+                    },
                     on_navigate: move |path: String| {
                         let route = match path.as_str() {
                             "/" => Route::Dashboard {},
@@ -481,9 +514,65 @@ fn AppShell(children: Element) -> Element {
 
 #[component]
 fn Dashboard() -> Element {
+    let navigator = use_navigator();
+    let mut first_space_id = use_signal(|| None::<String>);
+    let mut loading_spaces = use_signal(|| true);
+    let mut load_error = use_signal(|| None::<String>);
+
+    use_future(move || async move {
+        let client = X0xClient::new();
+        match client.list_groups().await {
+            Ok(mut groups) => {
+                groups.sort_by(|left, right| left.name.cmp(&right.name));
+                first_space_id.set(groups.into_iter().next().map(|group| group.group_id));
+                load_error.set(None);
+            }
+            Err(err) => {
+                load_error.set(Some(format!("Failed to load spaces: {err}")));
+            }
+        }
+        loading_spaces.set(false);
+    });
+
+    use_effect(move || {
+        if let Some(space_id) = first_space_id() {
+            navigator.replace(Route::SpaceView { space_id });
+        }
+    });
+
     rsx! {
         AppShell {
-            components::Dashboard {}
+            if loading_spaces() {
+                div {
+                    style: format!(
+                        "display: flex; height: 100%; align-items: center; justify-content: center; color: {};",
+                        colors::TEXT_MUTED,
+                    ),
+                    "Opening your local x0x workspace..."
+                }
+            } else if first_space_id().is_none() {
+                div {
+                    style: "display: flex; flex-direction: column; height: 100%;",
+                    if let Some(err) = load_error() {
+                        div {
+                            style: format!(
+                                "margin: 24px 24px 0; padding: 12px 14px; border-radius: 12px; background: rgba(255, 68, 102, 0.08); border: 1px solid rgba(255, 68, 102, 0.3); color: {};",
+                                colors::DANGER,
+                            ),
+                            "{err}"
+                        }
+                    }
+                    components::Dashboard {}
+                }
+            } else {
+                div {
+                    style: format!(
+                        "display: flex; height: 100%; align-items: center; justify-content: center; color: {};",
+                        colors::TEXT_MUTED,
+                    ),
+                    "Opening your local x0x workspace..."
+                }
+            }
         }
     }
 }
@@ -550,128 +639,107 @@ fn Settings() -> Element {
 // ── Legacy route components (redirect to new routes) ────────────────────────
 
 #[component]
-fn LoginRoute() -> Element {
+fn RouteRedirect(to: Route) -> Element {
     let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    use_effect(move || {
+        nav.replace(to.clone());
+    });
     rsx! { div { "Redirecting..." } }
+}
+
+#[component]
+fn LoginRoute() -> Element {
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn CreateIdentityRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn RecoverIdentityRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn LoginOtherRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn DashboardRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn MessagesRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn ChannelsRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn ProjectsRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn ContactsRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::People {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::People {} } }
 }
 
 #[component]
 fn NetworkRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Network {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Network {} } }
 }
 
 #[component]
 fn MoreRoute() -> Element {
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Settings {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! {
+        AppShell {
+            components::LocalX0xProfileView {}
+        }
+    }
 }
 
 #[component]
 fn EntityDetailRoute(entity_type: String, entity_id: String) -> Element {
     let _ = (entity_type, entity_id);
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn EntityChatRoute(entity_type: String, entity_id: String) -> Element {
     let _ = (entity_type, entity_id);
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn EntityDriveRoute(entity_type: String, entity_id: String) -> Element {
     let _ = (entity_type, entity_id);
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn ProjectBoardRoute(project_id: String) -> Element {
     let _ = project_id;
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::Dashboard {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::Dashboard {} } }
 }
 
 #[component]
 fn ContactDetailRoute(contact_id: String) -> Element {
     let _ = contact_id;
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::People {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::People {} } }
 }
 
 #[component]
 fn ContactChatRoute(contact_id: String) -> Element {
     let _ = contact_id;
-    let nav = use_navigator();
-    use_effect(move || { nav.replace(Route::People {}); });
-    rsx! { div { "Redirecting..." } }
+    rsx! { RouteRedirect { to: Route::People {} } }
 }
 
 // ── Channel creation helper ─────────────────────────────────────────────────
@@ -759,10 +827,7 @@ mod tests {
         let route = Route::SpaceView {
             space_id: "abc123".into(),
         };
-        assert_eq!(
-            format!("{route:?}"),
-            "SpaceView { space_id: \"abc123\" }"
-        );
+        assert_eq!(format!("{route:?}"), "SpaceView { space_id: \"abc123\" }");
     }
 
     #[test]

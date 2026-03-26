@@ -131,6 +131,11 @@ jobs:
                       if is_doc_comment(line_num):
                           continue
 
+                      # Skip compile-time const assertions marked CONST_SAFE
+                      line_text = lines[line_num - 1] if line_num <= len(lines) else ''
+                      if 'CONST_SAFE' in line_text:
+                          continue
+
                       # Check if this is after a #[cfg(test)] marker
                       in_test = False
                       for test_pos in test_positions:

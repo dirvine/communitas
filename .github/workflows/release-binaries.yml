@@ -77,6 +77,24 @@ jobs:
         path: |
           target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
 
+    - name: Build communitas-dioxus
+      run: |
+        cargo build --release -p communitas-dioxus
+
+    - name: Strip Dioxus binary
+      run: strip target/release/communitas-dioxus || true
+
+    - name: Archive Dioxus
+      run: |
+        cd target/release
+        tar -czf communitas-dioxus-x86_64-unknown-linux-gnu.tar.gz communitas-dioxus
+
+    - name: Upload Linux Dioxus
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-dioxus-linux-x86_64
+        path: target/release/communitas-dioxus-x86_64-unknown-linux-gnu.tar.gz
+
   build-macos:
     name: Build macOS Binaries
     runs-on: macos-latest
@@ -117,6 +135,29 @@ jobs:
         name: communitas-headless-macos-universal
         path: target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
 
+    - name: Build x86_64 Dioxus
+      run: cargo build --release -p communitas-dioxus --target x86_64-apple-darwin
+
+    - name: Build aarch64 Dioxus
+      run: cargo build --release -p communitas-dioxus --target aarch64-apple-darwin
+
+    - name: Create universal Dioxus binary
+      run: |
+        lipo target/x86_64-apple-darwin/release/communitas-dioxus \
+             target/aarch64-apple-darwin/release/communitas-dioxus \
+             -create -output target/universal-apple-darwin/communitas-dioxus
+
+    - name: Archive Dioxus
+      run: |
+        cd target/universal-apple-darwin
+        tar -czf communitas-dioxus-macos-universal.tar.gz communitas-dioxus
+
+    - name: Upload macOS Dioxus
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-dioxus-macos-universal
+        path: target/universal-apple-darwin/communitas-dioxus-macos-universal.tar.gz
+
   build-windows:
     continue-on-error: true
     name: Build Windows Binaries
@@ -143,5 +184,20 @@ jobs:
       with:
         name: communitas-headless-windows-x86_64
         path: target/release/communitas-headless-windows-x86_64.zip
+
+    - name: Build communitas-dioxus
+      run: |
+        cargo build --release -p communitas-dioxus
+
+    - name: Archive Dioxus
+      run: |
+        cd target/release
+        Compress-Archive -Path communitas-dioxus.exe -DestinationPath communitas-dioxus-windows-x86_64.zip
+
+    - name: Upload Windows Dioxus
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-dioxus-windows-x86_64
+        path: target/release/communitas-dioxus-windows-x86_64.zip
 
   # Note: No release publishing here. Use release-headless.yml for releases.

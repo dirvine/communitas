@@ -1,0 +1,80 @@
+name: Build Swift App (macOS)
+
+on:
+  push:
+    tags:
+      - 'swift-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-swift:
+    name: Build CommuniTas Swift App
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: |
+          cd communitas-apple
+          swift build -c release
+
+      - name: Get binary info
+        run: |
+          BINARY=communitas-apple/.build/release/CommuniTas
+          ls -la "$BINARY"
+          file "$BINARY"
+          lipo -info "$BINARY"
+
+      - name: Ad-hoc sign
+        run: |
+          codesign --force --sign - communitas-apple/.build/release/CommuniTas
+
+      - name: Create archive
+        run: |
+          cd communitas-apple/.build/release
+          tar -czf CommuniTas-macos-arm64.tar.gz CommuniTas
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CommuniTas-macos-arm64
+          path: communitas-apple/.build/release/CommuniTas-macos-arm64.tar.gz
+
+  release:
+    name: Create Release
+    needs: build-swift
+    if: startsWith(github.ref, 'refs/tags/swift-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CommuniTas-macos-arm64
+          path: ./release
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: CommuniTas (Swift) ${{ github.ref_name }}
+          body: |
+            ## CommuniTas macOS App
+
+            Swift/SwiftUI native macOS application.
+            Requires x0x daemon running on localhost:12700.
+
+            ### Installation
+            1. Download and extract the archive
+            2. Move CommuniTas to /Applications
+            3. Install x0x: `curl -sfL https://x0x.md | sh && x0x autostart && x0x start`
+            4. Launch CommuniTas
+          files: ./release/CommuniTas-macos-arm64.tar.gz
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

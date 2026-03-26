@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.build/CommuniTasPackageTests.d",
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.build/CommuniTasPackageTests.o",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.build/master.swiftdeps"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.derived/runner.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTasPackageTests.build/runner.dia"
+  }
+}

@@ -322,10 +322,7 @@ impl CoreContext {
             .await
             .map_err(|e| format!("Failed to get x0x agent identity: {}", e))?;
 
-        info!(
-            "x0x networking active: agent_id={}",
-            identity.agent_id
-        );
+        info!("x0x networking active: agent_id={}", identity.agent_id);
 
         self.agent_id = Some(identity.agent_id.clone());
 

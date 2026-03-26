@@ -52,11 +52,11 @@
 //! ```
 
 use crate::command::{
-    CanvasSnapshotResponse, ChunkReadResponse,
-    ChunkedWriteProgressResponse, DiskInfoResponse, DiskStatsResponse,
-    EntityResponse, FileInfoResponse, FileMetadataResponse, FilePreviewResponse, InviteResponse,
-    MemberResponse, MessageResponse, PresenceResponse, ReactionResponse, ResumableTransferResponse,
-    ResumeCapabilityResponse, ResumeVerificationResponse, SyncStateResponse, WebsiteResponse,
+    CanvasSnapshotResponse, ChunkReadResponse, ChunkedWriteProgressResponse, DiskInfoResponse,
+    DiskStatsResponse, EntityResponse, FileInfoResponse, FileMetadataResponse, FilePreviewResponse,
+    InviteResponse, MemberResponse, MessageResponse, PresenceResponse, ReactionResponse,
+    ResumableTransferResponse, ResumeCapabilityResponse, ResumeVerificationResponse,
+    SyncStateResponse, WebsiteResponse,
 };
 use crate::command::{
     Command, CommandError, CommandResult, DiskTypeArg, Event, Query, QueryError, QueryResponse,
@@ -627,10 +627,7 @@ impl CommunitasApp {
             } => {
                 let (entity_service, deleted_by) = {
                     let ctx = self.context.read().await;
-                    (
-                        ctx.entity_service.clone(),
-                        ctx.four_words.clone(),
-                    )
+                    (ctx.entity_service.clone(), ctx.four_words.clone())
                 };
 
                 let remove_result = entity_service
@@ -657,10 +654,7 @@ impl CommunitasApp {
             Command::RemoveOrganizationMember { org_id, member_id } => {
                 let (entity_service, deleted_by) = {
                     let ctx = self.context.read().await;
-                    (
-                        ctx.entity_service.clone(),
-                        ctx.four_words.clone(),
-                    )
+                    (ctx.entity_service.clone(), ctx.four_words.clone())
                 };
                 let result = entity_service
                     .remove_organization_member(&org_id, &member_id, &deleted_by)
@@ -1001,7 +995,10 @@ impl CommunitasApp {
                 is_typing,
             } => {
                 let ctx = self.context.read().await;
-                let agent_id = ctx.agent_id.clone().unwrap_or_else(|| ctx.four_words.clone());
+                let agent_id = ctx
+                    .agent_id
+                    .clone()
+                    .unwrap_or_else(|| ctx.four_words.clone());
 
                 // Broadcast typing indicator event locally for other subscribers
                 // TODO: gossip via x0x
@@ -2145,7 +2142,10 @@ impl CommunitasApp {
             Query::GetProfile => {
                 let ctx = self.context.read().await;
                 Ok(QueryResponse::Profile {
-                    agent_id: ctx.agent_id.clone().unwrap_or_else(|| ctx.four_words.clone()),
+                    agent_id: ctx
+                        .agent_id
+                        .clone()
+                        .unwrap_or_else(|| ctx.four_words.clone()),
                     display_name: ctx.display_name.clone(),
                     device_name: ctx.device_name.clone(),
                     device_type: format!("{:?}", ctx.device_type()),
@@ -3159,7 +3159,10 @@ impl CommunitasApp {
 
             Query::GetOurPresence => {
                 let ctx = self.context.read().await;
-                let agent_id = ctx.agent_id.clone().unwrap_or_else(|| ctx.four_words.clone());
+                let agent_id = ctx
+                    .agent_id
+                    .clone()
+                    .unwrap_or_else(|| ctx.four_words.clone());
                 Ok(QueryResponse::OurPresence(Some(PresenceResponse {
                     agent_id,
                     status: "online".to_string(),

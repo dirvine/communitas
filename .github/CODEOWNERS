@@ -4,12 +4,8 @@
 
 # Core crates
 communitas-core/ @dirvine
-communitas-mcp/ @dirvine
 communitas-headless/ @dirvine
 communitas-kanban/ @dirvine
-
-# Flutter app
-communitas-flutter/ @dirvine
 
 # CI/CD and release automation
 .github/ @dirvine
@@ -17,5 +13,3 @@ communitas-flutter/ @dirvine
 # Workspace-level dependency changes
 Cargo.toml @dirvine
 Cargo.lock @dirvine
-communitas-flutter/pubspec.yaml @dirvine
-communitas-flutter/pubspec.lock @dirvine

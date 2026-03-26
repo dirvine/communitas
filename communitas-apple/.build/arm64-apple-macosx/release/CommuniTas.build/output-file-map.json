@@ -1,0 +1,79 @@
+{
+  "": {
+    "dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/CommuniTas.d",
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/CommuniTas.o",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/master.swiftdeps"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/CommuniTasApp.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/CommuniTasApp.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/CommuniTasApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/CommuniTasApp.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/CommuniTasApp.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/ContentView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContentView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContentView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContentView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContentView.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Models/AppState.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/AppState.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/AppState~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/AppState.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/AppState.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Models/ChannelManager.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelManager.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelManager.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelManager.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Models/NavigationItem.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/NavigationItem.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/NavigationItem~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/NavigationItem.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/NavigationItem.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Views/ChannelSidebarView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelSidebarView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelSidebarView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelSidebarView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ChannelSidebarView.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Views/ContactsView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContactsView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContactsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContactsView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ContactsView.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Views/DaemonStatusView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/DaemonStatusView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/DaemonStatusView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/DaemonStatusView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/DaemonStatusView.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Views/GroupsView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/GroupsView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/GroupsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/GroupsView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/GroupsView.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Views/MessagingView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/MessagingView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/MessagingView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/MessagingView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/MessagingView.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Views/SettingsView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/SettingsView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/SettingsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/SettingsView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/SettingsView.dia"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Sources/CommuniTas/Views/ThreadView.swift": {
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ThreadView.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ThreadView~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ThreadView.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/release/CommuniTas.build/ThreadView.dia"
+  }
+}

@@ -40,9 +40,8 @@ pub type IdentityResult<T> = Result<T, IdentityError>;
 /// compatibility with callers that expect this format.
 pub fn generate_id_words() -> IdentityResult<String> {
     let mut buf = [0u8; 16];
-    getrandom::getrandom(&mut buf).map_err(|e| {
-        IdentityError::EncodingFailed(format!("RNG failure: {e}"))
-    })?;
+    getrandom::getrandom(&mut buf)
+        .map_err(|e| IdentityError::EncodingFailed(format!("RNG failure: {e}")))?;
     let hash = blake3::hash(&buf);
     let bytes = hash.as_bytes();
     // Produce 4 short lowercase words from hash bytes
@@ -114,9 +113,9 @@ pub fn conn_from_words(words: &str) -> IdentityResult<SocketAddr> {
     }
 
     // Try direct parse as SocketAddr
-    let addr: SocketAddr = words.parse().map_err(|e| {
-        IdentityError::DecodingFailed(format!("Failed to parse address: {e}"))
-    })?;
+    let addr: SocketAddr = words
+        .parse()
+        .map_err(|e| IdentityError::DecodingFailed(format!("Failed to parse address: {e}")))?;
 
     Ok(addr)
 }

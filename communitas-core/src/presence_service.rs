@@ -317,13 +317,11 @@ mod tests {
         let topic2 = random_topic_id();
 
         let peer1 = random_agent_id();
-        let beacon1 =
-            PresenceBeacon::new(peer1.clone(), "Peer 1".to_string(), topic1).unwrap();
+        let beacon1 = PresenceBeacon::new(peer1.clone(), "Peer 1".to_string(), topic1).unwrap();
         service.update_presence(beacon1).await;
 
         let peer2 = random_agent_id();
-        let beacon2 =
-            PresenceBeacon::new(peer2.clone(), "Peer 2".to_string(), topic2).unwrap();
+        let beacon2 = PresenceBeacon::new(peer2.clone(), "Peer 2".to_string(), topic2).unwrap();
         service.update_presence(beacon2).await;
 
         let online_topic1 = service.get_online_in_group(topic1).await;

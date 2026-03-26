@@ -56,45 +56,6 @@ jobs:
       - name: Rust tests
         run: cargo test --all-features --lib --tests --bins
 
-      - name: MCP nav/auth parity check
-        run: ./scripts/tests/mcp_nav_auth.sh
-        continue-on-error: true  # Server may crash in CRDT/FFI layer (core dump)
-
-      - name: MCP messaging parity check
-        run: ./scripts/tests/mcp_messaging.sh
-        continue-on-error: true  # Server may crash in CRDT/FFI layer (core dump)
-
-      - name: MCP advanced surfaces parity check (M3)
-        run: ./scripts/tests/mcp_parity.sh
-        continue-on-error: true  # New test, don't block on initial run
-
-      - name: Upload MCP parity artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mcp-parity-artifacts
-          path: parity-artifacts/
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload MCP messaging artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mcp-messaging-artifacts
-          path: messaging-parity-artifacts/
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload M3 parity artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mcp-m3-parity-artifacts
-          path: m3-parity-artifacts/
-          if-no-files-found: ignore
-          retention-days: 7
-
   # WebDriver tests run on multiple platforms
   webdriver-tests:
     needs: rust-checks

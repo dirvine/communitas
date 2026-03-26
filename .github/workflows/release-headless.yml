@@ -59,7 +59,7 @@ jobs:
               '### Binaries Included\n' +
               '- communitas-headless (headless P2P node with built-in auto-update)\n\n' +
               '### Desktop/Mobile App\n' +
-              '- See communitas-flutter for cross-platform Flutter app (macOS, iOS, Android, Linux, Windows; web demo only)\n\n' +
+              '- See communitas-dioxus for cross-platform desktop app (Dioxus + Tauri: macOS, Windows, Linux)\n\n' +
               '### Installation\n' +
               'Extract the archive and run the binary directly. No additional dependencies required.'
 

@@ -74,7 +74,7 @@ jobs:
 
             const rel = await waitForRelease();
             const when = new Date().toISOString();
-            const summary = `\n\n## Build Summary (auto)\n- Headless: ${headless.status} ${headless.url ? `(${headless.url})` : ''}\n- Desktop/Mobile: See communitas-flutter (Flutter cross-platform app)\n\nGenerated: ${when}`;
+            const summary = `\n\n## Build Summary (auto)\n- Headless: ${headless.status} ${headless.url ? `(${headless.url})` : ''}\n- Desktop: See communitas-dioxus (Dioxus + Tauri cross-platform app)\n\nGenerated: ${when}`;
 
             const body = (rel.body || '');
             const newBody = body.includes('## Build Summary (auto)') ? body.replace(/## Build Summary \(auto\)[\s\S]*/m, summary) : (body + summary);

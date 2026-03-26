@@ -146,7 +146,7 @@ jobs:
           
           # Check all Rust files
           total_violations = []
-          for crate_dir in ['communitas-core/src', 'communitas-desktop/src', 'communitas-headless/src', 'crates/communitas-container/src']:
+          for crate_dir in ['communitas-core/src', 'communitas-headless/src', 'communitas-kanban/src', 'communitas-ui-api/src', 'communitas-ui-service/src', 'communitas-x0x-client/src']:
               if os.path.exists(crate_dir):
                   for root, dirs, files in os.walk(crate_dir):
                       # Skip test directories
@@ -204,7 +204,7 @@ jobs:
           VIOLATIONS_FOUND=0
           for pattern in "${SECRET_LITERALS[@]}"; do
             # Find matches in .rs files, excluding test files
-            MATCHES=$(find communitas-core/src communitas-desktop/src communitas-headless/src crates/*/src -name "*.rs" 2>/dev/null -not -path "*/tests/*" | \
+            MATCHES=$(find communitas-core/src communitas-headless/src communitas-kanban/src communitas-ui-api/src communitas-ui-service/src communitas-x0x-client/src -name "*.rs" 2>/dev/null -not -path "*/tests/*" | \
                      xargs grep -E "${pattern}" 2>/dev/null | \
                      grep -v -E "($(echo "${EXCLUDE_PATTERNS[@]}" | tr ' ' '|'))" | \
                      wc -l || echo 0)

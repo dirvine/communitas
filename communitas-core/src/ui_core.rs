@@ -279,11 +279,7 @@ impl CommunitasApi {
 
     /// Connect to a remote agent by agent ID
     pub async fn connect_to_agent(&self, agent_id: String) -> Result<Vec<UiEvent>, String> {
-        execute_command(
-            &self.app,
-            Command::ConnectToAgent { agent_id },
-        )
-        .await
+        execute_command(&self.app, Command::ConnectToAgent { agent_id }).await
     }
 
     /// Get network info (stubbed - migrating to x0x)
@@ -710,10 +706,7 @@ impl CommunitasApi {
         execute_command(&self.app, Command::SetFavouriteContact { agent_id }).await
     }
 
-    pub async fn contact_remove_favourite(
-        &self,
-        agent_id: String,
-    ) -> Result<Vec<UiEvent>, String> {
+    pub async fn contact_remove_favourite(&self, agent_id: String) -> Result<Vec<UiEvent>, String> {
         execute_command(&self.app, Command::RemoveFavouriteContact { agent_id }).await
     }
 
@@ -744,7 +737,9 @@ impl CommunitasApi {
         agent_id: String,
     ) -> Result<Option<UiPresenceStatus>, String> {
         match execute_query(&self.app, Query::GetCachedAgentPresence { agent_id }).await? {
-            QueryResponse::CachedAgentPresence(presence) => Ok(presence.map(UiPresenceStatus::from)),
+            QueryResponse::CachedAgentPresence(presence) => {
+                Ok(presence.map(UiPresenceStatus::from))
+            }
             _ => Err("Unexpected response for GetCachedAgentPresence".to_string()),
         }
     }
@@ -1688,13 +1683,9 @@ async fn execute_query(app: &Arc<CommunitasApp>, query: Query) -> Result<QueryRe
 
 fn map_event(event: Event) -> Option<UiEvent> {
     match event {
-        Event::DaemonRunning { agent_id } => Some(UiEvent::NetworkingStarted {
-            address: agent_id,
-        }),
+        Event::DaemonRunning { agent_id } => Some(UiEvent::NetworkingStarted { address: agent_id }),
         Event::DaemonStopped => Some(UiEvent::NetworkingStopped),
-        Event::AgentConnected { agent_id } => Some(UiEvent::PeerConnected {
-            peer_id: agent_id,
-        }),
+        Event::AgentConnected { agent_id } => Some(UiEvent::PeerConnected { peer_id: agent_id }),
         Event::AgentConnectionFailed { agent_id, reason } => Some(UiEvent::Error {
             code: "CONNECTION_FAILED".to_string(),
             message: format!("Failed to connect to {}: {}", agent_id, reason),

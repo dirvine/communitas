@@ -6,59 +6,49 @@
 //
 // See the LICENSE-AGPL-3.0 and LICENSE-COMMERCIAL.md files for details.
 
-//! Core Context - Centralized application state for Communitas (RC1b architecture)
+//! Core Context - Centralized application state for Communitas
 //!
 //! This module provides the main application context that coordinates:
-//! - User identity and profiles
-//! - Gossip networking layer
+//! - User identity and profiles (via x0x daemon)
+//! - P2P networking (via x0x daemon)
 //! - Message synchronization
 //! - Storage and persistence
 //!
-//! **Architecture Note**: This is the RC1b implementation that replaces the old
-//! saorsa_core-based CoreContext with a simpler saorsa-gossip + four-word-networking
-//! based architecture.
+//! **Architecture Note**: Networking and identity are delegated to the x0x daemon,
+//! accessed via `communitas-x0x-client`.
 
 use crate::disk_service::EntityDiskService;
 use crate::encrypted_storage::{
-    IdentityKeyMaterial, identity_keys_exist, load_identity_keys, store_identity_keys,
-    vault_dir_from_root,
+    identity_keys_exist, load_identity_keys, store_identity_keys, vault_dir_from_root,
 };
 use crate::keystore::Keystore;
 use crate::message_sync::MessageSyncService;
 use crate::types::{DeviceType, UserProfile};
-use crate::webrtc::CommunitasWebRtcService;
 use blake3;
 use communitas_kanban::KanbanService;
-use rand::rngs::OsRng;
-use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
-use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Centralized context for the Communitas application
 ///
-/// This replaces the old saorsa_core-based CoreContext with a simpler architecture
-/// based on saorsa-gossip for networking and four-word-networking for identities.
+/// Networking and cryptographic identity are delegated to the x0x daemon,
+/// accessed through `communitas_x0x_client::X0xClient`.
 ///
 /// **Lifecycle**:
 /// 1. Initialize with user profile (four-word ID, display name, device)
-/// 2. Start gossip networking (optional, can run in local mode)
+/// 2. Start networking via x0x daemon (optional, can run in local mode)
 /// 3. Initialize message sync service
 /// 4. Ready for operations
 pub struct CoreContext {
     /// User profile with identity and device info
     pub profile: UserProfile,
 
-    /// ML-DSA-87 post-quantum signing key (kept in memory for session)
-    pub signing_key: PrivateKey,
-
-    /// ML-DSA-87 post-quantum public key
-    pub public_key: PublicKey,
-
-    /// Four-word user identity (derived from public key)
+    /// Four-word user identity
     pub four_words: String,
+
+    /// x0x agent identity (set once networking starts)
+    pub agent_id: Option<String>,
 
     /// Display name for this user
     pub display_name: String,
@@ -82,27 +72,11 @@ pub struct CoreContext {
     /// Handles dual-storage: Files (encrypted) + Web (public)
     pub doc_replicator: Arc<crate::doc_replicator::DocReplicator>,
 
-    /// Current listen address (if networking is active)
-    pub listen_address: Option<SocketAddr>,
-
-    /// Connection identity (four-word encoded listen address)
-    pub connection_identity: Option<String>,
-
-    /// External/public address (NAT-reflected address for WAN connectivity)
-    /// This is the address that other peers on the internet see us at,
-    /// obtained via address reflection from a coordinator/bootstrap node
-    pub external_address: Option<SocketAddr>,
-
-    /// Gossip overlay system (replaces DHT-based networking)
-    /// Handles P2P networking, membership, pubsub, presence, and discovery
-    pub gossip: Option<Arc<crate::gossip::GossipContext>>,
+    /// x0x client for daemon communication (networking, identity, crypto)
+    pub x0x: Arc<communitas_x0x_client::X0xClient>,
 
     /// Per-entity virtual disk service (Private, Public, Shared disks)
     pub disk_service: Arc<EntityDiskService>,
-
-    /// WebRTC service for voice, video, and screen sharing
-    /// Initialized when networking starts (requires gossip context)
-    pub webrtc: Option<Arc<CommunitasWebRtcService>>,
 
     /// Kanban service for project management boards
     /// CRDT-based, offline-first collaborative Kanban system
@@ -118,20 +92,15 @@ impl std::fmt::Debug for CoreContext {
         f.debug_struct("CoreContext")
             .field("profile", &self.profile)
             .field("four_words", &self.four_words)
+            .field("agent_id", &self.agent_id)
             .field("display_name", &self.display_name)
             .field("device_name", &self.device_name)
             .field("crdt_manager", &"<active>")
             .field("entity_service", &"<active>")
             .field("message_service", &"<active>")
-            .field("listen_address", &self.listen_address)
-            .field("connection_identity", &self.connection_identity)
-            .field("external_address", &self.external_address)
-            .field("signing_key", &"<redacted>")
-            .field("public_key", &"<key_bytes>")
             .field("doc_replicator", &"<active>")
-            .field("gossip", &self.gossip.as_ref().map(|_| "<active>"))
+            .field("x0x", &"<client>")
             .field("disk_service", &"<active>")
-            .field("webrtc", &self.webrtc.as_ref().map(|_| "<active>"))
             .field("kanban_service", &"<active>")
             .field("invite_service", &"<active>")
             .finish()
@@ -139,19 +108,10 @@ impl std::fmt::Debug for CoreContext {
 }
 
 impl CoreContext {
-    fn join_timeout() -> std::time::Duration {
-        std::env::var("COMMUNITAS_JOIN_TIMEOUT_SECS")
-            .ok()
-            .and_then(|value| value.parse::<u64>().ok())
-            .map(std::time::Duration::from_secs)
-            .unwrap_or_else(|| std::time::Duration::from_secs(10))
-    }
     /// Initialize a new CoreContext from a four-word identity
     ///
-    /// This creates a new profile with:
-    /// - Generated ML-DSA-87 keypair (post-quantum signatures, Level 5 security)
-    /// - Four-word user identity derived from public key
-    /// - Local storage directory
+    /// This creates a new profile with local storage for CRDT, entities, messages,
+    /// and documents. Cryptographic identity is managed by the x0x daemon.
     ///
     /// **Note**: This does NOT start networking. Call `start_networking()` separately.
     ///
@@ -190,12 +150,12 @@ impl CoreContext {
         info!("CoreContext::initialize: four-word format validated");
 
         let vault_dir = vault_dir_from_root(&storage_dir);
-        let mut key_material: Option<IdentityKeyMaterial> = None;
 
+        // Try to load existing key material from vault (for local vault encryption)
         if identity_keys_exist(&vault_dir, &four_words).await {
             match load_identity_keys(&vault_dir, &four_words).await {
-                Ok(keys) => {
-                    key_material = Some(keys);
+                Ok(_keys) => {
+                    info!("Loaded identity keys from vault for '{}'", four_words);
                 }
                 Err(err) => {
                     warn!(
@@ -204,18 +164,15 @@ impl CoreContext {
                     );
                 }
             }
-        }
-
-        if key_material.is_none() {
+        } else {
             // Try legacy keyring for migration
-            info!("CoreContext::initialize: creating keystore");
+            info!("CoreContext::initialize: checking keystore for legacy keys");
             let keystore = Keystore::new();
             let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
-            info!("CoreContext::initialize: id_hex = {}", id_hex);
 
             if let Ok((pk_bytes, sk_bytes)) = keystore.load_mldsa_keys(&id_hex) {
                 info!(
-                    "Loaded existing ML-DSA-87 keypair for identity '{}' from keyring",
+                    "Migrating legacy ML-DSA keys for identity '{}' to vault",
                     four_words
                 );
                 if let Err(err) = store_identity_keys(
@@ -228,74 +185,9 @@ impl CoreContext {
                 .await
                 {
                     warn!("Failed to migrate identity keys to vault: {err}");
-                } else {
-                    info!(
-                        "Migrated identity keys to vault storage for '{}'",
-                        four_words
-                    );
                 }
-
-                key_material = Some(IdentityKeyMaterial {
-                    public_key: pk_bytes,
-                    secret_key: sk_bytes,
-                });
             }
         }
-
-        let (public_key, signing_key) = match key_material {
-            Some(keys) => {
-                let public_key = PublicKey::try_from_bytes(
-                    keys.public_key
-                        .as_slice()
-                        .try_into()
-                        .map_err(|_| "Invalid public key length in vault".to_string())?,
-                )
-                .map_err(|e| format!("Failed to deserialize public key: {}", e))?;
-
-                let signing_key = PrivateKey::try_from_bytes(
-                    keys.secret_key
-                        .as_slice()
-                        .try_into()
-                        .map_err(|_| "Invalid signing key length in vault".to_string())?,
-                )
-                .map_err(|e| format!("Failed to deserialize signing key: {}", e))?;
-
-                (public_key, signing_key)
-            }
-            None => {
-                info!(
-                    "Generating new ML-DSA-87 keypair for identity '{}' using CSPRNG",
-                    four_words
-                );
-
-                let mut rng = OsRng;
-                let (public_key, signing_key) = try_keygen_with_rng(&mut rng)
-                    .map_err(|e| format!("Failed to generate ML-DSA-87 keypair: {}", e))?;
-
-                let pk_bytes = public_key.clone().into_bytes();
-                let sk_bytes = signing_key.clone().into_bytes();
-
-                if let Err(err) = store_identity_keys(
-                    &vault_dir,
-                    &four_words,
-                    &display_name,
-                    &pk_bytes,
-                    &sk_bytes,
-                )
-                .await
-                {
-                    warn!(
-                        "Failed to store identity keys in vault: {}. Keys may not persist.",
-                        err
-                    );
-                }
-
-                (public_key, signing_key)
-            }
-        };
-
-        // Get public key bytes for UserProfile
-        let pubkey_bytes = public_key.clone().into_bytes();
 
         // Create storage directory if it doesn't exist
         if !storage_dir.exists() {
@@ -307,10 +199,9 @@ impl CoreContext {
             })?;
         }
 
-        // For UserProfile, we need a fixed-size array. Use first 32 bytes of public key
-        let pubkey_array: [u8; 32] = pubkey_bytes[..32]
-            .try_into()
-            .map_err(|_| "Public key too short".to_string())?;
+        // Derive a deterministic pubkey placeholder for UserProfile from four_words
+        let pubkey_hash = blake3::hash(four_words.as_bytes());
+        let pubkey_array: [u8; 32] = *pubkey_hash.as_bytes();
 
         // Create user profile
         info!("CoreContext::initialize: creating UserProfile");
@@ -389,9 +280,8 @@ impl CoreContext {
 
         Ok(Self {
             profile,
-            signing_key,
-            public_key,
             four_words,
+            agent_id: None,
             display_name,
             device_name,
             crdt_manager,
@@ -399,1157 +289,77 @@ impl CoreContext {
             message_service,
             message_sync,
             doc_replicator,
-            listen_address: None,
-            connection_identity: None,
-            external_address: None,
-            gossip: None,
+            x0x: Arc::new(communitas_x0x_client::X0xClient::new()),
             disk_service,
-            webrtc: None, // Initialized when networking starts
             kanban_service,
             invite_service,
         })
     }
 
-    /// Start networking with gossip overlay system
+    /// Start networking via the x0x daemon
     ///
-    /// Initializes the saorsa-gossip based P2P networking layer:
-    /// - Creates QUIC transport on random high port (49152-65535)
-    /// - Initializes HyParView membership and Plumtree pubsub
-    /// - Sets up peer cache for fast boot
-    /// - Connects to coordinator and rendezvous services
-    /// - Generates connection identity (four-word encoded address)
+    /// Ensures the x0x daemon is running and retrieves the agent identity.
     ///
     /// # Arguments
-    /// * `_port` - Optional specific port (currently ignored, transport auto-selects)
+    /// * `_preferred_port` - Ignored; the x0x daemon manages its own ports
     ///
     /// # Returns
-    /// Connection identity (four-word encoded address)
+    /// The x0x agent ID for this node
     pub async fn start_networking(
         &mut self,
-        preferred_port: Option<u16>,
+        _preferred_port: Option<u16>,
     ) -> Result<String, String> {
-        info!("Starting gossip networking for {}", self.four_words);
+        info!("Starting x0x networking for {}", self.four_words);
 
-        // Allocate UDP port using PortManager
-        let env_port = match std::env::var("COMMUNITAS_PORT") {
-            Ok(value) => match value.parse::<u16>() {
-                Ok(port) => Some(port),
-                Err(_) => {
-                    warn!("Invalid COMMUNITAS_PORT value: {}", value);
-                    None
-                }
-            },
-            Err(_) => None,
-        };
-        let preferred_port = preferred_port.or(env_port);
-
-        let mut port_manager = if let Some(port) = preferred_port {
-            crate::gossip::PortManager::with_preferred_port(port)
-        } else {
-            crate::gossip::PortManager::new()
-        };
-
-        let listen_port = port_manager
-            .allocate_port()
-            .map_err(|e| format!("Failed to allocate port: {}", e))?;
-
-        info!("Allocated port {} for QUIC transport", listen_port);
-
-        // Initialize gossip context with allocated port
-        let gossip_ctx = crate::gossip::GossipContext::initialize(
-            self.four_words.clone(),
-            self.display_name.clone(),
-            self.device_name.clone(),
-            Some(listen_port),
-        )
-        .await
-        .map_err(|e| format!("Failed to initialize gossip: {}", e))?;
-
-        // Load persisted contacts and favourites before boot
-        let mut favourite_contacts: Vec<String> = Vec::new();
-        match Self::load_contact_records(&self.profile.storage_dir).await {
-            Ok(records) => {
-                if !records.is_empty() {
-                    gossip_ctx.contact_store.import(records.clone()).await;
-                    favourite_contacts = records
-                        .into_iter()
-                        .filter(|record| record.is_favourite)
-                        .filter_map(|record| record.four_words)
-                        .collect();
-
-                    let mut favourites_guard = gossip_ctx.favourite_contacts.write().await;
-                    *favourites_guard = favourite_contacts.clone();
-                }
-            }
-            Err(e) => {
-                warn!("Failed to load persisted contacts: {}", e);
-            }
-        }
-
-        // Load entities for boot sequence topic subscriptions (optional for tests)
-        let boot_entities = match std::env::var("COMMUNITAS_SKIP_BOOT_ENTITIES") {
-            Ok(value)
-                if matches!(
-                    value.trim().to_ascii_lowercase().as_str(),
-                    "1" | "true" | "yes"
-                ) =>
-            {
-                info!(
-                    "COMMUNITAS_SKIP_BOOT_ENTITIES set; skipping entity subscriptions during boot"
-                );
-                Vec::new()
-            }
-            _ => match self.entity_service.list_entities().await {
-                Ok(entities) => entities
-                    .into_iter()
-                    .map(|entity| (entity.id, entity.entity_type.as_str().to_string()))
-                    .collect::<Vec<_>>(),
-                Err(e) => {
-                    warn!("Failed to load entities for boot: {}", e);
-                    Vec::new()
-                }
-            },
-        };
-
-        // Execute gossip boot sequence (SPEC.md §2)
-        // This enables: membership, topic subscriptions, presence, and CRDT anti-entropy
-        info!("Executing gossip boot sequence (5 steps)");
-        let mut boot_sequence = crate::gossip::GossipBootSequence::new(gossip_ctx)
-            .with_favourites(favourite_contacts)
-            .with_entities(boot_entities);
-        boot_sequence
-            .execute()
+        let dm = communitas_x0x_client::DaemonManager::new();
+        dm.ensure_running()
             .await
-            .map_err(|e| format!("Failed to execute boot sequence: {}", e))?;
+            .map_err(|e| format!("Failed to start x0x daemon: {}", e))?;
 
-        // Extract the gossip context after boot
-        let gossip_arc = boot_sequence.into_context();
-        info!("Gossip boot sequence completed successfully");
-
-        // Build listen address
-        let local_ip = match std::env::var("COMMUNITAS_LOCAL_IP") {
-            Ok(value) => match value.parse() {
-                Ok(addr) => addr,
-                Err(_) => {
-                    warn!("Invalid COMMUNITAS_LOCAL_IP value: {}", value);
-                    local_ip_address::local_ip()
-                        .map_err(|e| format!("Failed to get local IP: {}", e))?
-                }
-            },
-            Err(_) => local_ip_address::local_ip()
-                .map_err(|e| format!("Failed to get local IP: {}", e))?,
-        };
-
-        let listen_addr = std::net::SocketAddr::new(local_ip, listen_port);
-
-        // Generate connection identity using four-word encoding
-        let connection_identity = crate::conn_words(&listen_addr)
-            .map_err(|e| format!("Failed to encode connection address: {}", e))?;
+        let identity = self
+            .x0x
+            .agent()
+            .await
+            .map_err(|e| format!("Failed to get x0x agent identity: {}", e))?;
 
         info!(
-            "Gossip networking started on {} ({})",
-            listen_addr, connection_identity
+            "x0x networking active: agent_id={}",
+            identity.agent_id
         );
 
-        self.listen_address = Some(listen_addr);
-        self.connection_identity = Some(connection_identity.clone());
-        self.gossip = Some(gossip_arc.clone());
+        self.agent_id = Some(identity.agent_id.clone());
 
-        // Set up entity message handler for incoming gossip messages
-        self.setup_entity_message_handler().await?;
-
-        // Initialize WebRTC service (requires gossip context)
-        match CommunitasWebRtcService::new(gossip_arc).await {
-            Ok(webrtc) => {
-                info!("WebRTC service initialized successfully");
-                self.webrtc = Some(Arc::new(webrtc));
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to initialize WebRTC service: {}. Voice/video calls will be unavailable.",
-                    e
-                );
-                // Don't fail networking start - WebRTC is optional
-            }
-        }
-
-        // Auto-request external address after a brief delay (allow time for peer connections)
-        // This is non-blocking and best-effort - failure is logged but doesn't affect networking
-        info!("Scheduling automatic external address detection...");
-
-        Ok(connection_identity)
-    }
-
-    /// Set up the entity message handler to process incoming gossip messages
-    ///
-    /// This handler is called whenever a message is received on a subscribed entity topic.
-    /// It deserializes the message and handles different message types:
-    /// - Chat: Regular messages stored via message service
-    /// - SyncRequest: Respond with historical messages
-    /// - SyncResponse: Process and store historical messages
-    async fn setup_entity_message_handler(&self) -> Result<(), String> {
-        let gossip = self.gossip.as_ref().ok_or("Gossip not initialized")?;
-
-        // Clone services for use in the handler closure
-        let message_service = self.message_service.clone();
-        let entity_service = self.entity_service.clone();
-        let gossip_clone = gossip.clone();
-
-        // Create handler that processes incoming entity messages
-        let handler: crate::gossip::EntityMessageHandler = Arc::new(
-            move |entity_id, sender_peer_id, message_bytes| {
-                if sender_peer_id == gossip_clone.peer_id {
-                    debug!(
-                        "Ignoring local echo for entity {} (peer {:?})",
-                        entity_id, sender_peer_id
-                    );
-                    return;
-                }
-
-                // Try to parse as GossipMessageType first (new format)
-                // Fall back to CRDTMessage for backwards compatibility
-                let gossip_msg: Result<crate::crdt::GossipMessageType, _> =
-                    serde_json::from_slice(&message_bytes);
-
-                let message_service = message_service.clone();
-                let entity_service = entity_service.clone();
-                let gossip_clone = gossip_clone.clone();
-                let entity_id_clone = entity_id.clone();
-
-                match gossip_msg {
-                    Ok(crate::crdt::GossipMessageType::Chat(crdt_message)) => {
-                        info!(
-                            "Received chat message for entity {} from peer {:?}: {}",
-                            entity_id, sender_peer_id, crdt_message.metadata.id
-                        );
-                        Self::handle_chat_message(
-                            message_service,
-                            gossip_clone,
-                            entity_id_clone,
-                            sender_peer_id,
-                            crdt_message,
-                        );
-                    }
-                    Ok(crate::crdt::GossipMessageType::SyncRequest(sync_request)) => {
-                        info!(
-                            "Received sync request for entity {} from peer {:?}",
-                            entity_id, sender_peer_id
-                        );
-                        Self::handle_sync_request(
-                            message_service,
-                            gossip_clone,
-                            entity_id_clone,
-                            sender_peer_id,
-                            sync_request,
-                        );
-                    }
-                    Ok(crate::crdt::GossipMessageType::SyncResponse(sync_response)) => {
-                        info!(
-                            "Received sync response for entity {} from peer {:?} with {} messages",
-                            entity_id,
-                            sender_peer_id,
-                            sync_response.messages.len()
-                        );
-                        Self::handle_sync_response(message_service, entity_id_clone, sync_response);
-                    }
-                    Ok(crate::crdt::GossipMessageType::MemberUpdate(update)) => {
-                        info!(
-                            "Received member update for entity {} from peer {:?}: {} {}",
-                            entity_id,
-                            sender_peer_id,
-                            update.member_id,
-                            match update.action {
-                                crate::crdt::MemberUpdateAction::Add => "add",
-                                crate::crdt::MemberUpdateAction::Remove => "remove",
-                            }
-                        );
-                        if update.member_id == update.updated_by {
-                            let gossip_for_contact = gossip_clone.clone();
-                            let member_id = update.member_id.clone();
-                            tokio::spawn(async move {
-                                let mut presence_hint: Option<String> = None;
-                                {
-                                    let presence_guard = gossip_for_contact.presence.read().await;
-                                    let groups = presence_guard.get_groups().await;
-                                    'groups: for topic_id in groups {
-                                        let presence_records =
-                                            presence_guard.get_group_presence(topic_id).await;
-                                        if let Some(record) = presence_records.get(&sender_peer_id)
-                                            && record.four_words.as_deref()
-                                                == Some(member_id.as_str())
-                                        {
-                                            presence_hint = record.addr_hints.first().cloned();
-                                            break 'groups;
-                                        }
-                                    }
-                                }
-
-                                if presence_hint.is_none() {
-                                    debug!(
-                                        "Skipping contact cache for {} (peer {:?}): presence did not confirm identity",
-                                        member_id, sender_peer_id
-                                    );
-                                    return;
-                                }
-
-                                if let Err(err) = gossip_for_contact
-                                    .add_contact(member_id.clone(), sender_peer_id)
-                                    .await
-                                {
-                                    warn!(
-                                        "Failed to cache contact {} for peer {:?}: {}",
-                                        member_id, sender_peer_id, err
-                                    );
-                                }
-
-                                if let Some(hint) = presence_hint {
-                                    let addr = hint
-                                        .parse::<SocketAddr>()
-                                        .ok()
-                                        .or_else(|| crate::identity::conn_from_words(&hint).ok());
-                                    if let Some(addr) = addr
-                                        && let Err(err) = gossip_for_contact
-                                            .update_contact_endpoint(&member_id, &addr)
-                                            .await
-                                    {
-                                        warn!(
-                                            "Failed to update endpoint for contact {} (peer {:?}): {}",
-                                            member_id, sender_peer_id, err
-                                        );
-                                    }
-                                }
-                            });
-                        }
-                        Self::handle_member_update(entity_service, update);
-                    }
-                    Ok(crate::crdt::GossipMessageType::MemberSyncRequest(request)) => {
-                        info!(
-                            "Received member sync request for entity {} from peer {:?}",
-                            entity_id, sender_peer_id
-                        );
-                        Self::handle_member_sync_request(
-                            entity_service,
-                            gossip_clone,
-                            sender_peer_id,
-                            request,
-                        );
-                    }
-                    Ok(crate::crdt::GossipMessageType::MemberSyncResponse(response)) => {
-                        info!(
-                            "Received member sync response for entity {} from peer {:?} ({} updates)",
-                            entity_id,
-                            sender_peer_id,
-                            response.updates.len()
-                        );
-                        Self::handle_member_sync_response(entity_service, response);
-                    }
-                    Ok(crate::crdt::GossipMessageType::PeerListRequest(request)) => {
-                        info!(
-                            "Received peer list request for {} peers from peer {:?}",
-                            request.max_peers, sender_peer_id
-                        );
-                        Self::handle_peer_list_request(gossip_clone, sender_peer_id, request);
-                    }
-                    Ok(crate::crdt::GossipMessageType::PeerListResponse(response)) => {
-                        info!(
-                            "Received peer list response with {} peers from peer {:?}",
-                            response.peers.len(),
-                            sender_peer_id
-                        );
-                        Self::handle_peer_list_response(gossip_clone, response);
-                    }
-                    Ok(crate::crdt::GossipMessageType::CanvasOperation(operation)) => {
-                        info!(
-                            "Received canvas operation for canvas {} element {} from peer {:?}",
-                            operation.canvas_id, operation.element_id, sender_peer_id
-                        );
-                        // TODO: Handle canvas operation via canvas service
-                        // For now, suppress unused variable warnings
-                        let _ = (&message_service, &gossip_clone);
-                    }
-                    Ok(crate::crdt::GossipMessageType::CanvasCursorUpdate(cursor)) => {
-                        debug!(
-                            "Received cursor update for canvas {} from peer {} at ({}, {})",
-                            cursor.canvas_id, cursor.peer_id, cursor.x, cursor.y
-                        );
-                        // Cursor updates are ephemeral and handled by UI layer
-                        let _ = (&message_service, &gossip_clone);
-                    }
-                    Ok(crate::crdt::GossipMessageType::CanvasStateRequest(request)) => {
-                        info!(
-                            "Received canvas state request for canvas {} from peer {:?}",
-                            request.canvas_id, sender_peer_id
-                        );
-                        // TODO: Handle canvas state request via canvas service
-                        let _ = (&message_service, &gossip_clone);
-                    }
-                    Ok(crate::crdt::GossipMessageType::CanvasStateResponse(response)) => {
-                        info!(
-                            "Received canvas state response for canvas {} with {} elements from peer {:?}",
-                            response.canvas_id,
-                            response.elements.len(),
-                            sender_peer_id
-                        );
-                        // TODO: Handle canvas state response via canvas service
-                        let _ = (&message_service, &gossip_clone);
-                    }
-                    Err(_) => {
-                        // Try legacy CRDTMessage format for backwards compatibility
-                        match serde_json::from_slice::<crate::crdt::CRDTMessage>(&message_bytes) {
-                            Ok(crdt_message) => {
-                                info!(
-                                    "Received legacy message for entity {} from peer {:?}: {}",
-                                    entity_id, sender_peer_id, crdt_message.metadata.id
-                                );
-                                Self::handle_chat_message(
-                                    message_service,
-                                    gossip_clone,
-                                    entity_id_clone,
-                                    sender_peer_id,
-                                    crdt_message,
-                                );
-                            }
-                            Err(e) => {
-                                warn!(
-                                    "Failed to deserialize message for entity {}: {}",
-                                    entity_id, e
-                                );
-                            }
-                        }
-                    }
-                }
-            },
-        );
-
-        // Register the handler with the gossip context
-        gossip.set_entity_message_handler(handler).await;
-
-        info!("Entity message handler registered for incoming gossip messages");
-        Ok(())
-    }
-
-    /// Handle incoming chat message
-    fn handle_chat_message(
-        message_service: Arc<crate::MessageService>,
-        gossip: Arc<crate::gossip::GossipContext>,
-        entity_id: String,
-        sender_peer_id: saorsa_gossip_types::PeerId,
-        crdt_message: crate::crdt::CRDTMessage,
-    ) {
-        tokio::spawn(async move {
-            match message_service.receive_message(crdt_message).await {
-                Ok(result) => {
-                    if result.accepted {
-                        info!("Stored incoming message for entity {}", entity_id);
-                    } else if result.out_of_order {
-                        warn!(
-                            "Message for entity {} was out of order, queued for later",
-                            entity_id
-                        );
-                        if let Err(err) =
-                            Self::publish_sync_request(message_service, gossip, &entity_id).await
-                        {
-                            warn!(
-                                "Failed to request sync for {} after out-of-order message from {:?}: {}",
-                                entity_id, sender_peer_id, err
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to store incoming message for entity {}: {}",
-                        entity_id, e
-                    );
-                }
-            }
-        });
-    }
-
-    async fn publish_sync_request(
-        message_service: Arc<crate::MessageService>,
-        gossip: Arc<crate::gossip::GossipContext>,
-        entity_id: &str,
-    ) -> Result<(), String> {
-        let sync_request = message_service
-            .request_sync(entity_id)
-            .await
-            .map_err(|e| format!("Failed to build sync request for {}: {}", entity_id, e))?;
-
-        let entity_type = sync_request.entity_type.as_str();
-        match tokio::time::timeout(
-            Self::join_timeout(),
-            gossip.join_entity(entity_id, entity_type),
-        )
-        .await
-        {
-            Ok(Ok(())) => {}
-            Ok(Err(err)) => {
-                warn!(
-                    "Failed to join entity {} before sync request: {}",
-                    entity_id, err
-                );
-            }
-            Err(_) => {
-                warn!("Timed out joining entity {} before sync request", entity_id);
-            }
-        }
-
-        let gossip_msg = crate::crdt::GossipMessageType::SyncRequest(sync_request);
-        let bytes = serde_json::to_vec(&gossip_msg)
-            .map_err(|e| format!("Failed to serialize sync request for {}: {}", entity_id, e))?;
-
-        let mut pubsub_ok = false;
-        let mut pubsub_err: Option<String> = None;
-        match tokio::time::timeout(
-            Self::join_timeout(),
-            gossip.publish_to_entity(entity_id, bytes.clone()),
-        )
-        .await
-        {
-            Ok(Ok(())) => {
-                pubsub_ok = true;
-            }
-            Ok(Err(err)) => {
-                pubsub_err = Some(format!(
-                    "Failed to publish sync request for {}: {}",
-                    entity_id, err
-                ));
-            }
-            Err(_) => {
-                pubsub_err = Some(format!(
-                    "Timed out publishing sync request for {}",
-                    entity_id
-                ));
-            }
-        }
-
-        let mut direct_ok = false;
-        let mut direct_err: Option<String> = None;
-        match tokio::time::timeout(
-            Self::join_timeout(),
-            gossip.direct_publish_membership_message(entity_id, bytes),
-        )
-        .await
-        {
-            Ok(Ok(())) => {
-                direct_ok = true;
-            }
-            Ok(Err(err)) => {
-                direct_err = Some(format!(
-                    "Direct sync request failed for {}: {}",
-                    entity_id, err
-                ));
-            }
-            Err(_) => {
-                direct_err = Some(format!("Timed out direct sync request for {}", entity_id));
-            }
-        }
-
-        if pubsub_ok || direct_ok {
-            Ok(())
-        } else if let Some(err) = pubsub_err.or(direct_err) {
-            Err(err)
-        } else {
-            Err(format!("Sync request failed for {}", entity_id))
-        }
-    }
-
-    /// Handle sync request - respond with historical messages
-    ///
-    /// Also adds the requesting peer to our eager_peers for this entity's topic,
-    /// ensuring they receive any new messages we publish.
-    fn handle_sync_request(
-        message_service: Arc<crate::MessageService>,
-        gossip: Arc<crate::gossip::GossipContext>,
-        entity_id: String,
-        sender_peer_id: saorsa_gossip_types::PeerId,
-        sync_request: crate::crdt::SyncRequest,
-    ) {
-        tokio::spawn(async move {
-            match tokio::time::timeout(
-                Self::join_timeout(),
-                gossip.join_entity(&entity_id, sync_request.entity_type.as_str()),
-            )
-            .await
-            {
-                Ok(Ok(())) => {}
-                Ok(Err(err)) => {
-                    warn!(
-                        "Failed to join entity {} before sync response: {}",
-                        entity_id, err
-                    );
-                }
-                Err(_) => {
-                    warn!(
-                        "Timed out joining entity {} before sync response",
-                        entity_id
-                    );
-                }
-            }
-
-            // Add the requesting peer to our eager_peers for this entity's topic
-            // This ensures they receive any new messages we publish
-            if let Err(e) = gossip
-                .add_peer_to_entity_topic(&entity_id, sender_peer_id)
-                .await
-            {
-                warn!(
-                    "Failed to add peer {:?} to entity {} topic: {}",
-                    sender_peer_id, entity_id, e
-                );
-            }
-
-            // Get all messages for this entity
-            match message_service.get_entity_messages(entity_id.clone()).await {
-                Ok(sync_response) => {
-                    info!(
-                        "Sending sync response with {} messages for entity {}",
-                        sync_response.messages.len(),
-                        entity_id
-                    );
-
-                    // Wrap in GossipMessageType
-                    let gossip_msg = crate::crdt::GossipMessageType::SyncResponse(sync_response);
-
-                    // Serialize and publish
-                    match serde_json::to_vec(&gossip_msg) {
-                        Ok(bytes) => {
-                            if let Err(err) = gossip
-                                .direct_publish_entity_to_peer(
-                                    &entity_id,
-                                    sender_peer_id,
-                                    bytes.clone(),
-                                    saorsa_gossip_transport::GossipStreamType::Membership,
-                                )
-                                .await
-                            {
-                                warn!(
-                                    "Direct sync response for {} to peer {:?} failed: {}",
-                                    entity_id, sender_peer_id, err
-                                );
-                                if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
-                                    warn!("Failed to send sync response for {}: {}", entity_id, e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to serialize sync response: {}", e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to get messages for sync response: {}", e);
-                }
-            }
-        });
-    }
-
-    /// Handle sync response - process and store historical messages
-    fn handle_sync_response(
-        message_service: Arc<crate::MessageService>,
-        entity_id: String,
-        sync_response: crate::crdt::SyncResponse,
-    ) {
-        tokio::spawn(async move {
-            match message_service.handle_sync_response(sync_response).await {
-                Ok(result) => {
-                    info!(
-                        "Sync response processed for {}: {} accepted, {} rejected",
-                        entity_id, result.messages_added, result.messages_rejected
-                    );
-                }
-                Err(e) => {
-                    warn!("Failed to process sync response for {}: {}", entity_id, e);
-                }
-            }
-        });
-    }
-
-    /// Handle incoming member update (add/remove) from gossip
-    fn handle_member_update(
-        entity_service: Arc<crate::EntityService>,
-        update: crate::crdt::MemberUpdate,
-    ) {
-        tokio::spawn(async move {
-            info!(
-                "Applying member update: entity={} member={} action={:?} role={:?} updated_by={}",
-                update.entity_id, update.member_id, update.action, update.role, update.updated_by
-            );
-            let action = update.action.clone();
-            let result = entity_service
-                .apply_member_update(
-                    update.entity_type,
-                    &update.entity_id,
-                    &update.member_id,
-                    update.role.as_deref(),
-                    action.clone(),
-                    &update.updated_by,
-                    update.timestamp,
-                )
-                .await;
-
-            if let Err(err) = result {
-                warn!(
-                    "Failed to apply member update for {} (member {} action {:?} role {:?} updated_by {}): {}",
-                    update.entity_id, update.member_id, action, update.role, update.updated_by, err
-                );
-            } else {
-                info!(
-                    "Applied member update: entity={} member={} action={:?} role={:?} updated_by={}",
-                    update.entity_id, update.member_id, action, update.role, update.updated_by
-                );
-            }
-        });
-    }
-
-    /// Respond to a membership snapshot request by publishing current member updates.
-    fn handle_member_sync_request(
-        entity_service: Arc<crate::EntityService>,
-        gossip: Arc<crate::gossip::GossipContext>,
-        sender_peer_id: saorsa_gossip_types::PeerId,
-        request: crate::crdt::MemberSyncRequest,
-    ) {
-        tokio::spawn(async move {
-            if let Err(e) = gossip
-                .add_peer_to_entity_topic(&request.entity_id, sender_peer_id)
-                .await
-            {
-                warn!(
-                    "Failed to add peer {:?} to entity {} topic for member sync: {}",
-                    sender_peer_id, request.entity_id, e
-                );
-            }
-
-            let updates = match entity_service
-                .get_member_updates(request.entity_type, &request.entity_id, &gossip.four_words)
-                .await
-            {
-                Ok(updates) => updates,
-                Err(e) => {
-                    warn!(
-                        "Failed to build member snapshot for {}: {}",
-                        request.entity_id, e
-                    );
-                    return;
-                }
-            };
-
-            let response = crate::crdt::MemberSyncResponse {
-                entity_id: request.entity_id.clone(),
-                entity_type: request.entity_type,
-                responder_peer_id: gossip.four_words.clone(),
-                updates,
-            };
-            let gossip_msg = crate::crdt::GossipMessageType::MemberSyncResponse(response);
-            let Ok(bytes) = serde_json::to_vec(&gossip_msg) else {
-                warn!(
-                    "Failed to serialize member sync response for {}",
-                    request.entity_id
-                );
-                return;
-            };
-
-            let publish_result = gossip
-                .publish_to_entity(&request.entity_id, bytes.clone())
-                .await;
-            if let Err(e) = publish_result.as_ref() {
-                warn!(
-                    "Failed to publish member sync response for {}: {}",
-                    request.entity_id, e
-                );
-            }
-
-            let direct_enabled = matches!(
-                std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
-                    .unwrap_or_default()
-                    .trim()
-                    .to_ascii_lowercase()
-                    .as_str(),
-                "1" | "true" | "yes"
-            );
-            if let Err(e) = gossip
-                .direct_send_membership_to_peer(&request.entity_id, sender_peer_id, bytes.clone())
-                .await
-            {
-                warn!(
-                    "Direct member sync response to peer {:?} failed for {}: {}",
-                    sender_peer_id, request.entity_id, e
-                );
-            }
-            if direct_enabled
-                && let Err(e) = gossip
-                    .direct_publish_membership_message(&request.entity_id, bytes)
-                    .await
-            {
-                warn!(
-                    "Direct member sync response failed for {}: {}",
-                    request.entity_id, e
-                );
-            }
-        });
-    }
-
-    /// Apply member snapshot updates to local entity state.
-    fn handle_member_sync_response(
-        entity_service: Arc<crate::EntityService>,
-        response: crate::crdt::MemberSyncResponse,
-    ) {
-        tokio::spawn(async move {
-            for update in response.updates {
-                tracing::debug!(
-                    entity_id = %update.entity_id,
-                    member_id = %update.member_id,
-                    role = ?update.role,
-                    action = ?update.action,
-                    updated_by = %update.updated_by,
-                    timestamp = update.timestamp,
-                    "Applying member sync update"
-                );
-                if let Err(e) = entity_service
-                    .apply_member_update(
-                        update.entity_type,
-                        &update.entity_id,
-                        &update.member_id,
-                        update.role.as_deref(),
-                        update.action.clone(),
-                        &update.updated_by,
-                        update.timestamp,
-                    )
-                    .await
-                {
-                    warn!(
-                        "Failed to apply member sync update for {} (member {}): {}",
-                        update.entity_id, update.member_id, e
-                    );
-                }
-            }
-        });
-    }
-
-    /// Handle peer list request - respond with healthy peers from peer cache
-    ///
-    /// Selects best peers using quality scoring from the peer cache
-    /// and publishes them to the peer discovery topic.
-    fn handle_peer_list_request(
-        gossip: Arc<crate::gossip::GossipContext>,
-        _sender_peer_id: saorsa_gossip_types::PeerId,
-        request: crate::crdt::PeerListRequest,
-    ) {
-        let handle = tokio::spawn(async move {
-            let peer_count = gossip.peer_cache.len().await;
-            let selected = gossip
-                .peer_cache
-                .get_top_peers(request.max_peers as usize)
-                .await;
-
-            let mut skipped = 0usize;
-            let peers: Vec<crate::crdt::PeerInfo> = selected
-                .iter()
-                .filter_map(|peer| {
-                    if let Some(addr) = peer.addresses.first() {
-                        Some(crate::crdt::PeerInfo::with_details(
-                            addr.to_string(),
-                            peer.quality_score,
-                            peer_nat_label(peer),
-                            peer_roles(peer),
-                        ))
-                    } else {
-                        skipped += 1;
-                        None
-                    }
-                })
-                .collect();
-
-            if skipped > 0 {
-                warn!(
-                    "Skipped {} peers with no address hints when building peer list response",
-                    skipped
-                );
-            }
-
-            info!(
-                "Sending peer list response with {} peers (of {} known)",
-                peers.len(),
-                peer_count
-            );
-
-            // Wrap in GossipMessageType and serialize
-            let gossip_msg =
-                crate::crdt::GossipMessageType::PeerListResponse(crate::crdt::PeerListResponse {
-                    peers,
-                    total_known_peers: peer_count,
-                });
-
-            match serde_json::to_vec(&gossip_msg) {
-                Ok(bytes) => {
-                    // Publish to a well-known peer discovery topic
-                    if let Err(e) = gossip.publish_to_entity("_peer_discovery", bytes).await {
-                        warn!("Failed to send peer list response: {}", e);
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to serialize peer list response: {}", e);
-                }
-            }
-        });
-
-        // Monitor the task for panics
-        tokio::spawn(async move {
-            if let Err(e) = handle.await {
-                warn!("handle_peer_list_request task panicked: {}", e);
-            }
-        });
-    }
-
-    /// Handle peer list response - process received peers
-    ///
-    /// Logs received peers for debugging and potential future connection attempts.
-    /// Direct cache integration requires PeerIds which are not included in the response.
-    fn handle_peer_list_response(
-        gossip: Arc<crate::gossip::GossipContext>,
-        response: crate::crdt::PeerListResponse,
-    ) {
-        let handle = tokio::spawn(async move {
-            info!(
-                "Received {} peers from peer list response (remote knows {} total)",
-                response.peers.len(),
-                response.total_known_peers
-            );
-
-            // Log each peer for debugging
-            for peer_info in &response.peers {
-                info!(
-                    "  - Peer: {} (score: {:.2})",
-                    peer_info.addr, peer_info.score
-                );
-            }
-
-            if response.peers.is_empty() {
-                return;
-            }
-
-            for peer_info in &response.peers {
-                match peer_info.addr.parse::<SocketAddr>() {
-                    Ok(addr) => {
-                        if let Err(e) = gossip.peer_cache.add_bootstrap_addr(addr, false).await {
-                            warn!(
-                                "Failed to add peer {} to bootstrap cache: {}",
-                                peer_info.addr, e
-                            );
-                            continue;
-                        }
-                        if let Err(e) = gossip.peer_cache.record_bootstrap_success(&addr).await {
-                            warn!("Failed to record bootstrap success for {}: {}", addr, e);
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Invalid peer address '{}': {}", peer_info.addr, e);
-                    }
-                }
-            }
-        });
-
-        // Monitor the task for panics
-        tokio::spawn(async move {
-            if let Err(e) = handle.await {
-                warn!("handle_peer_list_response task panicked: {}", e);
-            }
-        });
-    }
-
-    /// Automatically request external address with retry logic
-    ///
-    /// This is called after networking starts to discover our public IP address.
-    /// It retries a few times with delays to allow peer connections to establish.
-    ///
-    /// # Returns
-    /// Ok if external address was successfully determined, Err otherwise
-    pub async fn auto_request_external_address(&mut self) -> Result<(), String> {
-        // Retry up to 3 times with 2 second delays to allow peer connections
-        for attempt in 1..=3 {
-            info!("Auto-detecting external address (attempt {}/3)...", attempt);
-
-            // Wait a bit for peers to connect (first attempt waits longer)
-            let delay_ms = if attempt == 1 { 2000 } else { 1000 };
-            tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
-
-            match self.request_external_address().await {
-                Ok(()) => {
-                    if let Some(addr) = self.external_address {
-                        info!("Auto-detected external address: {}", addr);
-                        return Ok(());
-                    }
-                }
-                Err(e) => {
-                    if attempt < 3 {
-                        warn!(
-                            "External address detection attempt {} failed: {}. Retrying...",
-                            attempt, e
-                        );
-                    } else {
-                        warn!("External address detection failed after 3 attempts: {}", e);
-                    }
-                }
-            }
-        }
-
-        Err("Failed to auto-detect external address after 3 attempts".to_string())
-    }
-
-    /// Request external/public address via NAT reflection from a bootstrap node
-    ///
-    /// Get our external IP address and port as seen from the internet.
-    ///
-    /// This uses the native QUIC OBSERVED_ADDRESS frame mechanism (draft-ietf-quic-address-discovery)
-    /// which is automatically exchanged during QUIC connection establishment.
-    ///
-    /// Should be called after networking is active and we have connections to bootstrap nodes.
-    ///
-    /// # Returns
-    /// The external address if successfully obtained, or an error message
-    pub async fn request_external_address(&mut self) -> Result<(), String> {
-        let gossip = self
-            .gossip
-            .as_ref()
-            .ok_or("Networking not started. Call start_networking() first")?;
-
-        info!("Requesting external address via native QUIC address discovery");
-
-        // Use the native QUIC OBSERVED_ADDRESS mechanism through the transport layer
-        // This is the standard way to discover external address via QUIC connections
-        if let Some(external_addr) = gossip.transport.inner().get_external_address() {
-            info!(
-                "Got external address via QUIC OBSERVED_ADDRESS: {}",
-                external_addr
-            );
-            self.external_address = Some(external_addr);
-            return Ok(());
-        }
-
-        // If native discovery didn't work, check if we have any connected peers at all
-        let peers = gossip.peer_cache.get_top_peers(5).await;
-
-        if peers.is_empty() {
-            return Err("No connected peers - external address not yet available. \
-                 The address will be discovered automatically when connections are established."
-                .to_string());
-        }
-
-        // We have peers but no observed address yet - this can happen if:
-        // 1. The connection is still being established
-        // 2. The remote peer doesn't support OBSERVED_ADDRESS frames
-        // 3. We're behind a very restrictive NAT
-        warn!(
-            "Connected to {} peers but no OBSERVED_ADDRESS received yet",
-            peers.len()
-        );
-        Err(
-            "External address not yet available - waiting for OBSERVED_ADDRESS frame from peers"
-                .to_string(),
-        )
+        Ok(identity.agent_id)
     }
 
     /// Stop networking gracefully
     ///
-    /// Shuts down gossip services, presence beacons, and transport
+    /// The x0x daemon runs independently so there is nothing to tear down here.
     pub async fn stop_networking(&mut self) -> Result<(), String> {
-        if let Some(gossip) = self.gossip.take() {
-            info!("Stopping gossip networking for {}", self.four_words);
-            gossip.shutdown();
-            // Clear WebRTC service (depends on gossip)
-            self.webrtc = None;
-            // Note: Graceful shutdown will be implemented when needed
-            // The Arc drop will clean up resources
-            self.listen_address = None;
-            self.connection_identity = None;
-            self.external_address = None;
-        }
+        // x0x daemon runs independently - nothing to stop
         Ok(())
     }
 
-    /// Connect to a peer using their four-word identity
-    ///
-    /// This adds the peer to favourite contacts and initiates FOAF discovery.
-    /// The gossip overlay will find and connect to the peer automatically.
+    /// Connect to a peer using their agent ID via x0x daemon
     ///
     /// # Arguments
-    /// * `peer_four_words` - The peer's four-word identity (e.g., "ocean-forest-moon-star")
+    /// * `agent_id` - The peer's x0x agent ID
     ///
     /// # Returns
-    /// Success if peer added to favourites
-    pub async fn connect_to_peer(&self, peer_four_words: &str) -> Result<(), String> {
-        let gossip = self
-            .gossip
-            .as_ref()
-            .ok_or("Networking not started. Call start_networking() first")?;
-
-        info!("Adding peer {} to favourites", peer_four_words);
-
-        // Add peer to favourite contacts
-        gossip
-            .add_favourite_contact(peer_four_words.to_string())
+    /// Success if the connection request was accepted by the daemon
+    pub async fn connect_to_peer(&self, agent_id: &str) -> Result<(), String> {
+        info!("Connecting to peer {} via x0x daemon", agent_id);
+        self.x0x
+            .connect_agent(agent_id)
             .await
-            .map_err(|e| format!("Failed to add favourite contact: {}", e))?;
-
-        // Try to decode as connection address and dial immediately (for bootstrap)
-        // First try parsing as a direct IP:port address, then as four-word address
-        let maybe_addr: Option<std::net::SocketAddr> = peer_four_words
-            .parse::<std::net::SocketAddr>()
-            .ok()
-            .or_else(|| crate::identity::conn_from_words(peer_four_words).ok());
-
-        if let Some(addr) = maybe_addr {
-            info!("Dialing peer at {} ({})", addr, peer_four_words);
-            let mut last_err: Option<String> = None;
-            for attempt in 1..=3 {
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(5),
-                    gossip.dial_address(addr),
-                )
-                .await
-                {
-                    Ok(Ok(())) => {
-                        info!("Successfully dialed peer {} on attempt {}", addr, attempt);
-                        return Ok(());
-                    }
-                    Ok(Err(e)) => {
-                        warn!("Failed to dial peer {} (attempt {}): {}", addr, attempt, e);
-                        last_err = Some(e.to_string());
-                    }
-                    Err(_) => {
-                        warn!("Timed out dialing peer {} (attempt {})", addr, attempt);
-                        last_err = Some("dial timeout".to_string());
-                    }
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(250 * attempt)).await;
-            }
-
-            return Err(format!(
-                "Failed to dial peer {} after 3 attempts: {}",
-                addr,
-                last_err.unwrap_or_else(|| "unknown error".to_string())
-            ));
-        } else {
-            info!(
-                "Peer {} is not a direct address; relying on FOAF discovery",
-                peer_four_words
-            );
-        }
-        // The gossip overlay will automatically discover and connect via FOAF
-        info!(
-            "Peer {} added. FOAF discovery will locate and connect automatically",
-            peer_four_words
-        );
-
-        Ok(())
+            .map_err(|e| format!("Failed to connect to peer {}: {}", agent_id, e))
     }
 
-    /// Send a channel message and publish it to gossip if networking is active
+    /// Send a channel message and publish it via x0x if networking is active
     ///
     /// This method:
     /// 1. Stores the message locally via CRDT
-    /// 2. If gossip is active, joins the entity topic and publishes for P2P sync
+    /// 2. If x0x networking is active, publishes to the channel topic
     ///
     /// # Arguments
     /// * `channel_id` - The channel to send to
@@ -1593,43 +403,25 @@ impl CoreContext {
 
         let message_id = message.metadata.id.clone();
 
-        // If gossip is active, publish to the network
-        if let Some(gossip) = self.gossip.as_ref() {
-            // Ensure we're joined to the entity topic
-            if let Err(e) = gossip.join_entity(&channel_id, "channel").await {
-                warn!(
-                    "Failed to join channel topic {} (may already be joined): {}",
-                    channel_id, e
-                );
-                // Continue anyway - we might already be subscribed
-            }
-
+        // If x0x networking is active, publish to the network
+        if self.agent_id.is_some() {
             // Serialize message to JSON bytes
             let message_bytes = serde_json::to_vec(&message)
                 .map_err(|e| format!("Failed to serialize message: {}", e))?;
 
-            let publish_result = gossip
-                .publish_to_entity(&channel_id, message_bytes.clone())
-                .await;
-            if let Err(e) = publish_result {
-                warn!("Failed to publish message to gossip: {}", e);
+            let topic = format!("entity:{}", channel_id);
+            if let Err(e) = self.x0x.publish(&topic, &message_bytes).await {
+                warn!("Failed to publish message via x0x: {}", e);
                 // Don't fail - message is stored locally, sync will catch up
             } else {
                 info!(
-                    "Message {} published to gossip for channel {}",
+                    "Message {} published via x0x for channel {}",
                     message_id, channel_id
                 );
             }
-
-            if let Err(e) = gossip
-                .direct_publish_membership_message(&channel_id, message_bytes)
-                .await
-            {
-                warn!("Direct publish fallback failed for {}: {}", channel_id, e);
-            }
         } else {
             info!(
-                "Gossip not active - message {} stored locally only",
+                "x0x not active - message {} stored locally only",
                 message_id
             );
         }
@@ -1637,53 +429,12 @@ impl CoreContext {
         Ok(message_id)
     }
 
-    /// Request a message sync for an entity if gossip is active.
-    pub async fn request_entity_message_sync(&self, entity_id: &str) -> Result<(), String> {
-        let gossip = match self.gossip.as_ref() {
-            Some(gossip) => gossip.clone(),
-            None => return Ok(()),
-        };
-
-        Self::publish_sync_request(self.message_service.clone(), gossip, entity_id).await
-    }
-
-    /// Get the ML-DSA-87 public key for this identity
-    pub fn get_public_key(&self) -> &PublicKey {
-        &self.public_key
-    }
-
-    /// Get the public key bytes
-    /// ML-DSA-87 public keys are 2592 bytes
-    pub fn public_key_bytes(&self) -> [u8; 2592] {
-        self.public_key.clone().into_bytes()
-    }
-
-    /// Sign a message with ML-DSA-87 post-quantum signature
+    /// Request a message sync for an entity via x0x.
     ///
-    /// # Arguments
-    /// * `message` - Message bytes to sign
-    ///
-    /// # Returns
-    /// ML-DSA-87 signature (4627 bytes for ML-DSA-87)
-    ///
-    /// # Errors
-    /// Returns error if signing fails
-    pub fn sign(&self, message: &[u8]) -> Result<[u8; 4627], String> {
-        self.signing_key
-            .try_sign(message, &[]) // Empty context
-            .map_err(|e| format!("ML-DSA-87 signing failed: {}", e))
-    }
-
-    /// Verify an ML-DSA-87 signature
-    ///
-    /// # Arguments
-    /// * `message` - Message bytes that were signed
-    /// * `signature` - ML-DSA-87 signature (4627 bytes)
-    ///
-    /// # Returns
-    /// true if signature is valid, false otherwise
-    pub fn verify(&self, message: &[u8], signature: &[u8; 4627]) -> bool {
-        self.public_key.verify(message, signature, &[]) // Empty context, returns bool directly
+    /// Currently a no-op since sync is handled by the x0x daemon.
+    pub async fn request_entity_message_sync(&self, _entity_id: &str) -> Result<(), String> {
+        // Message sync is handled by x0x daemon subscriptions
+        Ok(())
     }
 
     /// Get the storage directory for this profile
@@ -1691,51 +442,14 @@ impl CoreContext {
         &self.profile.storage_dir
     }
 
-    fn contacts_file_path(storage_dir: &Path) -> PathBuf {
-        storage_dir.join("contacts.json")
-    }
-
-    pub(crate) async fn load_contact_records(
-        storage_dir: &Path,
-    ) -> Result<Vec<crate::gossip::contact_storage::ContactRecord>, String> {
-        let path = Self::contacts_file_path(storage_dir);
-        if !path.exists() {
-            return Ok(Vec::new());
-        }
-
-        let data = tokio::fs::read_to_string(&path)
-            .await
-            .map_err(|e| format!("Failed to read contacts file: {}", e))?;
-        serde_json::from_str(&data).map_err(|e| format!("Failed to parse contacts file: {}", e))
-    }
-
-    pub(crate) async fn persist_contact_records(
-        storage_dir: &Path,
-        records: &[crate::gossip::contact_storage::ContactRecord],
-    ) -> Result<(), String> {
-        let path = Self::contacts_file_path(storage_dir);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| format!("Failed to create contacts directory: {}", e))?;
-        }
-
-        let data = serde_json::to_string_pretty(records)
-            .map_err(|e| format!("Failed to serialize contacts: {}", e))?;
-        tokio::fs::write(&path, data)
-            .await
-            .map_err(|e| format!("Failed to write contacts file: {}", e))?;
-        Ok(())
-    }
-
     /// Check if networking is active
     pub fn is_networking_active(&self) -> bool {
-        self.gossip.is_some() && self.listen_address.is_some()
+        self.agent_id.is_some()
     }
 
-    /// Get connection identity (if networking is active)
-    pub fn connection_identity(&self) -> Option<&str> {
-        self.connection_identity.as_deref()
+    /// Get the x0x agent ID (if networking is active)
+    pub fn get_agent_id(&self) -> Option<&str> {
+        self.agent_id.as_deref()
     }
 
     /// Update display name
@@ -1748,29 +462,6 @@ impl CoreContext {
     pub fn device_type(&self) -> DeviceType {
         self.profile.device_type
     }
-}
-
-fn peer_nat_label(peer: &saorsa_gossip_transport::CachedPeer) -> Option<String> {
-    use saorsa_gossip_transport::BootstrapNatType;
-    peer.capabilities.nat_type.map(|nat| match nat {
-        BootstrapNatType::None => "public".to_string(),
-        BootstrapNatType::FullCone => "full_cone".to_string(),
-        BootstrapNatType::AddressRestrictedCone => "restricted_cone".to_string(),
-        BootstrapNatType::PortRestrictedCone => "port_restricted_cone".to_string(),
-        BootstrapNatType::Symmetric => "symmetric".to_string(),
-        BootstrapNatType::Unknown => "unknown".to_string(),
-    })
-}
-
-fn peer_roles(peer: &saorsa_gossip_transport::CachedPeer) -> Vec<String> {
-    let mut roles = Vec::new();
-    if peer.capabilities.supports_coordination {
-        roles.push("coordinator".to_string());
-    }
-    if peer.capabilities.supports_relay {
-        roles.push("relay".to_string());
-    }
-    roles
 }
 
 #[cfg(test)]
@@ -1841,31 +532,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_signing() {
-        let temp_dir = TempDir::new().unwrap();
-
-        let context = CoreContext::initialize(
-            "ocean-forest-moon-star".to_string(),
-            "Test User".to_string(),
-            "Test Device".to_string(),
-            DeviceType::Desktop,
-            temp_dir.path().to_path_buf(),
-        )
-        .await
-        .unwrap();
-
-        let message = b"test message";
-        let signature = context.sign(message).unwrap();
-
-        // Verify ML-DSA-87 signature
-        assert!(context.verify(message, &signature));
-
-        // Verify signature fails with wrong message
-        let wrong_message = b"wrong message";
-        assert!(!context.verify(wrong_message, &signature));
-    }
-
-    #[tokio::test]
     async fn test_networking_not_active_by_default() {
         let temp_dir = TempDir::new().unwrap();
 
@@ -1880,6 +546,6 @@ mod tests {
         .unwrap();
 
         assert!(!context.is_networking_active());
-        assert!(context.connection_identity().is_none());
+        assert!(context.get_agent_id().is_none());
     }
 }

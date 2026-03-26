@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/debug/X0xClientTests.build/master.swiftdeps"
+  },
+  "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/Tests/X0xClientTests/X0xClientTests.swift": {
+    "dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/debug/X0xClientTests.build/X0xClientTests.d",
+    "object": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/debug/X0xClientTests.build/X0xClientTests.swift.o",
+    "swiftmodule": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/debug/X0xClientTests.build/X0xClientTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/debug/X0xClientTests.build/X0xClientTests.swiftdeps",
+    "diagnostics": "/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-apple/.build/arm64-apple-macosx/debug/X0xClientTests.build/X0xClientTests.dia"
+  }
+}

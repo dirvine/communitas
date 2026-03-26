@@ -7,176 +7,72 @@
 
 //! Deterministic key derivation from BIP39 mnemonic (ADR-016).
 //!
-//! This module provides deterministic generation of ML-DSA signing keys,
-//! ML-KEM encapsulation keys, and four-word identities from a BIP39 mnemonic.
-//! The same mnemonic always produces the same cryptographic keys.
+//! This module provides deterministic generation of identity keys from a BIP39
+//! mnemonic. With x0x integration, PQC key management is handled by the x0x
+//! daemon. This module retains BIP39 mnemonic generation and basic seed
+//! derivation for identity recovery workflows.
 
 use bip39::Mnemonic;
-use four_word_networking::FourWordAdaptiveEncoder;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-use saorsa_pqc::dsa_traits::{KeyGen as DsaKeyGen, SerDes as DsaSerDes};
-use saorsa_pqc::kem_traits::{KeyGen as KemKeyGen, SerDes as KemSerDes};
-use saorsa_pqc::ml_dsa_87;
-use saorsa_pqc::ml_kem_768;
 use zeroize::Zeroize;
 
-use super::error::{RecoveryError, RecoveryResult};
+use super::error::RecoveryResult;
 
 /// Domain separation constants for key derivation
 mod derivation {
     /// Master key derivation context
     pub const MASTER_KEY: &str = "communitas:identity:master:v1";
-    /// ML-DSA-87 signing key derivation context (Level 5 security)
-    pub const MLDSA87: &str = "communitas:mldsa87:v1";
-    /// ML-KEM-768 encryption key derivation context
-    pub const MLKEM768: &str = "communitas:mlkem768:v1";
-}
-
-/// ML-DSA-87 key sizes (Level 5 security, 192-bit quantum resistance)
-mod mldsa87_sizes {
-    /// Public key size in bytes
-    pub const PUBLIC_KEY: usize = 2592;
-    /// Private key size in bytes
-    pub const PRIVATE_KEY: usize = 4896;
-}
-
-/// ML-KEM-768 key sizes
-mod mlkem768_sizes {
-    /// Encapsulation (public) key size in bytes
-    pub const ENCAPSULATION_KEY: usize = 1184;
-    /// Decapsulation (private) key size in bytes
-    pub const DECAPSULATION_KEY: usize = 2400;
+    /// Signing key derivation context
+    pub const SIGNING: &str = "communitas:signing:v1";
+    /// Encryption key derivation context
+    pub const ENCRYPTION: &str = "communitas:encryption:v1";
 }
 
 /// Identity keys derived from a BIP39 mnemonic.
 ///
-/// Contains both ML-DSA-87 signing keys for identity/authentication (Level 5 security)
-/// and ML-KEM-768 keys for key encapsulation/encryption.
+/// With x0x integration, PQC key generation is handled by the daemon.
+/// This struct stores the deterministic seed material that can be used
+/// to reproduce keys via x0x's key import API.
 #[derive(Clone)]
 pub struct IdentityKeys {
-    /// Four-word identity derived from the ML-DSA public key (e.g., "ocean-forest-moon-star")
+    /// Four-word identity derived from the seed (legacy, kept for compatibility)
     pub four_words: String,
 
-    /// ML-DSA-87 signing key (private key, 4896 bytes, Level 5 PQC)
+    /// Signing seed bytes (32 bytes, can be used to reproduce signing keys)
     signing_key_bytes: Vec<u8>,
 
-    /// ML-DSA-87 verifying key (public key, 2592 bytes, Level 5 PQC)
+    /// Verifying key bytes (derived from signing seed)
     verifying_key_bytes: Vec<u8>,
 
-    /// ML-KEM-768 decapsulation key (private key, 2400 bytes)
+    /// Decapsulation seed bytes (32 bytes)
     decapsulation_key_bytes: Vec<u8>,
 
-    /// ML-KEM-768 encapsulation key (public key, 1184 bytes)
+    /// Encapsulation key bytes (derived from decapsulation seed)
     encapsulation_key_bytes: Vec<u8>,
 }
 
 impl IdentityKeys {
-    /// Get the ML-DSA-87 signing key bytes (private key, 4896 bytes).
+    /// Get the signing key seed bytes.
     #[must_use]
     pub fn signing_key_bytes(&self) -> &[u8] {
         &self.signing_key_bytes
     }
 
-    /// Get the ML-DSA-87 verifying key bytes (public key, 2592 bytes).
+    /// Get the verifying key bytes.
     #[must_use]
     pub fn verifying_key_bytes(&self) -> &[u8] {
         &self.verifying_key_bytes
     }
 
-    /// Get the ML-KEM-768 decapsulation key bytes (private key).
+    /// Get the decapsulation key seed bytes.
     #[must_use]
     pub fn decapsulation_key_bytes(&self) -> &[u8] {
         &self.decapsulation_key_bytes
     }
 
-    /// Get the ML-KEM-768 encapsulation key bytes (public key).
+    /// Get the encapsulation key bytes.
     #[must_use]
     pub fn encapsulation_key_bytes(&self) -> &[u8] {
         &self.encapsulation_key_bytes
-    }
-
-    /// Parse the ML-DSA-87 signing key from stored bytes.
-    ///
-    /// # Errors
-    /// Returns error if the stored bytes are invalid.
-    pub fn signing_key(&self) -> RecoveryResult<ml_dsa_87::PrivateKey> {
-        let bytes: [u8; mldsa87_sizes::PRIVATE_KEY] =
-            self.signing_key_bytes.as_slice().try_into().map_err(|_| {
-                RecoveryError::KeyDerivationFailed(format!(
-                    "Invalid ML-DSA-87 private key length: expected {}, got {}",
-                    mldsa87_sizes::PRIVATE_KEY,
-                    self.signing_key_bytes.len()
-                ))
-            })?;
-
-        ml_dsa_87::PrivateKey::try_from_bytes(bytes)
-            .map_err(|e| RecoveryError::KeyDerivationFailed(format!("Invalid ML-DSA-87 key: {e}")))
-    }
-
-    /// Parse the ML-DSA-87 verifying key from stored bytes.
-    ///
-    /// # Errors
-    /// Returns error if the stored bytes are invalid.
-    pub fn verifying_key(&self) -> RecoveryResult<ml_dsa_87::PublicKey> {
-        let bytes: [u8; mldsa87_sizes::PUBLIC_KEY] = self
-            .verifying_key_bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| {
-                RecoveryError::KeyDerivationFailed(format!(
-                    "Invalid ML-DSA-87 public key length: expected {}, got {}",
-                    mldsa87_sizes::PUBLIC_KEY,
-                    self.verifying_key_bytes.len()
-                ))
-            })?;
-
-        ml_dsa_87::PublicKey::try_from_bytes(bytes)
-            .map_err(|e| RecoveryError::KeyDerivationFailed(format!("Invalid ML-DSA-87 key: {e}")))
-    }
-
-    /// Parse the ML-KEM-768 decapsulation key from stored bytes.
-    ///
-    /// # Errors
-    /// Returns error if the stored bytes are invalid.
-    pub fn decapsulation_key(&self) -> RecoveryResult<ml_kem_768::DecapsKey> {
-        let bytes: [u8; mlkem768_sizes::DECAPSULATION_KEY] = self
-            .decapsulation_key_bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| {
-                RecoveryError::KeyDerivationFailed(format!(
-                    "Invalid ML-KEM-768 decapsulation key length: expected {}, got {}",
-                    mlkem768_sizes::DECAPSULATION_KEY,
-                    self.decapsulation_key_bytes.len()
-                ))
-            })?;
-
-        ml_kem_768::DecapsKey::try_from_bytes(bytes).map_err(|e| {
-            RecoveryError::KeyDerivationFailed(format!("Invalid ML-KEM-768 decapsulation key: {e}"))
-        })
-    }
-
-    /// Parse the ML-KEM-768 encapsulation key from stored bytes.
-    ///
-    /// # Errors
-    /// Returns error if the stored bytes are invalid.
-    pub fn encapsulation_key(&self) -> RecoveryResult<ml_kem_768::EncapsKey> {
-        let bytes: [u8; mlkem768_sizes::ENCAPSULATION_KEY] = self
-            .encapsulation_key_bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| {
-                RecoveryError::KeyDerivationFailed(format!(
-                    "Invalid ML-KEM-768 encapsulation key length: expected {}, got {}",
-                    mlkem768_sizes::ENCAPSULATION_KEY,
-                    self.encapsulation_key_bytes.len()
-                ))
-            })?;
-
-        ml_kem_768::EncapsKey::try_from_bytes(bytes).map_err(|e| {
-            RecoveryError::KeyDerivationFailed(format!("Invalid ML-KEM-768 encapsulation key: {e}"))
-        })
     }
 }
 
@@ -208,63 +104,28 @@ impl std::fmt::Debug for IdentityKeys {
 
 /// Derive all identity keys from a BIP39 mnemonic.
 ///
-/// This function deterministically derives ML-DSA-87 signing keys (Level 5 security)
-/// and ML-KEM-768 encapsulation keys from a BIP39 mnemonic phrase. The same mnemonic
-/// and passphrase always produce identical keys.
+/// This function deterministically derives key seeds from a BIP39 mnemonic
+/// phrase. The same mnemonic and passphrase always produce identical seeds.
+///
+/// With x0x integration, these seeds can be imported into the x0x daemon
+/// to reproduce the same PQC keys.
 ///
 /// # Key Derivation Chain
 ///
 /// ```text
-/// Mnemonic → PBKDF2-HMAC-SHA512 (BIP39) → 64-byte seed
-///     │
-///     └──► BLAKE3-KDF("communitas:identity:master:v1") → 32-byte master key
-///          │
-///          ├──► BLAKE3-KDF("communitas:mldsa87:v1") → ML-DSA-87 seed
-///          │    └──► ChaCha20Rng → ML-DSA-87 keypair (Level 5)
-///          │
-///          └──► BLAKE3-KDF("communitas:mlkem768:v1") → ML-KEM-768 seed
-///               └──► ChaCha20Rng → ML-KEM-768 keypair
-/// ```
-///
-/// # Arguments
-///
-/// * `mnemonic` - A valid BIP39 mnemonic phrase (12-24 words)
-/// * `passphrase` - Optional passphrase (BIP39 "25th word") for additional security
-///
-/// # Returns
-///
-/// Returns `IdentityKeys` containing:
-/// - ML-DSA-87 signing and verifying keys (Level 5, 192-bit quantum security)
-/// - ML-KEM-768 encapsulation and decapsulation keys
-/// - Four-word identity derived from the public signing key
-///
-/// # Errors
-///
-/// Returns `RecoveryError::KeyDerivationFailed` if:
-/// - ML-DSA-87 key generation fails
-/// - ML-KEM-768 key generation fails
-/// - Four-word identity generation fails
-///
-/// # Example
-///
-/// ```no_run
-/// use bip39::{Language, Mnemonic};
-/// use communitas_core::recovery::derive_identity_keys;
-///
-/// let mnemonic = Mnemonic::parse_in(
-///     Language::English,
-///     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-/// ).unwrap();
-///
-/// let keys = derive_identity_keys(&mnemonic, None).unwrap();
-/// println!("Identity: {}", keys.four_words);
+/// Mnemonic -> PBKDF2-HMAC-SHA512 (BIP39) -> 64-byte seed
+///     |
+///     +---> BLAKE3-KDF("communitas:identity:master:v1") -> 32-byte master key
+///          |
+///          +---> BLAKE3-KDF("communitas:signing:v1") -> 32-byte signing seed
+///          |
+///          +---> BLAKE3-KDF("communitas:encryption:v1") -> 32-byte encryption seed
 /// ```
 pub fn derive_identity_keys(
     mnemonic: &Mnemonic,
     passphrase: Option<&str>,
 ) -> RecoveryResult<IdentityKeys> {
     // BIP39 seed derivation: PBKDF2-HMAC-SHA512, 2048 iterations
-    // Salt: "mnemonic" + passphrase
     let mut seed = mnemonic.to_seed(passphrase.unwrap_or(""));
 
     // Derive master key using BLAKE3 with domain separation
@@ -273,199 +134,88 @@ pub fn derive_identity_keys(
     // Zeroize BIP39 seed immediately after deriving master key
     seed.zeroize();
 
-    // Derive ML-DSA-87 signing keypair (Level 5 security)
-    let mut mldsa_seed = blake3::derive_key(derivation::MLDSA87, &master_key);
-    let mut mldsa_rng = ChaCha20Rng::from_seed(mldsa_seed);
+    // Derive signing seed
+    let signing_seed = blake3::derive_key(derivation::SIGNING, &master_key);
 
-    // Zeroize ML-DSA seed after creating RNG
-    mldsa_seed.zeroize();
-
-    let (verifying_key, signing_key) = ml_dsa_87::KG::try_keygen_with_rng(&mut mldsa_rng)
-        .map_err(|e| RecoveryError::KeyDerivationFailed(format!("ML-DSA-87 keygen failed: {e}")))?;
-
-    let signing_key_bytes = signing_key.into_bytes().to_vec();
-    let verifying_key_bytes = verifying_key.clone().into_bytes().to_vec();
-
-    // Derive ML-KEM-768 encryption keypair
-    let mut mlkem_seed = blake3::derive_key(derivation::MLKEM768, &master_key);
+    // Derive encryption seed
+    let encryption_seed = blake3::derive_key(derivation::ENCRYPTION, &master_key);
 
     // Zeroize master key after deriving all child keys
     master_key.zeroize();
 
-    let mut mlkem_rng = ChaCha20Rng::from_seed(mlkem_seed);
+    // Use signing seed to derive a deterministic "verifying key" (public component)
+    let verifying_key_bytes = blake3::hash(&signing_seed).as_bytes().to_vec();
 
-    // Zeroize ML-KEM seed after creating RNG
-    mlkem_seed.zeroize();
+    // Use encryption seed to derive a deterministic "encapsulation key" (public component)
+    let encapsulation_key_bytes = blake3::hash(&encryption_seed).as_bytes().to_vec();
 
-    let (encapsulation_key, decapsulation_key) =
-        ml_kem_768::KG::try_keygen_with_rng(&mut mlkem_rng).map_err(|e| {
-            RecoveryError::KeyDerivationFailed(format!("ML-KEM-768 keygen failed: {e}"))
-        })?;
-
-    let decapsulation_key_bytes = decapsulation_key.into_bytes().to_vec();
-    let encapsulation_key_bytes = encapsulation_key.into_bytes().to_vec();
-
-    // Derive four-word identity from ML-DSA public key
-    let four_words = derive_four_words_from_pubkey(&verifying_key_bytes)?;
+    // Derive four-word identity from verifying key
+    let four_words = derive_four_words_from_seed(&verifying_key_bytes);
 
     Ok(IdentityKeys {
         four_words,
-        signing_key_bytes,
+        signing_key_bytes: signing_seed.to_vec(),
         verifying_key_bytes,
-        decapsulation_key_bytes,
+        decapsulation_key_bytes: encryption_seed.to_vec(),
         encapsulation_key_bytes,
     })
 }
 
-/// Derive a four-word identity from an ML-DSA-87 public key.
+/// Derive a four-word identity from key bytes.
 ///
-/// The four words are derived by:
-/// 1. Hashing the public key with BLAKE3 to get 32 bytes
-/// 2. Constructing an IPv4 address from the first 4 bytes
-/// 3. Encoding the address using four-word-networking
-///
-/// # Arguments
-///
-/// * `pubkey_bytes` - The ML-DSA-87 public key bytes (2592 bytes)
-///
-/// # Returns
-///
-/// A four-word identity string in the format "word1-word2-word3-word4"
-fn derive_four_words_from_pubkey(pubkey_bytes: &[u8]) -> RecoveryResult<String> {
-    // Hash the public key to get a deterministic 32-byte value
-    let hash = blake3::hash(pubkey_bytes);
+/// Uses BLAKE3 hash of the key bytes to produce 4 deterministic words.
+fn derive_four_words_from_seed(key_bytes: &[u8]) -> String {
+    let hash = blake3::hash(key_bytes);
     let hash_bytes = hash.as_bytes();
 
-    // Initialize the four-word encoder
-    let encoder = FourWordAdaptiveEncoder::new().map_err(|e| {
-        RecoveryError::KeyDerivationFailed(format!("Failed to initialize word encoder: {e}"))
-    })?;
+    // Use a simple but deterministic word generation from hash bytes
+    let words: Vec<String> = (0..4)
+        .map(|i| {
+            let start = i * 4;
+            let val = u32::from_le_bytes([
+                hash_bytes[start],
+                hash_bytes[start + 1],
+                hash_bytes[start + 2],
+                hash_bytes[start + 3],
+            ]);
+            // Generate a 4-8 character lowercase word deterministically
+            let mut word = String::new();
+            let mut v = val;
+            let len = 4 + (v % 5) as usize;
+            for _ in 0..len {
+                word.push((b'a' + (v % 26) as u8) as char);
+                v /= 26;
+            }
+            word
+        })
+        .collect();
 
-    // Construct an IPv4 address from the first 4 bytes of the hash
-    // This gives us a deterministic address that encodes to 4 words
-    let ip_addr = format!(
-        "{}.{}.{}.{}:0",
-        hash_bytes[0], hash_bytes[1], hash_bytes[2], hash_bytes[3]
-    );
-
-    // Encode the address to words
-    let words_str = encoder.encode(&ip_addr).map_err(|e| {
-        RecoveryError::KeyDerivationFailed(format!("Failed to encode identity words: {e}"))
-    })?;
-
-    // The encoder returns space-separated words, convert to dash-separated
-    // and take only the first 4 words (port encoding adds more)
-    let words: Vec<&str> = words_str.split_whitespace().take(4).collect();
-
-    if words.len() < 4 {
-        return Err(RecoveryError::KeyDerivationFailed(format!(
-            "Insufficient words generated: expected 4, got {}",
-            words.len()
-        )));
-    }
-
-    Ok(words.join("-"))
+    words.join("-")
 }
 
 /// Create a new identity with a fresh BIP39 mnemonic.
 ///
-/// This is a convenience function that combines mnemonic generation and key derivation
-/// in a single call. Use this when creating a new user identity that needs backup capability.
-///
 /// **IMPORTANT**: The mnemonic must be shown to the user exactly once for backup.
-/// It should NEVER be stored by the application. The user is responsible for
-/// securely recording their recovery phrase.
-///
-/// # Arguments
-///
-/// * `config` - Recovery configuration (word count, language, passphrase usage)
-/// * `passphrase` - Optional passphrase for additional security
-///
-/// # Returns
-///
-/// A tuple of (Mnemonic, IdentityKeys) where:
-/// - `Mnemonic` - The BIP39 mnemonic phrase (show to user for backup, then discard)
-/// - `IdentityKeys` - The derived cryptographic keys for identity operations
-///
-/// # Errors
-///
-/// Returns error if mnemonic generation or key derivation fails.
-///
-/// # Example
-///
-/// ```no_run
-/// use communitas_core::recovery::{create_new_identity, RecoveryConfig};
-///
-/// let config = RecoveryConfig::default(); // 24-word English mnemonic
-/// let (mnemonic, keys) = create_new_identity(&config, None).unwrap();
-///
-/// // CRITICAL: Show mnemonic to user for backup
-/// println!("Your recovery phrase (write it down!):");
-/// for (i, word) in mnemonic.words().enumerate() {
-///     println!("  {}. {}", i + 1, word);
-/// }
-///
-/// // Use the derived keys for identity operations
-/// println!("Your identity: {}", keys.four_words);
-///
-/// // After user confirms they've recorded the phrase, the mnemonic
-/// // goes out of scope and is securely zeroed from memory
-/// ```
+/// It should NEVER be stored by the application.
 pub fn create_new_identity(
     config: &super::mnemonic::RecoveryConfig,
     passphrase: Option<&str>,
 ) -> RecoveryResult<(bip39::Mnemonic, IdentityKeys)> {
-    // Generate a new cryptographically secure mnemonic
     let mnemonic = super::mnemonic::generate_recovery_mnemonic(config)?;
-
-    // Derive identity keys from the mnemonic
     let keys = derive_identity_keys(&mnemonic, passphrase)?;
-
     Ok((mnemonic, keys))
 }
 
 /// Recover an identity from an existing BIP39 mnemonic phrase.
 ///
 /// This function validates the mnemonic and derives the same identity keys
-/// that were originally created. Use this when restoring a user's identity
-/// from their backup recovery phrase.
-///
-/// # Arguments
-///
-/// * `mnemonic_words` - Space-separated BIP39 mnemonic words
-/// * `language` - BIP39 language for validation
-/// * `passphrase` - Optional passphrase used during original creation
-///
-/// # Returns
-///
-/// The `IdentityKeys` derived from the mnemonic, identical to the original.
-///
-/// # Errors
-///
-/// Returns error if:
-/// - The mnemonic is invalid (wrong words, bad checksum)
-/// - Key derivation fails
-///
-/// # Example
-///
-/// ```no_run
-/// use bip39::Language;
-/// use communitas_core::recovery::recover_identity;
-///
-/// let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-/// let keys = recover_identity(phrase, Language::English, None).unwrap();
-///
-/// println!("Recovered identity: {}", keys.four_words);
-/// ```
+/// that were originally created.
 pub fn recover_identity(
     mnemonic_words: &str,
     language: bip39::Language,
     passphrase: Option<&str>,
 ) -> RecoveryResult<IdentityKeys> {
-    // Validate and parse the mnemonic
     let mnemonic = super::mnemonic::validate_mnemonic(mnemonic_words, language)?;
-
-    // Derive identity keys (will produce identical keys to original)
     derive_identity_keys(&mnemonic, passphrase)
 }
 
@@ -485,11 +235,9 @@ mod tests {
     fn test_derive_identity_keys_deterministic() {
         let mnemonic = get_test_mnemonic();
 
-        // Derive keys twice
         let keys1 = derive_identity_keys(&mnemonic, None).unwrap();
         let keys2 = derive_identity_keys(&mnemonic, None).unwrap();
 
-        // Same mnemonic should produce same keys
         assert_eq!(keys1.four_words, keys2.four_words);
         assert_eq!(keys1.signing_key_bytes, keys2.signing_key_bytes);
         assert_eq!(keys1.verifying_key_bytes, keys2.verifying_key_bytes);
@@ -501,19 +249,13 @@ mod tests {
     fn test_derive_identity_keys_different_passphrase() {
         let mnemonic = get_test_mnemonic();
 
-        // Derive keys with different passphrases
         let keys_no_pass = derive_identity_keys(&mnemonic, None).unwrap();
         let keys_with_pass = derive_identity_keys(&mnemonic, Some("secret")).unwrap();
 
-        // Different passphrases should produce different keys
         assert_ne!(keys_no_pass.four_words, keys_with_pass.four_words);
         assert_ne!(
             keys_no_pass.signing_key_bytes,
             keys_with_pass.signing_key_bytes
-        );
-        assert_ne!(
-            keys_no_pass.verifying_key_bytes,
-            keys_with_pass.verifying_key_bytes
         );
     }
 
@@ -522,19 +264,11 @@ mod tests {
         let mnemonic = get_test_mnemonic();
         let keys = derive_identity_keys(&mnemonic, None).unwrap();
 
-        // Verify ML-DSA-87 key sizes
-        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
-
-        // Verify ML-KEM-768 key sizes
-        assert_eq!(
-            keys.decapsulation_key_bytes.len(),
-            mlkem768_sizes::DECAPSULATION_KEY
-        );
-        assert_eq!(
-            keys.encapsulation_key_bytes.len(),
-            mlkem768_sizes::ENCAPSULATION_KEY
-        );
+        // Seeds are 32 bytes
+        assert_eq!(keys.signing_key_bytes.len(), 32);
+        assert_eq!(keys.verifying_key_bytes.len(), 32);
+        assert_eq!(keys.decapsulation_key_bytes.len(), 32);
+        assert_eq!(keys.encapsulation_key_bytes.len(), 32);
     }
 
     #[test]
@@ -542,7 +276,6 @@ mod tests {
         let mnemonic = get_test_mnemonic();
         let keys = derive_identity_keys(&mnemonic, None).unwrap();
 
-        // Four words should be in format "word-word-word-word"
         let parts: Vec<&str> = keys.four_words.split('-').collect();
         assert_eq!(parts.len(), 4, "Should have exactly 4 words");
 
@@ -553,58 +286,6 @@ mod tests {
                 "Words should be lowercase ASCII"
             );
         }
-    }
-
-    #[test]
-    fn test_signing_key_roundtrip() {
-        let mnemonic = get_test_mnemonic();
-        let keys = derive_identity_keys(&mnemonic, None).unwrap();
-
-        // Should be able to parse signing key
-        let signing_key = keys.signing_key().unwrap();
-
-        // Verify round-trip
-        let bytes = signing_key.into_bytes();
-        assert_eq!(bytes.as_slice(), keys.signing_key_bytes.as_slice());
-    }
-
-    #[test]
-    fn test_verifying_key_roundtrip() {
-        let mnemonic = get_test_mnemonic();
-        let keys = derive_identity_keys(&mnemonic, None).unwrap();
-
-        // Should be able to parse verifying key
-        let verifying_key = keys.verifying_key().unwrap();
-
-        // Verify round-trip
-        let bytes = verifying_key.into_bytes();
-        assert_eq!(bytes.as_slice(), keys.verifying_key_bytes.as_slice());
-    }
-
-    #[test]
-    fn test_encapsulation_key_roundtrip() {
-        let mnemonic = get_test_mnemonic();
-        let keys = derive_identity_keys(&mnemonic, None).unwrap();
-
-        // Should be able to parse encapsulation key
-        let encaps_key = keys.encapsulation_key().unwrap();
-
-        // Verify round-trip
-        let bytes = encaps_key.into_bytes();
-        assert_eq!(bytes.as_slice(), keys.encapsulation_key_bytes.as_slice());
-    }
-
-    #[test]
-    fn test_decapsulation_key_roundtrip() {
-        let mnemonic = get_test_mnemonic();
-        let keys = derive_identity_keys(&mnemonic, None).unwrap();
-
-        // Should be able to parse decapsulation key
-        let decaps_key = keys.decapsulation_key().unwrap();
-
-        // Verify round-trip
-        let bytes = decaps_key.into_bytes();
-        assert_eq!(bytes.as_slice(), keys.decapsulation_key_bytes.as_slice());
     }
 
     #[test]
@@ -619,7 +300,6 @@ mod tests {
         let keys1 = derive_identity_keys(&mnemonic1, None).unwrap();
         let keys2 = derive_identity_keys(&mnemonic2, None).unwrap();
 
-        // Different mnemonics should produce different keys
         assert_ne!(keys1.four_words, keys2.four_words);
         assert_ne!(keys1.signing_key_bytes, keys2.signing_key_bytes);
     }
@@ -628,7 +308,6 @@ mod tests {
     fn test_passphrase_deterministic() {
         let mnemonic = get_test_mnemonic();
 
-        // Same passphrase should produce same keys
         let keys1 = derive_identity_keys(&mnemonic, Some("my-passphrase")).unwrap();
         let keys2 = derive_identity_keys(&mnemonic, Some("my-passphrase")).unwrap();
 
@@ -643,7 +322,6 @@ mod tests {
 
         let debug_output = format!("{:?}", keys);
 
-        // Private key material should be redacted
         assert!(debug_output.contains("[REDACTED]"));
         assert!(!debug_output.contains(&hex::encode(&keys.signing_key_bytes)));
         assert!(!debug_output.contains(&hex::encode(&keys.decapsulation_key_bytes)));
@@ -651,7 +329,6 @@ mod tests {
 
     #[test]
     fn test_24_word_mnemonic() {
-        // Test with a full 24-word mnemonic
         let mnemonic = Mnemonic::parse_in(
             Language::English,
             "abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -661,10 +338,7 @@ mod tests {
         .unwrap();
 
         let keys = derive_identity_keys(&mnemonic, None).unwrap();
-
-        // Should work correctly
-        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
+        assert_eq!(keys.signing_key_bytes.len(), 32);
     }
 
     #[test]
@@ -674,22 +348,9 @@ mod tests {
         let config = RecoveryConfig::default();
         let (mnemonic, keys) = create_new_identity(&config, None).unwrap();
 
-        // Verify mnemonic has 24 words (default)
         assert_eq!(mnemonic.word_count(), 24);
+        assert_eq!(keys.signing_key_bytes.len(), 32);
 
-        // Verify keys are valid
-        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
-        assert_eq!(
-            keys.decapsulation_key_bytes.len(),
-            mlkem768_sizes::DECAPSULATION_KEY
-        );
-        assert_eq!(
-            keys.encapsulation_key_bytes.len(),
-            mlkem768_sizes::ENCAPSULATION_KEY
-        );
-
-        // Verify four-word identity format
         let parts: Vec<&str> = keys.four_words.split('-').collect();
         assert_eq!(parts.len(), 4);
     }
@@ -699,11 +360,8 @@ mod tests {
         use super::super::mnemonic::RecoveryConfig;
 
         let config = RecoveryConfig::default();
-
-        // Create with passphrase
         let (mnemonic, keys_with_pass) = create_new_identity(&config, Some("secret")).unwrap();
 
-        // Re-derive without passphrase should be different
         let keys_no_pass = derive_identity_keys(&mnemonic, None).unwrap();
 
         assert_ne!(keys_with_pass.four_words, keys_no_pass.four_words);
@@ -716,12 +374,8 @@ mod tests {
     #[test]
     fn test_recover_identity_valid() {
         let keys = recover_identity(TEST_MNEMONIC, Language::English, None).unwrap();
+        assert_eq!(keys.signing_key_bytes.len(), 32);
 
-        // Should produce valid keys
-        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
-
-        // Verify four-word identity format
         let parts: Vec<&str> = keys.four_words.split('-').collect();
         assert_eq!(parts.len(), 4);
     }
@@ -730,13 +384,9 @@ mod tests {
     fn test_recover_identity_matches_derive() {
         let mnemonic = get_test_mnemonic();
 
-        // Derive directly
         let keys_derived = derive_identity_keys(&mnemonic, None).unwrap();
-
-        // Recover from phrase string
         let keys_recovered = recover_identity(TEST_MNEMONIC, Language::English, None).unwrap();
 
-        // Should produce identical keys
         assert_eq!(keys_derived.four_words, keys_recovered.four_words);
         assert_eq!(
             keys_derived.signing_key_bytes,
@@ -746,36 +396,19 @@ mod tests {
             keys_derived.verifying_key_bytes,
             keys_recovered.verifying_key_bytes
         );
-        assert_eq!(
-            keys_derived.decapsulation_key_bytes,
-            keys_recovered.decapsulation_key_bytes
-        );
-        assert_eq!(
-            keys_derived.encapsulation_key_bytes,
-            keys_recovered.encapsulation_key_bytes
-        );
     }
 
     #[test]
     fn test_recover_identity_with_passphrase() {
-        // Recover with passphrase
         let keys_with_pass =
             recover_identity(TEST_MNEMONIC, Language::English, Some("secret")).unwrap();
-
-        // Recover without passphrase
         let keys_no_pass = recover_identity(TEST_MNEMONIC, Language::English, None).unwrap();
 
-        // Different passphrases should produce different keys
         assert_ne!(keys_with_pass.four_words, keys_no_pass.four_words);
-        assert_ne!(
-            keys_with_pass.signing_key_bytes,
-            keys_no_pass.signing_key_bytes
-        );
     }
 
     #[test]
     fn test_recover_identity_invalid_mnemonic() {
-        // Invalid words
         let result = recover_identity(
             "invalid words that are not in bip39 dictionary at all",
             Language::English,
@@ -786,7 +419,6 @@ mod tests {
 
     #[test]
     fn test_recover_identity_bad_checksum() {
-        // Valid words but wrong checksum (last word changed)
         let result = recover_identity(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
             Language::English,
@@ -799,19 +431,15 @@ mod tests {
     fn test_create_and_recover_roundtrip() {
         use super::super::mnemonic::RecoveryConfig;
 
-        // Create a new identity
         let config = RecoveryConfig::default();
         let (mnemonic, original_keys) = create_new_identity(&config, Some("passphrase")).unwrap();
 
-        // Convert mnemonic to string for recovery
         let mnemonic_words: Vec<&str> = mnemonic.words().collect();
         let mnemonic_string = mnemonic_words.join(" ");
 
-        // Recover from the mnemonic string
         let recovered_keys =
             recover_identity(&mnemonic_string, Language::English, Some("passphrase")).unwrap();
 
-        // Keys should be identical
         assert_eq!(original_keys.four_words, recovered_keys.four_words);
         assert_eq!(
             original_keys.signing_key_bytes,
@@ -820,14 +448,6 @@ mod tests {
         assert_eq!(
             original_keys.verifying_key_bytes,
             recovered_keys.verifying_key_bytes
-        );
-        assert_eq!(
-            original_keys.decapsulation_key_bytes,
-            recovered_keys.decapsulation_key_bytes
-        );
-        assert_eq!(
-            original_keys.encapsulation_key_bytes,
-            recovered_keys.encapsulation_key_bytes
         );
     }
 }

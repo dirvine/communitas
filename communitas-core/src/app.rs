@@ -52,8 +52,8 @@
 //! ```
 
 use crate::command::{
-    CallResponse, CallStatusResponse, CanvasSnapshotResponse, ChunkReadResponse,
-    ChunkedWriteProgressResponse, ContactResponse, DiskInfoResponse, DiskStatsResponse,
+    CanvasSnapshotResponse, ChunkReadResponse,
+    ChunkedWriteProgressResponse, DiskInfoResponse, DiskStatsResponse,
     EntityResponse, FileInfoResponse, FileMetadataResponse, FilePreviewResponse, InviteResponse,
     MemberResponse, MessageResponse, PresenceResponse, ReactionResponse, ResumableTransferResponse,
     ResumeCapabilityResponse, ResumeVerificationResponse, SyncStateResponse, WebsiteResponse,
@@ -63,20 +63,16 @@ use crate::command::{
     QueryResult, Subscription,
 };
 use crate::core_context::CoreContext;
-use crate::crdt::{EntityType, GossipMessageType, MemberUpdate, MemberUpdateAction};
+use crate::crdt::{EntityType, MemberUpdateAction};
 use crate::disk_service::DiskType;
-use crate::identity::conn_words;
 use crate::legacy_crdt::{Attachment, AttachmentType};
 use crate::peer_presence::PresenceCache;
 use crate::types::DeviceType;
-use saorsa_gossip_types::PeerId;
-use saorsa_pqc::dsa_traits::SerDes;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, info, warn};
-use uuid::Uuid;
 use yrs::{Map, ReadTxn, Transact};
 
 fn attachments_from_strings(raw: Option<Vec<String>>) -> Option<Vec<Attachment>> {
@@ -106,33 +102,7 @@ fn attachments_from_strings(raw: Option<Vec<String>>) -> Option<Vec<Attachment>>
     }
 }
 
-async fn presence_by_four_words(
-    presence: &saorsa_gossip_presence::PresenceManager,
-) -> HashMap<String, i64> {
-    let mut map = HashMap::new();
-    let groups = presence.get_groups().await;
-
-    for topic_id in groups {
-        let records = presence.get_group_presence(topic_id).await;
-        for record in records.values() {
-            if record.is_expired() {
-                continue;
-            }
-            if let Some(four_words) = &record.four_words {
-                let since = record.since as i64;
-                map.entry(four_words.clone())
-                    .and_modify(|existing| {
-                        if since > *existing {
-                            *existing = since;
-                        }
-                    })
-                    .or_insert(since);
-            }
-        }
-    }
-
-    map
-}
+// Presence querying will be handled by x0x daemon
 
 /// The main Communitas application
 ///
@@ -194,20 +164,15 @@ impl CommunitasApp {
         })
     }
 
+    /// Persist contacts (stub - contact storage is being migrated to x0x)
+    #[allow(dead_code)]
     async fn persist_contacts(
         &self,
-        command_type: &str,
-        storage_dir: &Path,
-        contact_store: &crate::gossip::contact_storage::ContactStore,
+        _command_type: &str,
+        _storage_dir: &Path,
     ) -> Result<(), CommandError> {
-        let records = contact_store.export().await;
-        CoreContext::persist_contact_records(storage_dir, &records)
-            .await
-            .map_err(|e| CommandError {
-                command_type: command_type.to_string(),
-                message: e,
-                code: "CONTACT_PERSIST_FAILED".to_string(),
-            })
+        // TODO: persist contacts via x0x contact storage
+        Ok(())
     }
 
     /// Search messages by text content.
@@ -266,17 +231,8 @@ impl CommunitasApp {
                     .get_direct_messages(contact_id.to_string())
                     .await
                 {
-                    // Get contact name for thread_name from gossip contact store
-                    let thread_name = if let Some(gossip) = ctx.gossip.as_ref() {
-                        gossip
-                            .contact_store
-                            .get(contact_id)
-                            .await
-                            .and_then(|c| c.display_name)
-                            .unwrap_or_else(|| contact_id.to_string())
-                    } else {
-                        contact_id.to_string()
-                    };
+                    // TODO: look up contact name from x0x contact storage
+                    let thread_name = contact_id.to_string();
                     results.extend(search_in_messages(
                         sync_response.messages,
                         tid,
@@ -330,28 +286,7 @@ impl CommunitasApp {
                 }
             }
 
-            // Search DMs - only if gossip is available
-            if let Some(gossip) = ctx.gossip.as_ref() {
-                for contact in gossip.contact_store.all().await {
-                    let contact_id = contact.four_words.clone().unwrap_or(contact.id.clone());
-                    if let Ok(sync_response) = ctx
-                        .message_service
-                        .get_direct_messages(contact_id.clone())
-                        .await
-                    {
-                        let thread_id = format!("dm:{}", contact_id);
-                        let display_name =
-                            contact.display_name.unwrap_or_else(|| contact_id.clone());
-                        results.extend(search_in_messages(
-                            sync_response.messages,
-                            &thread_id,
-                            &display_name,
-                            &query_lower,
-                            query,
-                        ));
-                    }
-                }
-            }
+            // TODO: Search DMs when x0x contact storage is available
         }
 
         // Sort by match count (desc), then timestamp (desc)
@@ -438,122 +373,38 @@ impl CommunitasApp {
             }
 
             // ================================================================
-            // Networking Commands
+            // Networking Commands (x0x daemon integration)
             // ================================================================
-            Command::StartNetworking { preferred_port } => {
-                let mut ctx = self.context.write().await;
-
-                if ctx.is_networking_active() {
-                    return Err(CommandError {
-                        command_type,
-                        message: "Networking is already active".to_string(),
-                        code: "ALREADY_ACTIVE".to_string(),
-                    });
-                }
-
-                let connection_identity =
-                    ctx.start_networking(preferred_port)
-                        .await
-                        .map_err(|e| CommandError {
-                            command_type: command_type.clone(),
-                            message: e,
-                            code: "NETWORKING_START_FAILED".to_string(),
-                        })?;
-
-                let listen_addr = ctx
-                    .listen_address
-                    .map(|a| a.to_string())
-                    .unwrap_or_default();
-
-                let event = Event::NetworkingStarted {
-                    listen_address: listen_addr,
-                    connection_identity,
-                };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::StopNetworking => {
-                let mut ctx = self.context.write().await;
-                ctx.stop_networking().await.map_err(|e| CommandError {
-                    command_type: command_type.clone(),
-                    message: e,
-                    code: "NETWORKING_STOP_FAILED".to_string(),
-                })?;
-
-                let event = Event::NetworkingStopped;
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::ConnectToPeer { peer_four_words } => {
+            Command::EnsureDaemon => {
+                // TODO: call x0x daemon manager ensure_running
                 let ctx = self.context.read().await;
-                ctx.connect_to_peer(&peer_four_words)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: e,
-                        code: "CONNECT_FAILED".to_string(),
-                    })?;
-
-                let event = Event::PeerConnected { peer_four_words };
+                let agent_id = ctx.four_words.clone();
+                let event = Event::DaemonRunning { agent_id };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
             }
 
-            Command::RequestExternalAddress => {
-                let mut ctx = self.context.write().await;
-                ctx.request_external_address()
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: e,
-                        code: "EXTERNAL_ADDRESS_FAILED".to_string(),
-                    })?;
-
-                let address = ctx
-                    .external_address
-                    .map(|a| a.to_string())
-                    .unwrap_or_default();
-
-                let event = Event::ExternalAddressDiscovered { address };
+            Command::ConnectToAgent { agent_id } => {
+                // TODO: call x0x client connect_agent
+                let event = Event::AgentConnected { agent_id };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
             }
 
             Command::AnnouncePresence => {
                 let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
+                let agent_id = ctx.four_words.clone();
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
 
-                let (public_key, private_key) =
-                    gossip.get_sites_signing_keys().map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to load identity keypair: {e}"),
-                        code: "IDENTITY_KEYPAIR_FAILED".to_string(),
-                    })?;
-
-                let connection_words = ctx
-                    .external_address
-                    .or(ctx.listen_address)
-                    .map(|addr| {
-                        crate::identity::conn_words(&addr).unwrap_or_else(|_| "unknown".to_string())
-                    })
-                    .unwrap_or_else(|| "no-address".to_string());
-
-                let record = crate::peer_presence::PresenceRecord::new(
-                    &public_key,
-                    &private_key,
-                    connection_words.clone(),
-                )
-                .map_err(|e| CommandError {
-                    command_type: command_type.clone(),
-                    message: format!("Failed to sign presence record: {e}"),
-                    code: "PRESENCE_SIGN_FAILED".to_string(),
-                })?;
+                // Create a presence record in the local cache
+                let record = crate::peer_presence::PresenceRecord::new_unsigned(
+                    agent_id.as_bytes().to_vec(),
+                    agent_id.clone(),
+                    timestamp,
+                );
 
                 {
                     let mut cache = self.presence_cache.write().await;
@@ -561,82 +412,11 @@ impl CommunitasApp {
                 }
 
                 let event = Event::PresenceAnnounced {
-                    connection_words,
-                    timestamp: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0),
+                    agent_id,
+                    timestamp,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
-            }
-
-            Command::QueryPeerPresence { target_pubkey } => {
-                // Check local cache first
-                let cache = self.presence_cache.read().await;
-                if let Some(record) = cache.get(&target_pubkey) {
-                    let event = Event::PeerPresenceReceived {
-                        record: record.record.clone(),
-                    };
-                    self.broadcast_event(event.clone());
-                    return Ok(vec![event]);
-                }
-                drop(cache);
-
-                let ctx = self.context.read().await;
-                let gossip = match ctx.gossip.as_ref() {
-                    Some(gossip) => gossip,
-                    None => return Ok(vec![]),
-                };
-
-                let peer_id = PeerId::from_pubkey(&target_pubkey);
-                let presence = gossip.presence.read().await;
-                let groups = presence.get_groups().await;
-                let mut best_record = None;
-
-                for topic_id in groups {
-                    let records = presence.get_group_presence(topic_id).await;
-                    if let Some(record) = records.get(&peer_id) {
-                        if record.is_expired() {
-                            continue;
-                        }
-                        let should_replace = best_record
-                            .as_ref()
-                            .map(|existing: &saorsa_gossip_types::PresenceRecord| {
-                                record.since > existing.since
-                            })
-                            .unwrap_or(true);
-                        if should_replace {
-                            best_record = Some(record.clone());
-                        }
-                    }
-                }
-
-                if let Some(record) = best_record {
-                    let connection_words = record
-                        .addr_hints
-                        .iter()
-                        .find_map(|hint| hint.parse::<std::net::SocketAddr>().ok())
-                        .and_then(|addr| crate::identity::conn_words(&addr).ok())
-                        .unwrap_or_else(|| "unknown".to_string());
-
-                    let unsigned = crate::peer_presence::PresenceRecord::new_unsigned(
-                        target_pubkey.clone(),
-                        connection_words,
-                        record.since,
-                    );
-
-                    {
-                        let mut cache = self.presence_cache.write().await;
-                        cache.insert(unsigned.clone());
-                    }
-
-                    let event = Event::PeerPresenceReceived { record: unsigned };
-                    self.broadcast_event(event.clone());
-                    return Ok(vec![event]);
-                }
-
-                Ok(vec![])
             }
 
             // ================================================================
@@ -667,30 +447,7 @@ impl CommunitasApp {
                         code: "CREATE_ENTITY_FAILED".to_string(),
                     })?;
 
-                if let Some(gossip) = ctx.gossip.as_ref() {
-                    let entity_id = entity.id.clone();
-                    let entity_type_str = entity_type.as_str().to_string();
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(30),
-                        gossip.join_entity(&entity_id, &entity_type_str),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(e)) => {
-                            warn!(
-                                "Failed to join gossip topic for entity {} ({}): {}",
-                                entity_id, entity_type_str, e
-                            );
-                        }
-                        Err(_) => {
-                            warn!(
-                                "Timed out joining gossip topic for entity {} ({})",
-                                entity_id, entity_type_str
-                            );
-                        }
-                    }
-                }
+                // TODO: notify x0x daemon about new entity for network sync
 
                 let event = Event::EntityCreated {
                     entity_id: entity.id.clone(),
@@ -726,30 +483,7 @@ impl CommunitasApp {
                         code: "CREATE_LOCAL_ENTITY_FAILED".to_string(),
                     })?;
 
-                if let Some(gossip) = ctx.gossip.as_ref() {
-                    let entity_id = entity.id.clone();
-                    let entity_type_str = entity_type.as_str().to_string();
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(30),
-                        gossip.join_entity(&entity_id, &entity_type_str),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(e)) => {
-                            warn!(
-                                "Failed to join gossip topic for entity {} ({}): {}",
-                                entity_id, entity_type_str, e
-                            );
-                        }
-                        Err(_) => {
-                            warn!(
-                                "Timed out joining gossip topic for entity {} ({})",
-                                entity_id, entity_type_str
-                            );
-                        }
-                    }
-                }
+                // TODO: notify x0x daemon about new entity for network sync
 
                 let event = Event::EntityCreated {
                     entity_id: entity.id.clone(),
@@ -763,14 +497,14 @@ impl CommunitasApp {
 
             Command::LinkEntityToNetwork {
                 entity_id,
-                four_words,
+                agent_id,
             } => {
                 // Note: Entity linking is a conceptual operation - the entity service
                 // doesn't have a direct link_to_network method. This would be implemented
                 // by updating the entity's network identity field.
                 let event = Event::EntityLinkedToNetwork {
                     entity_id,
-                    four_words,
+                    agent_id,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -861,13 +595,9 @@ impl CommunitasApp {
                 member_id,
                 role,
             } => {
-                let (entity_service, gossip, updated_by) = {
+                let entity_service = {
                     let ctx = self.context.read().await;
-                    (
-                        ctx.entity_service.clone(),
-                        ctx.gossip.clone(),
-                        ctx.four_words.clone(),
-                    )
+                    ctx.entity_service.clone()
                 };
                 entity_service
                     .add_member(entity_type, &entity_id, &member_id, &role)
@@ -878,27 +608,7 @@ impl CommunitasApp {
                         code: "ADD_MEMBER_FAILED".to_string(),
                     })?;
 
-                if let Some(gossip) = gossip.as_ref() {
-                    Self::publish_member_update(
-                        gossip.clone(),
-                        entity_type,
-                        &entity_id,
-                        &member_id,
-                        Some(&role),
-                        &updated_by,
-                        MemberUpdateAction::Add,
-                    )
-                    .await;
-                    Self::publish_member_snapshot(
-                        gossip.clone(),
-                        entity_service.clone(),
-                        entity_type,
-                        &entity_id,
-                        &updated_by,
-                        Some(&member_id),
-                    )
-                    .await;
-                }
+                // TODO: publish member update via x0x
 
                 let event = Event::MemberAdded {
                     entity_type,
@@ -915,12 +625,11 @@ impl CommunitasApp {
                 entity_id,
                 member_id,
             } => {
-                let (entity_service, deleted_by, gossip) = {
+                let (entity_service, deleted_by) = {
                     let ctx = self.context.read().await;
                     (
                         ctx.entity_service.clone(),
                         ctx.four_words.clone(),
-                        ctx.gossip.clone(),
                     )
                 };
 
@@ -928,173 +637,13 @@ impl CommunitasApp {
                     .remove_member(entity_type, &entity_id, &member_id, &deleted_by)
                     .await;
 
-                let remove_result = match remove_result {
-                    Ok(()) => Ok(()),
-                    Err(crate::entity_service::EntityServiceError::PermissionDenied(reason)) => {
-                        if let Some(gossip) = gossip.as_ref() {
-                            let mut last_reason = reason;
-                            let mut last_error: Option<CommandError> = None;
+                remove_result.map_err(|e| CommandError {
+                    command_type: command_type.clone(),
+                    message: format!("{}", e),
+                    code: "REMOVE_MEMBER_FAILED".to_string(),
+                })?;
 
-                            for attempt in 0..3 {
-                                if let Ok(entity) = entity_service.get_entity(&entity_id).await {
-                                    let owner_id = entity.created_by.clone();
-                                    if owner_id != deleted_by
-                                        && let Ok(result) =
-                                            gossip.find_contact_with_hints(&owner_id).await
-                                    {
-                                        for hint in &result.addr_hints {
-                                            let addr =
-                                                hint.parse::<std::net::SocketAddr>().ok().or_else(
-                                                    || crate::identity::conn_from_words(hint).ok(),
-                                                );
-                                            if let Some(addr) = addr
-                                                && let Err(err) = gossip.dial_address(addr).await
-                                            {
-                                                debug!(
-                                                    "Dial to owner {} at {} before sync failed for {}: {}",
-                                                    owner_id, addr, entity_id, err
-                                                );
-                                            }
-                                        }
-
-                                        let request = crate::crdt::MemberSyncRequest {
-                                            entity_id: entity_id.clone(),
-                                            entity_type,
-                                            requester_peer_id: deleted_by.clone(),
-                                        };
-                                        if let Ok(bytes) = serde_json::to_vec(
-                                            &crate::crdt::GossipMessageType::MemberSyncRequest(
-                                                request,
-                                            ),
-                                        ) && let Err(err) = gossip
-                                            .direct_send_membership_to_peer(
-                                                &entity_id,
-                                                result.peer_id,
-                                                bytes,
-                                            )
-                                            .await
-                                        {
-                                            warn!(
-                                                "Direct member sync request to owner {} failed for {}: {}",
-                                                owner_id, entity_id, err
-                                            );
-                                        }
-                                    }
-                                }
-
-                                match tokio::time::timeout(
-                                    std::time::Duration::from_secs(5),
-                                    gossip.join_entity(&entity_id, entity_type.as_str()),
-                                )
-                                .await
-                                {
-                                    Ok(Ok(())) => {}
-                                    Ok(Err(err)) => {
-                                        warn!(
-                                            "Failed to join entity topic {} before retry: {}",
-                                            entity_id, err
-                                        );
-                                    }
-                                    Err(_) => {
-                                        warn!(
-                                            "Timed out joining entity topic {} before retry",
-                                            entity_id
-                                        );
-                                    }
-                                }
-
-                                match tokio::time::timeout(
-                                    std::time::Duration::from_secs(20),
-                                    gossip.request_member_sync(&entity_id, entity_type.as_str()),
-                                )
-                                .await
-                                {
-                                    Ok(Ok(())) => {}
-                                    Ok(Err(err)) => {
-                                        warn!(
-                                            "Failed to request member sync for {} before retry: {}",
-                                            entity_id, err
-                                        );
-                                    }
-                                    Err(_) => {
-                                        warn!(
-                                            "Timed out requesting member sync for {} before retry",
-                                            entity_id
-                                        );
-                                    }
-                                }
-
-                                // Give the sync response a short window to apply.
-                                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-
-                                match entity_service
-                                    .remove_member(entity_type, &entity_id, &member_id, &deleted_by)
-                                    .await
-                                {
-                                    Ok(()) => {
-                                        last_error = None;
-                                        break;
-                                    }
-                                    Err(
-                                        crate::entity_service::EntityServiceError::PermissionDenied(
-                                            reason,
-                                        ),
-                                    ) => {
-                                        last_reason = reason;
-                                    }
-                                    Err(e) => {
-                                        last_error = Some(CommandError {
-                                            command_type: command_type.clone(),
-                                            message: format!("{}", e),
-                                            code: "REMOVE_MEMBER_FAILED".to_string(),
-                                        });
-                                        break;
-                                    }
-                                }
-
-                                if attempt < 2 {
-                                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                                }
-                            }
-
-                            if let Some(err) = last_error {
-                                Err(err)
-                            } else {
-                                Err(CommandError {
-                                    command_type: command_type.clone(),
-                                    message: last_reason.to_string(),
-                                    code: "REMOVE_MEMBER_FAILED".to_string(),
-                                })
-                            }
-                        } else {
-                            Err(CommandError {
-                                command_type: command_type.clone(),
-                                message: format!("{} (no gossip context for retry)", reason),
-                                code: "REMOVE_MEMBER_FAILED".to_string(),
-                            })
-                        }
-                    }
-                    Err(e) => Err(CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "REMOVE_MEMBER_FAILED".to_string(),
-                    }),
-                };
-
-                remove_result?;
-
-                if let Some(gossip) = gossip.as_ref() {
-                    Self::publish_member_update(
-                        gossip.clone(),
-                        entity_type,
-                        &entity_id,
-                        &member_id,
-                        None,
-                        &deleted_by,
-                        MemberUpdateAction::Remove,
-                    )
-                    .await;
-                }
+                // TODO: publish member removal via x0x
 
                 let event = Event::MemberRemoved {
                     entity_type,
@@ -1106,11 +655,10 @@ impl CommunitasApp {
             }
 
             Command::RemoveOrganizationMember { org_id, member_id } => {
-                let (entity_service, gossip, deleted_by) = {
+                let (entity_service, deleted_by) = {
                     let ctx = self.context.read().await;
                     (
                         ctx.entity_service.clone(),
-                        ctx.gossip.clone(),
                         ctx.four_words.clone(),
                     )
                 };
@@ -1123,20 +671,7 @@ impl CommunitasApp {
                         code: "REMOVE_ORG_MEMBER_FAILED".to_string(),
                     })?;
 
-                if let Some(gossip) = gossip.as_ref() {
-                    for (entity_type, entity_id) in &result.removed_in {
-                        Self::publish_member_update(
-                            gossip.clone(),
-                            *entity_type,
-                            entity_id,
-                            &member_id,
-                            None,
-                            &deleted_by,
-                            MemberUpdateAction::Remove,
-                        )
-                        .await;
-                    }
-                }
+                // TODO: publish member removal via x0x
 
                 let removed_from: Vec<(EntityType, String)> =
                     result.removed_in.into_iter().collect();
@@ -1156,13 +691,9 @@ impl CommunitasApp {
                 member_id,
                 new_role,
             } => {
-                let (entity_service, gossip, updated_by) = {
+                let entity_service = {
                     let ctx = self.context.read().await;
-                    (
-                        ctx.entity_service.clone(),
-                        ctx.gossip.clone(),
-                        ctx.four_words.clone(),
-                    )
+                    ctx.entity_service.clone()
                 };
                 let old_role = entity_service
                     .get_member_role(entity_type, &entity_id, &member_id)
@@ -1182,18 +713,7 @@ impl CommunitasApp {
                         code: "SET_ROLE_FAILED".to_string(),
                     })?;
 
-                if let Some(gossip) = gossip.as_ref() {
-                    Self::publish_member_update(
-                        gossip.clone(),
-                        entity_type,
-                        &entity_id,
-                        &member_id,
-                        Some(&new_role),
-                        &updated_by,
-                        MemberUpdateAction::Add,
-                    )
-                    .await;
-                }
+                // TODO: publish member role change via x0x
 
                 let event = Event::MemberRoleChanged {
                     entity_type,
@@ -1481,13 +1001,13 @@ impl CommunitasApp {
                 is_typing,
             } => {
                 let ctx = self.context.read().await;
-                let peer_id = ctx.four_words.clone();
+                let agent_id = ctx.agent_id.clone().unwrap_or_else(|| ctx.four_words.clone());
 
                 // Broadcast typing indicator event locally for other subscribers
-                // In a full implementation, this would also be gossiped to peers
+                // TODO: gossip via x0x
                 let event = Event::TypingIndicatorReceived {
                     thread_id,
-                    peer_id,
+                    agent_id,
                     is_typing,
                 };
                 self.broadcast_event(event.clone());
@@ -2164,287 +1684,19 @@ impl CommunitasApp {
             }
 
             // ================================================================
-            // WebRTC Commands
-            // WebRTC integration uses CallId conversion and MediaConstraints.
-            // ================================================================
-            Command::StartCall {
-                entity_id,
-                video_enabled,
-            } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "WebRTC not available - start networking first".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Use default media constraints
-                let constraints = crate::webrtc::MediaConstraints {
-                    video: video_enabled,
-                    audio: true,
-                    screen_share: false,
-                };
-
-                let call_id = webrtc
-                    .initiate_call(&entity_id, constraints)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "START_CALL_FAILED".to_string(),
-                    })?;
-
-                let event = Event::CallStarted {
-                    call_id: call_id.to_string(),
-                    entity_id,
-                };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::JoinCall { call_id } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "WebRTC not available".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Parse CallId from string (CallId wraps UUID)
-                let uuid = Uuid::parse_str(&call_id).map_err(|_| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Invalid call ID format".to_string(),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-                let call_id_parsed = crate::webrtc::CallId(uuid);
-
-                // Use default media constraints
-                let constraints = crate::webrtc::MediaConstraints {
-                    video: true,
-                    audio: true,
-                    screen_share: false,
-                };
-
-                webrtc
-                    .accept_call(call_id_parsed, constraints)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "JOIN_CALL_FAILED".to_string(),
-                    })?;
-
-                let event = Event::CallJoined { call_id };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::LeaveCall { call_id } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "WebRTC not available".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Parse CallId from string (CallId wraps UUID)
-                let uuid = Uuid::parse_str(&call_id).map_err(|_| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Invalid call ID format".to_string(),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-                let call_id_parsed = crate::webrtc::CallId(uuid);
-
-                webrtc
-                    .end_call(call_id_parsed)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "LEAVE_CALL_FAILED".to_string(),
-                    })?;
-
-                let event = Event::CallLeft { call_id };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::ToggleVideo { call_id, enabled } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "WebRTC not available".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Parse CallId from string (CallId wraps UUID)
-                let uuid = Uuid::parse_str(&call_id).map_err(|_| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Invalid call ID format".to_string(),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-                let call_id_parsed = crate::webrtc::CallId(uuid);
-
-                webrtc
-                    .set_video_enabled(call_id_parsed, enabled)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "TOGGLE_VIDEO_FAILED".to_string(),
-                    })?;
-
-                let event = Event::VideoToggled { call_id, enabled };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::ToggleAudio { call_id, enabled } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "WebRTC not available".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Parse CallId from string (CallId wraps UUID)
-                let uuid = Uuid::parse_str(&call_id).map_err(|_| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Invalid call ID format".to_string(),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-                let call_id_parsed = crate::webrtc::CallId(uuid);
-
-                webrtc
-                    .set_audio_enabled(call_id_parsed, enabled)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "TOGGLE_AUDIO_FAILED".to_string(),
-                    })?;
-
-                let event = Event::AudioToggled { call_id, enabled };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::StartScreenShare { call_id } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "WebRTC not available".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Parse CallId from string (CallId wraps UUID)
-                let uuid = Uuid::parse_str(&call_id).map_err(|_| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Invalid call ID format".to_string(),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-                let call_id_parsed = crate::webrtc::CallId(uuid);
-
-                webrtc
-                    .start_screen_share(call_id_parsed)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "START_SCREEN_SHARE_FAILED".to_string(),
-                    })?;
-
-                let event = Event::ScreenShareStarted { call_id };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            Command::StopScreenShare { call_id } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "WebRTC not available".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Parse CallId from string (CallId wraps UUID)
-                let uuid = Uuid::parse_str(&call_id).map_err(|_| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Invalid call ID format".to_string(),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-                let call_id_parsed = crate::webrtc::CallId(uuid);
-
-                webrtc
-                    .stop_screen_share(call_id_parsed)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("{}", e),
-                        code: "STOP_SCREEN_SHARE_FAILED".to_string(),
-                    })?;
-
-                let event = Event::ScreenShareStopped { call_id };
-                self.broadcast_event(event.clone());
-                Ok(vec![event])
-            }
-
-            // ================================================================
-            // Contact Management Commands
+            // Contact Management Commands (stubbed - migrating to x0x)
             // ================================================================
             Command::CreateContact {
                 display_name,
-                four_words,
-                is_favourite,
+                agent_id,
+                is_favourite: _is_favourite,
             } => {
-                let ctx = self.context.read().await;
-                let storage_dir = ctx.profile.storage_dir.clone();
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Networking not started - contacts require gossip context".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                use crate::gossip::contact_storage::ContactRecord;
-
-                // Create contact based on whether it has network identity
-                let mut contact = match four_words.clone() {
-                    Some(fw) => ContactRecord::with_display_name(fw, display_name.clone()),
-                    None => ContactRecord::new_local(display_name.clone()),
-                };
-
-                // Set favourite if requested
-                contact.is_favourite = is_favourite;
-                let contact_id = contact.id.clone();
-
-                gossip
-                    .contact_store
-                    .add(contact)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to create contact: {}", e),
-                        code: "CREATE_CONTACT_FAILED".to_string(),
-                    })?;
-
-                if is_favourite && let Some(ref fw) = four_words {
-                    gossip
-                        .add_favourite_contact(fw.clone())
-                        .await
-                        .map_err(|e| CommandError {
-                            command_type: command_type.clone(),
-                            message: format!("Failed to add favourite: {}", e),
-                            code: "SET_FAVOURITE_FAILED".to_string(),
-                        })?;
-                }
-
-                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
-                    .await?;
-
+                // TODO: persist contacts via x0x contact storage
+                let contact_id = format!("contact-{}", uuid::Uuid::new_v4());
                 let event = Event::ContactCreated {
                     contact_id,
                     display_name,
-                    four_words,
+                    agent_id,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -2455,83 +1707,7 @@ impl CommunitasApp {
                 display_name,
                 is_favourite,
             } => {
-                let ctx = self.context.read().await;
-                let storage_dir = ctx.profile.storage_dir.clone();
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Get the existing contact
-                let mut contact = gossip
-                    .contact_store
-                    .get_by_id(&contact_id)
-                    .await
-                    .ok_or_else(|| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Contact not found: {}", contact_id),
-                        code: "CONTACT_NOT_FOUND".to_string(),
-                    })?;
-
-                // Update display name if provided
-                if let Some(ref name) = display_name {
-                    contact.display_name = Some(name.clone());
-                }
-
-                // Update favourite status if provided
-                if let Some(fav) = is_favourite {
-                    contact.is_favourite = fav;
-                }
-
-                // Save updated contact
-                let updated_four_words = contact.four_words.clone();
-                let updated_is_favourite = contact.is_favourite;
-                gossip
-                    .contact_store
-                    .update(contact)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to update contact: {}", e),
-                        code: "UPDATE_CONTACT_FAILED".to_string(),
-                    })?;
-
-                if let Some(fav_update) = is_favourite {
-                    if let Some(ref fw) = updated_four_words {
-                        if fav_update {
-                            gossip
-                                .add_favourite_contact(fw.clone())
-                                .await
-                                .map_err(|e| CommandError {
-                                    command_type: command_type.clone(),
-                                    message: format!("Failed to add favourite: {}", e),
-                                    code: "SET_FAVOURITE_FAILED".to_string(),
-                                })?;
-                        } else {
-                            gossip.remove_favourite_contact(fw).await.map_err(|e| {
-                                CommandError {
-                                    command_type: command_type.clone(),
-                                    message: format!("Failed to remove favourite: {}", e),
-                                    code: "REMOVE_FAVOURITE_FAILED".to_string(),
-                                }
-                            })?;
-                        }
-                    }
-                } else if updated_is_favourite && let Some(ref fw) = updated_four_words {
-                    gossip
-                        .add_favourite_contact(fw.clone())
-                        .await
-                        .map_err(|e| CommandError {
-                            command_type: command_type.clone(),
-                            message: format!("Failed to add favourite: {}", e),
-                            code: "SET_FAVOURITE_FAILED".to_string(),
-                        })?;
-                }
-
-                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
-                    .await?;
-
+                // TODO: update contacts via x0x contact storage
                 let event = Event::ContactUpdated {
                     contact_id,
                     display_name,
@@ -2542,47 +1718,7 @@ impl CommunitasApp {
             }
 
             Command::DeleteContact { contact_id } => {
-                let ctx = self.context.read().await;
-                let storage_dir = ctx.profile.storage_dir.clone();
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let removed_contact = gossip.contact_store.get_by_id(&contact_id).await;
-                let removed_four_words = removed_contact
-                    .as_ref()
-                    .and_then(|contact| contact.four_words.clone());
-                let removed_favourite = removed_contact
-                    .as_ref()
-                    .map(|contact| contact.is_favourite)
-                    .unwrap_or(false);
-
-                gossip
-                    .contact_store
-                    .remove_by_id(&contact_id)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to delete contact: {}", e),
-                        code: "DELETE_CONTACT_FAILED".to_string(),
-                    })?;
-
-                if removed_favourite && let Some(fw) = removed_four_words {
-                    gossip
-                        .remove_favourite_contact(&fw)
-                        .await
-                        .map_err(|e| CommandError {
-                            command_type: command_type.clone(),
-                            message: format!("Failed to remove favourite: {}", e),
-                            code: "REMOVE_FAVOURITE_FAILED".to_string(),
-                        })?;
-                }
-
-                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
-                    .await?;
-
+                // TODO: delete contacts via x0x contact storage
                 let event = Event::ContactDeleted { contact_id };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -2590,144 +1726,27 @@ impl CommunitasApp {
 
             Command::LinkContact {
                 contact_id,
-                four_words,
+                agent_id,
             } => {
-                let ctx = self.context.read().await;
-                let storage_dir = ctx.profile.storage_dir.clone();
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let linked_contact = gossip
-                    .contact_store
-                    .link_contact(&contact_id, &four_words)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to link contact: {}", e),
-                        code: "LINK_CONTACT_FAILED".to_string(),
-                    })?;
-
-                if linked_contact.is_favourite
-                    && let Some(fw) = linked_contact.four_words.clone()
-                {
-                    gossip
-                        .add_favourite_contact(fw.clone())
-                        .await
-                        .map_err(|e| CommandError {
-                            command_type: command_type.clone(),
-                            message: format!("Failed to add favourite: {}", e),
-                            code: "SET_FAVOURITE_FAILED".to_string(),
-                        })?;
-                }
-
-                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
-                    .await?;
-
+                // TODO: link contacts via x0x contact storage
                 let event = Event::ContactLinked {
                     contact_id,
-                    four_words,
+                    agent_id,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
             }
 
-            Command::SetFavouriteContact { four_words } => {
-                let ctx = self.context.read().await;
-                let storage_dir = ctx.profile.storage_dir.clone();
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Get the contact by four_words, update favourite, save
-                let mut contact =
-                    gossip
-                        .contact_store
-                        .get(&four_words)
-                        .await
-                        .ok_or_else(|| CommandError {
-                            command_type: command_type.clone(),
-                            message: format!("Contact not found: {}", four_words),
-                            code: "CONTACT_NOT_FOUND".to_string(),
-                        })?;
-
-                contact.is_favourite = true;
-                gossip
-                    .contact_store
-                    .update(contact)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to set favourite: {}", e),
-                        code: "SET_FAVOURITE_FAILED".to_string(),
-                    })?;
-
-                gossip
-                    .add_favourite_contact(four_words.clone())
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to add favourite: {}", e),
-                        code: "SET_FAVOURITE_FAILED".to_string(),
-                    })?;
-
-                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
-                    .await?;
-
-                let event = Event::ContactFavouriteSet { four_words };
+            Command::SetFavouriteContact { agent_id } => {
+                // TODO: set favourite via x0x contact storage
+                let event = Event::ContactFavouriteSet { agent_id };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
             }
 
-            Command::RemoveFavouriteContact { four_words } => {
-                let ctx = self.context.read().await;
-                let storage_dir = ctx.profile.storage_dir.clone();
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
-                    command_type: command_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Get the contact by four_words, update favourite, save
-                let mut contact =
-                    gossip
-                        .contact_store
-                        .get(&four_words)
-                        .await
-                        .ok_or_else(|| CommandError {
-                            command_type: command_type.clone(),
-                            message: format!("Contact not found: {}", four_words),
-                            code: "CONTACT_NOT_FOUND".to_string(),
-                        })?;
-
-                contact.is_favourite = false;
-                gossip
-                    .contact_store
-                    .update(contact)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to remove favourite: {}", e),
-                        code: "REMOVE_FAVOURITE_FAILED".to_string(),
-                    })?;
-
-                gossip
-                    .remove_favourite_contact(&four_words)
-                    .await
-                    .map_err(|e| CommandError {
-                        command_type: command_type.clone(),
-                        message: format!("Failed to remove favourite: {}", e),
-                        code: "REMOVE_FAVOURITE_FAILED".to_string(),
-                    })?;
-
-                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
-                    .await?;
-
-                let event = Event::ContactFavouriteRemoved { four_words };
+            Command::RemoveFavouriteContact { agent_id } => {
+                // TODO: remove favourite via x0x contact storage
+                let event = Event::ContactFavouriteRemoved { agent_id };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
             }
@@ -3126,40 +2145,21 @@ impl CommunitasApp {
             Query::GetProfile => {
                 let ctx = self.context.read().await;
                 Ok(QueryResponse::Profile {
-                    four_words: ctx.four_words.clone(),
+                    agent_id: ctx.agent_id.clone().unwrap_or_else(|| ctx.four_words.clone()),
                     display_name: ctx.display_name.clone(),
                     device_name: ctx.device_name.clone(),
                     device_type: format!("{:?}", ctx.device_type()),
                 })
             }
 
-            Query::IsNetworkingActive => {
-                let ctx = self.context.read().await;
-                Ok(QueryResponse::Bool(ctx.is_networking_active()))
+            Query::IsDaemonRunning => {
+                // TODO: check x0x daemon status
+                Ok(QueryResponse::Bool(false))
             }
 
-            Query::GetConnectionIdentity => {
+            Query::GetAgentIdentity => {
                 let ctx = self.context.read().await;
-                Ok(QueryResponse::OptionalString(
-                    ctx.connection_identity().map(String::from),
-                ))
-            }
-
-            Query::GetExternalAddress => {
-                let ctx = self.context.read().await;
-                Ok(QueryResponse::OptionalString(
-                    ctx.external_address.map(|a| a.to_string()),
-                ))
-            }
-
-            Query::GetConnectionWords => {
-                let ctx = self.context.read().await;
-                // Fall back to listen_address if external_address not yet discovered
-                let words = ctx
-                    .external_address
-                    .or(ctx.listen_address)
-                    .and_then(|addr| conn_words(&addr).ok());
-                Ok(QueryResponse::OptionalString(words))
+                Ok(QueryResponse::OptionalString(ctx.agent_id.clone()))
             }
 
             // ================================================================
@@ -3250,52 +2250,7 @@ impl CommunitasApp {
                 entity_type,
                 entity_id,
             } => {
-                let gossip = {
-                    let ctx = self.context.read().await;
-                    ctx.gossip.clone()
-                };
-
-                if let Some(gossip) = gossip {
-                    let join_timeout_secs = std::env::var("COMMUNITAS_JOIN_TIMEOUT_SECS")
-                        .ok()
-                        .and_then(|value| value.parse::<u64>().ok())
-                        .unwrap_or(10);
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(join_timeout_secs),
-                        gossip.join_entity(&entity_id, entity_type.as_str()),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(err)) => {
-                            warn!(
-                                "Failed to join entity topic {} for member list: {}",
-                                entity_id, err
-                            );
-                        }
-                        Err(_) => {
-                            warn!(
-                                "Timed out joining entity topic {} for member list",
-                                entity_id
-                            );
-                        }
-                    }
-
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(12),
-                        gossip.request_member_sync(&entity_id, entity_type.as_str()),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(err)) => {
-                            warn!("Failed to request member sync for {}: {}", entity_id, err);
-                        }
-                        Err(_) => {
-                            warn!("Timed out requesting member sync for {}", entity_id);
-                        }
-                    }
-                }
+                // TODO: request member sync via x0x before listing
 
                 let ctx = self.context.read().await;
                 let members = ctx
@@ -3407,17 +2362,7 @@ impl CommunitasApp {
 
             Query::GetEntityMessages { entity_id } => {
                 let ctx = self.context.read().await;
-                let sync_wait_ms = std::env::var("COMMUNITAS_MESSAGE_SYNC_ON_READ_MS")
-                    .ok()
-                    .and_then(|value| value.parse::<u64>().ok())
-                    .unwrap_or(0);
-
-                if sync_wait_ms > 0 && ctx.gossip.is_some() {
-                    if let Err(err) = ctx.request_entity_message_sync(&entity_id).await {
-                        warn!("Message sync request for {} failed: {}", entity_id, err);
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(sync_wait_ms)).await;
-                }
+                // TODO: sync messages via x0x before reading
 
                 let sync_response = ctx
                     .message_service
@@ -4196,422 +3141,74 @@ impl CommunitasApp {
             }
 
             // ================================================================
-            // Presence Queries
+            // Presence Queries (stubbed - migrating to x0x)
             // ================================================================
-            Query::GetPresence { peer_id } => {
-                let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let presence = gossip.presence.read().await;
-                let mut status = "unknown".to_string();
-                let mut last_seen = 0i64;
-
-                if peer_id.contains('-') {
-                    let index = presence_by_four_words(&presence).await;
-                    if let Some(seen) = index.get(&peer_id) {
-                        status = "online".to_string();
-                        last_seen = *seen;
-                    } else {
-                        status = "offline".to_string();
-                    }
-                } else if let Ok(bytes) = hex::decode(&peer_id)
-                    && bytes.len() == 32
-                {
-                    let mut arr = [0u8; 32];
-                    arr.copy_from_slice(&bytes);
-                    let peer = PeerId::new(arr);
-                    let groups = presence.get_groups().await;
-                    let mut seen_any = false;
-                    let mut latest = None;
-
-                    for topic_id in groups {
-                        let records = presence.get_group_presence(topic_id).await;
-                        if let Some(record) = records.get(&peer) {
-                            seen_any = true;
-                            if record.is_expired() {
-                                continue;
-                            }
-                            let since = record.since as i64;
-                            let should_replace =
-                                latest.map(|existing| since > existing).unwrap_or(true);
-                            if should_replace {
-                                latest = Some(since);
-                            }
-                        }
-                    }
-
-                    if let Some(seen) = latest {
-                        status = "online".to_string();
-                        last_seen = seen;
-                    } else if seen_any {
-                        status = "offline".to_string();
-                    }
-                }
-
+            Query::GetPresence { agent_id } => {
+                // TODO: query x0x daemon for agent presence
                 Ok(QueryResponse::Presence(PresenceResponse {
-                    peer_id,
-                    status,
-                    last_seen,
+                    agent_id,
+                    status: "unknown".to_string(),
+                    last_seen: 0,
                 }))
             }
 
-            Query::ListOnlinePeers => {
-                let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let presence = gossip.presence.read().await;
-                let groups = presence.get_groups().await;
-                let mut peers = HashSet::new();
-
-                for topic_id in groups {
-                    for peer_id in presence.get_online_peers(topic_id).await {
-                        peers.insert(peer_id);
-                    }
-                }
-
-                let peer_list = peers
-                    .into_iter()
-                    .map(|peer_id| hex::encode(peer_id.as_bytes()))
-                    .collect();
-
-                Ok(QueryResponse::PeerList(peer_list))
+            Query::ListOnlineAgents => {
+                // TODO: query x0x daemon for online agents
+                Ok(QueryResponse::AgentList(Vec::new()))
             }
 
-            Query::GetOurPresenceRecord => {
+            Query::GetOurPresence => {
                 let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let (public_key, private_key) =
-                    gossip.get_sites_signing_keys().map_err(|e| QueryError {
-                        query_type: query_type.clone(),
-                        message: format!("Failed to load identity keypair: {e}"),
-                        code: "IDENTITY_KEYPAIR_FAILED".to_string(),
-                    })?;
-
-                let pubkey_bytes = public_key.clone().into_bytes().to_vec();
-                if let Some(cached) = self.presence_cache.read().await.get(&pubkey_bytes) {
-                    return Ok(QueryResponse::OurPresenceRecord(Some(
-                        cached.record.clone(),
-                    )));
-                }
-
-                let connection_words = ctx.external_address.or(ctx.listen_address).map(|addr| {
-                    crate::identity::conn_words(&addr).unwrap_or_else(|_| "unknown".to_string())
-                });
-
-                match connection_words {
-                    Some(words) => {
-                        let record = crate::peer_presence::PresenceRecord::new(
-                            &public_key,
-                            &private_key,
-                            words.clone(),
-                        )
-                        .map_err(|e| QueryError {
-                            query_type: query_type.clone(),
-                            message: format!("Failed to sign presence record: {e}"),
-                            code: "PRESENCE_SIGN_FAILED".to_string(),
-                        })?;
-
-                        {
-                            let mut cache = self.presence_cache.write().await;
-                            cache.insert(record.clone());
-                        }
-
-                        Ok(QueryResponse::OurPresenceRecord(Some(record)))
-                    }
-                    None => Ok(QueryResponse::OurPresenceRecord(None)),
-                }
+                let agent_id = ctx.agent_id.clone().unwrap_or_else(|| ctx.four_words.clone());
+                Ok(QueryResponse::OurPresence(Some(PresenceResponse {
+                    agent_id,
+                    status: "online".to_string(),
+                    last_seen: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0),
+                })))
             }
 
-            Query::GetCachedPeerPresence { pubkey } => {
+            Query::GetCachedAgentPresence { agent_id } => {
+                // Check local cache
                 let cache = self.presence_cache.read().await;
-                let record = cache.get(&pubkey).map(|cp| cp.record.clone());
-                Ok(QueryResponse::CachedPeerPresence(record))
+                let record = cache.get(agent_id.as_bytes());
+                match record {
+                    Some(cp) => Ok(QueryResponse::CachedAgentPresence(Some(PresenceResponse {
+                        agent_id,
+                        status: "online".to_string(),
+                        last_seen: cp.record.timestamp as i64,
+                    }))),
+                    None => Ok(QueryResponse::CachedAgentPresence(None)),
+                }
             }
 
             // ================================================================
-            // WebRTC Queries
-            // ================================================================
-            Query::ListActiveCalls => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "WebRTC not initialized".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let calls = webrtc.list_active_calls().await;
-                let responses = calls
-                    .into_iter()
-                    .map(|call| {
-                        let started_at = call
-                            .started_at
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(0);
-
-                        CallResponse {
-                            id: call.call_id.to_string(),
-                            entity_id: String::new(),
-                            participant_count: 2,
-                            started_at,
-                        }
-                    })
-                    .collect();
-
-                Ok(QueryResponse::CallList(responses))
-            }
-
-            Query::GetCallParticipants { call_id } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "WebRTC not initialized".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let uuid = uuid::Uuid::parse_str(&call_id).map_err(|e| QueryError {
-                    query_type: query_type.clone(),
-                    message: format!("Invalid call id: {e}"),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-
-                let participants = webrtc
-                    .get_call_participants(crate::webrtc::CallId(uuid))
-                    .await
-                    .map_err(|e| QueryError {
-                        query_type: query_type.clone(),
-                        message: format!("Failed to get participants: {e}"),
-                        code: "CALL_PARTICIPANTS_FAILED".to_string(),
-                    })?;
-
-                let list = participants
-                    .into_iter()
-                    .map(|identity| identity.four_words)
-                    .collect();
-
-                Ok(QueryResponse::CallParticipants(list))
-            }
-
-            Query::GetCallStatus { call_id } => {
-                let ctx = self.context.read().await;
-                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "WebRTC not initialized".to_string(),
-                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let uuid = uuid::Uuid::parse_str(&call_id).map_err(|e| QueryError {
-                    query_type: query_type.clone(),
-                    message: format!("Invalid call id: {e}"),
-                    code: "INVALID_CALL_ID".to_string(),
-                })?;
-
-                let call_id_typed = crate::webrtc::CallId(uuid);
-
-                let participants =
-                    webrtc
-                        .get_call_participants(call_id_typed)
-                        .await
-                        .map_err(|e| QueryError {
-                            query_type: query_type.clone(),
-                            message: format!("Failed to get call status: {e}"),
-                            code: "CALL_STATUS_FAILED".to_string(),
-                        })?;
-
-                // Get call state - WebRTC manager tracks mute/video state internally
-                // For now, return default state; real implementation would query WebRTC
-                Ok(QueryResponse::CallStatus(CallStatusResponse {
-                    call_id,
-                    entity_id: String::new(), // Would be retrieved from call info
-                    participant_count: participants.len(),
-                    started_at: 0, // Would be retrieved from call info
-                    is_muted: false,
-                    is_video_enabled: false,
-                    is_screen_sharing: false,
-                }))
-            }
-
-            // ================================================================
-            // Contact Queries
+            // Contact Queries (stubbed - migrating to x0x)
             // ================================================================
             Query::GetContact { contact_id } => {
-                let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Try to get by id
-                let contact = gossip
-                    .contact_store
-                    .get_by_id(&contact_id)
-                    .await
-                    .ok_or_else(|| QueryError {
-                        query_type: query_type.clone(),
-                        message: format!("Contact not found: {}", contact_id),
-                        code: "CONTACT_NOT_FOUND".to_string(),
-                    })?;
-
-                let presence_index = {
-                    let presence = gossip.presence.read().await;
-                    presence_by_four_words(&presence).await
-                };
-
-                let (is_online, last_seen) = contact
-                    .four_words
-                    .as_ref()
-                    .and_then(|four_words| presence_index.get(four_words).copied())
-                    .map(|seen| (true, Some(seen)))
-                    .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
-
-                Ok(QueryResponse::Contact(ContactResponse {
-                    id: contact.id.clone(),
-                    display_name: contact.effective_name(),
-                    four_words: contact.four_words.clone(),
-                    is_favourite: contact.is_favourite,
-                    is_online,
-                    created_at: contact.created_at as i64,
-                    last_seen,
-                }))
+                // TODO: query x0x contact storage
+                Err(QueryError {
+                    query_type,
+                    message: format!("Contact not found: {}", contact_id),
+                    code: "CONTACT_NOT_FOUND".to_string(),
+                })
             }
 
             Query::ListContacts => {
-                let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let contacts = gossip.contact_store.all().await;
-                let presence_index = {
-                    let presence = gossip.presence.read().await;
-                    presence_by_four_words(&presence).await
-                };
-
-                let responses: Vec<ContactResponse> = contacts
-                    .into_iter()
-                    .map(|contact| {
-                        let (is_online, last_seen) = contact
-                            .four_words
-                            .as_ref()
-                            .and_then(|four_words| presence_index.get(four_words).copied())
-                            .map(|seen| (true, Some(seen)))
-                            .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
-
-                        ContactResponse {
-                            id: contact.id.clone(),
-                            display_name: contact.effective_name(),
-                            four_words: contact.four_words.clone(),
-                            is_favourite: contact.is_favourite,
-                            is_online,
-                            created_at: contact.created_at as i64,
-                            last_seen,
-                        }
-                    })
-                    .collect();
-
-                Ok(QueryResponse::ContactList(responses))
+                // TODO: query x0x contact storage
+                Ok(QueryResponse::ContactList(Vec::new()))
             }
 
             Query::ListFavouriteContacts => {
-                let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                let favourites = gossip.contact_store.favourites().await;
-                let presence_index = {
-                    let presence = gossip.presence.read().await;
-                    presence_by_four_words(&presence).await
-                };
-
-                let responses: Vec<ContactResponse> = favourites
-                    .into_iter()
-                    .map(|contact| {
-                        let (is_online, last_seen) = contact
-                            .four_words
-                            .as_ref()
-                            .and_then(|four_words| presence_index.get(four_words).copied())
-                            .map(|seen| (true, Some(seen)))
-                            .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
-
-                        ContactResponse {
-                            id: contact.id.clone(),
-                            display_name: contact.effective_name(),
-                            four_words: contact.four_words.clone(),
-                            is_favourite: true,
-                            is_online,
-                            created_at: contact.created_at as i64,
-                            last_seen,
-                        }
-                    })
-                    .collect();
-
-                Ok(QueryResponse::ContactList(responses))
+                // TODO: query x0x contact storage
+                Ok(QueryResponse::ContactList(Vec::new()))
             }
 
-            Query::SearchContacts { query } => {
-                let ctx = self.context.read().await;
-                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
-                    query_type: query_type.clone(),
-                    message: "Networking not started".to_string(),
-                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
-                })?;
-
-                // Simple search - filter all contacts by display name or four_words
-                let all_contacts = gossip.contact_store.all().await;
-                let presence_index = {
-                    let presence = gossip.presence.read().await;
-                    presence_by_four_words(&presence).await
-                };
-                let query_lower = query.to_lowercase();
-
-                let results: Vec<ContactResponse> = all_contacts
-                    .into_iter()
-                    .filter(|c| {
-                        c.effective_name().to_lowercase().contains(&query_lower)
-                            || c.four_words
-                                .as_ref()
-                                .is_some_and(|fw| fw.to_lowercase().contains(&query_lower))
-                    })
-                    .map(|contact| {
-                        let (is_online, last_seen) = contact
-                            .four_words
-                            .as_ref()
-                            .and_then(|four_words| presence_index.get(four_words).copied())
-                            .map(|seen| (true, Some(seen)))
-                            .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
-
-                        ContactResponse {
-                            id: contact.id.clone(),
-                            display_name: contact.effective_name(),
-                            four_words: contact.four_words.clone(),
-                            is_favourite: contact.is_favourite,
-                            is_online,
-                            created_at: contact.created_at as i64,
-                            last_seen,
-                        }
-                    })
-                    .collect();
-
-                Ok(QueryResponse::ContactList(results))
+            Query::SearchContacts { query: _ } => {
+                // TODO: query x0x contact storage
+                Ok(QueryResponse::ContactList(Vec::new()))
             }
 
             Query::GetWebsite { entity_id } => {
@@ -4786,325 +3383,38 @@ impl CommunitasApp {
         }
     }
 
+    /// Publish member update to the network (stub - migrating to x0x)
+    #[allow(dead_code)]
     async fn publish_member_update(
-        gossip: Arc<crate::gossip::GossipContext>,
-        entity_type: EntityType,
+        _entity_type: EntityType,
         entity_id: &str,
         member_id: &str,
         role: Option<&str>,
         updated_by: &str,
         action: MemberUpdateAction,
     ) {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        // TODO: publish member update via x0x daemon
         debug!(
             entity_id,
             member_id,
             role = ?role,
             action = ?action,
             updated_by = %updated_by,
-            timestamp,
-            "Publishing member update"
+            "Member update stub (x0x migration pending)"
         );
-        let update = MemberUpdate {
-            entity_id: entity_id.to_string(),
-            entity_type,
-            member_id: member_id.to_string(),
-            role: role.map(|value| value.to_string()),
-            updated_by: updated_by.to_string(),
-            action,
-            timestamp,
-        };
-        let gossip_msg = GossipMessageType::MemberUpdate(update);
-        let Ok(bytes) = serde_json::to_vec(&gossip_msg) else {
-            warn!("Failed to serialize member update for {}", entity_id);
-            return;
-        };
-
-        if let Err(err) = gossip.join_entity(entity_id, entity_type.as_str()).await {
-            warn!(
-                "Failed to join entity {} before member update: {}",
-                entity_id, err
-            );
-        }
-
-        if let Err(err) = gossip.publish_to_entity(entity_id, bytes.clone()).await {
-            warn!("Failed to publish member update for {}: {}", entity_id, err);
-        }
-
-        let direct_enabled = matches!(
-            std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase()
-                .as_str(),
-            "1" | "true" | "yes"
-        );
-        if direct_enabled
-            && let Err(err) = gossip
-                .direct_publish_member_update(entity_id, bytes.clone())
-                .await
-        {
-            warn!("Direct member update for {} failed: {}", entity_id, err);
-        }
-
-        let direct_gossip = gossip.clone();
-        let direct_entity_id = entity_id.to_string();
-        let direct_member_id = member_id.to_string();
-        let direct_bytes = bytes.clone();
-        tokio::spawn(async move {
-            let discovery = match tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                direct_gossip.find_contact_with_hints(&direct_member_id),
-            )
-            .await
-            {
-                Ok(Ok(result)) => Some(result),
-                Ok(Err(err)) => {
-                    warn!(
-                        "Failed to resolve member {} for direct update on {}: {}",
-                        direct_member_id, direct_entity_id, err
-                    );
-                    None
-                }
-                Err(_) => {
-                    warn!(
-                        "Timed out resolving member {} for direct update on {}",
-                        direct_member_id, direct_entity_id
-                    );
-                    None
-                }
-            };
-
-            if let Some(result) = discovery {
-                for hint in &result.addr_hints {
-                    let addr = hint
-                        .parse::<std::net::SocketAddr>()
-                        .ok()
-                        .or_else(|| crate::identity::conn_from_words(hint).ok());
-                    if let Some(addr) = addr
-                        && let Err(err) = direct_gossip.dial_address(addr).await
-                    {
-                        debug!(
-                            "Dial to member {} at {} before direct update failed: {}",
-                            direct_member_id, addr, err
-                        );
-                    }
-                }
-
-                if let Err(err) = direct_gossip
-                    .direct_send_membership_to_peer(&direct_entity_id, result.peer_id, direct_bytes)
-                    .await
-                {
-                    warn!(
-                        "Direct member update to {} for {} failed: {}",
-                        direct_member_id, direct_entity_id, err
-                    );
-                }
-            }
-        });
-
-        let retry_gossip = gossip.clone();
-        let retry_entity_id = entity_id.to_string();
-        let retry_bytes = bytes.clone();
-        let retry_entity_type = entity_type;
-        let retry_direct_enabled = direct_enabled;
-        tokio::spawn(async move {
-            let delays = [2u64, 5, 10];
-            for delay in delays {
-                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
-                if let Err(err) = retry_gossip
-                    .join_entity(&retry_entity_id, retry_entity_type.as_str())
-                    .await
-                {
-                    warn!(
-                        "Retry join_entity failed for {} (member update): {}",
-                        retry_entity_id, err
-                    );
-                }
-                if let Err(err) = retry_gossip
-                    .publish_to_entity(&retry_entity_id, retry_bytes.clone())
-                    .await
-                {
-                    warn!(
-                        "Retry publish member update failed for {}: {}",
-                        retry_entity_id, err
-                    );
-                }
-                if retry_direct_enabled
-                    && let Err(err) = retry_gossip
-                        .direct_publish_member_update(&retry_entity_id, retry_bytes.clone())
-                        .await
-                {
-                    warn!(
-                        "Retry direct member update failed for {}: {}",
-                        retry_entity_id, err
-                    );
-                }
-            }
-        });
     }
 
+    /// Publish member snapshot to the network (stub - migrating to x0x)
+    #[allow(dead_code)]
     async fn publish_member_snapshot(
-        gossip: Arc<crate::gossip::GossipContext>,
-        entity_service: Arc<crate::EntityService>,
-        entity_type: EntityType,
+        _entity_service: Arc<crate::EntityService>,
+        _entity_type: EntityType,
         entity_id: &str,
-        responder_id: &str,
-        target_member: Option<&str>,
+        _responder_id: &str,
+        _target_member: Option<&str>,
     ) {
-        let updates = match entity_service
-            .get_member_updates(entity_type, entity_id, responder_id)
-            .await
-        {
-            Ok(updates) => updates,
-            Err(err) => {
-                warn!("Failed to build member snapshot for {}: {}", entity_id, err);
-                return;
-            }
-        };
-
-        let response = crate::crdt::MemberSyncResponse {
-            entity_id: entity_id.to_string(),
-            entity_type,
-            responder_peer_id: responder_id.to_string(),
-            updates,
-        };
-        debug!(
-            entity_id,
-            responder_id = %responder_id,
-            update_count = response.updates.len(),
-            target_member = ?target_member,
-            "Publishing member snapshot"
-        );
-        let gossip_msg = crate::crdt::GossipMessageType::MemberSyncResponse(response);
-        let Ok(bytes) = serde_json::to_vec(&gossip_msg) else {
-            warn!("Failed to serialize member snapshot for {}", entity_id);
-            return;
-        };
-
-        if let Err(err) = gossip.publish_to_entity(entity_id, bytes.clone()).await {
-            warn!(
-                "Failed to publish member snapshot for {}: {}",
-                entity_id, err
-            );
-        }
-
-        let direct_enabled = matches!(
-            std::env::var("COMMUNITAS_DIRECT_ENTITY_BROADCAST")
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase()
-                .as_str(),
-            "1" | "true" | "yes"
-        );
-        if direct_enabled
-            && let Err(err) = gossip
-                .direct_publish_membership_message(entity_id, bytes.clone())
-                .await
-        {
-            warn!("Direct member snapshot for {} failed: {}", entity_id, err);
-        }
-
-        let retry_gossip = gossip.clone();
-        let retry_entity_id = entity_id.to_string();
-        let retry_bytes = bytes.clone();
-        let retry_entity_type = entity_type;
-        let retry_direct_enabled = direct_enabled;
-        tokio::spawn(async move {
-            let delays = [2u64, 5, 10];
-            for delay in delays {
-                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
-                if let Err(err) = retry_gossip
-                    .join_entity(&retry_entity_id, retry_entity_type.as_str())
-                    .await
-                {
-                    warn!(
-                        "Retry join_entity failed for {} (member snapshot): {}",
-                        retry_entity_id, err
-                    );
-                }
-                if let Err(err) = retry_gossip
-                    .publish_to_entity(&retry_entity_id, retry_bytes.clone())
-                    .await
-                {
-                    warn!(
-                        "Retry publish member snapshot failed for {}: {}",
-                        retry_entity_id, err
-                    );
-                }
-                if retry_direct_enabled
-                    && let Err(err) = retry_gossip
-                        .direct_publish_membership_message(&retry_entity_id, retry_bytes.clone())
-                        .await
-                {
-                    warn!(
-                        "Retry direct member snapshot failed for {}: {}",
-                        retry_entity_id, err
-                    );
-                }
-            }
-        });
-
-        if let Some(member_id) = target_member {
-            let gossip = gossip.clone();
-            let entity_id = entity_id.to_string();
-            let member_id = member_id.to_string();
-            let bytes = bytes.clone();
-            tokio::spawn(async move {
-                let discovery = match tokio::time::timeout(
-                    std::time::Duration::from_secs(5),
-                    gossip.find_contact_with_hints(&member_id),
-                )
-                .await
-                {
-                    Ok(Ok(result)) => Some(result),
-                    Ok(Err(err)) => {
-                        warn!(
-                            "Failed to resolve member {} for snapshot on {}: {}",
-                            member_id, entity_id, err
-                        );
-                        None
-                    }
-                    Err(_) => {
-                        warn!(
-                            "Timed out resolving member {} for snapshot on {}",
-                            member_id, entity_id
-                        );
-                        None
-                    }
-                };
-
-                if let Some(result) = discovery {
-                    for hint in &result.addr_hints {
-                        let addr = hint
-                            .parse::<std::net::SocketAddr>()
-                            .ok()
-                            .or_else(|| crate::identity::conn_from_words(hint).ok());
-                        if let Some(addr) = addr
-                            && let Err(err) = gossip.dial_address(addr).await
-                        {
-                            debug!(
-                                "Dial to member {} at {} before snapshot failed: {}",
-                                member_id, addr, err
-                            );
-                        }
-                    }
-
-                    if let Err(err) = gossip
-                        .direct_send_membership_to_peer(&entity_id, result.peer_id, bytes)
-                        .await
-                    {
-                        warn!(
-                            "Direct member snapshot to {} for {} failed: {}",
-                            member_id, entity_id, err
-                        );
-                    }
-                }
-            });
-        }
+        // TODO: publish member snapshot via x0x daemon
+        debug!(entity_id, "Member snapshot stub (x0x migration pending)");
     }
 }
 
@@ -5132,7 +3442,7 @@ fn entity_to_response(entity: &crate::entity_service::Entity) -> EntityResponse 
         created_at: entity.created_at,
         member_count: entity.members.len(),
         parent_org_id: entity.parent_org_id.clone(),
-        network_four_words: entity.network_four_words.clone(),
+        network_agent_id: entity.network_four_words.clone(),
         is_local_only: entity.is_local_only,
     }
 }
@@ -5223,11 +3533,11 @@ mod tests {
 
         match response {
             QueryResponse::Profile {
-                four_words,
+                agent_id,
                 display_name,
                 ..
             } => {
-                assert_eq!(four_words, "ocean-forest-moon-star");
+                assert_eq!(agent_id, "ocean-forest-moon-star");
                 assert_eq!(display_name, "Test User");
             }
             _ => panic!("Unexpected response type"),

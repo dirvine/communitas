@@ -12,7 +12,6 @@ use dioxus::prelude::*;
 pub enum EntityTab {
     Board,
     Chat,
-    Call,
     Canvas,
     Drive,
     Documents,
@@ -24,7 +23,6 @@ impl EntityTab {
         match self {
             Self::Board => "Board",
             Self::Chat => "Chat",
-            Self::Call => "Call",
             Self::Canvas => "Canvas",
             Self::Drive => "Drive",
             Self::Documents => "Docs",
@@ -36,7 +34,6 @@ impl EntityTab {
         match self {
             Self::Board => "☰",
             Self::Chat => "💬",
-            Self::Call => "📞",
             Self::Canvas => "🎨",
             Self::Drive => "📁",
             Self::Documents => "📄",
@@ -57,22 +54,21 @@ impl EntityTab {
             UnifiedEntityType::Project => vec![
                 Self::Board,
                 Self::Chat,
-                Self::Call,
                 Self::Canvas,
                 Self::Drive,
                 Self::Documents,
                 Self::Details,
             ],
             UnifiedEntityType::Channel => {
-                vec![Self::Chat, Self::Call, Self::Drive]
+                vec![Self::Chat, Self::Drive]
             }
             UnifiedEntityType::Organization => {
-                vec![Self::Chat, Self::Call, Self::Drive, Self::Details]
+                vec![Self::Chat, Self::Drive, Self::Details]
             }
             UnifiedEntityType::Group => {
-                vec![Self::Chat, Self::Call, Self::Drive]
+                vec![Self::Chat, Self::Drive]
             }
-            UnifiedEntityType::Person => vec![Self::Chat, Self::Call],
+            UnifiedEntityType::Person => vec![Self::Chat],
         }
     }
 
@@ -81,7 +77,6 @@ impl EntityTab {
         &[
             Self::Board,
             Self::Chat,
-            Self::Call,
             Self::Canvas,
             Self::Drive,
             Self::Documents,

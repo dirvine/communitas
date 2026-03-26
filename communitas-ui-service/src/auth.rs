@@ -341,13 +341,13 @@ impl AuthController {
     /// Spawn network start in background (non-blocking)
     fn spawn_network_start(api: CommunitasApi) {
         tokio::spawn(async move {
-            if let Err(err) = api.gossip_start(None).await {
+            if let Err(err) = api.ensure_daemon().await {
                 warn!(
                     target = "ui.auth",
-                    "failed to start gossip (non-fatal): {err}"
+                    "failed to ensure daemon (non-fatal): {err}"
                 );
             } else {
-                info!(target = "ui.auth", "gossip runtime started");
+                info!(target = "ui.auth", "daemon started");
             }
         });
     }
@@ -634,9 +634,7 @@ impl AuthService for AuthController {
         let mut inner = self.inner.write().await;
         let temp_root = inner.temp_root.take();
         if let Some(api) = inner.api.take() {
-            if let Err(err) = api.gossip_stop().await {
-                warn!("failed to stop gossip: {err}");
-            }
+            // Daemon lifecycle is managed independently; no explicit stop needed.
             if let Err(err) = api.auth_logout().await {
                 warn!("failed to logout: {err}");
             }

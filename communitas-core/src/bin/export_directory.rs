@@ -60,12 +60,12 @@ async fn main() -> Result<()> {
 
     let profile = match app.query(Query::GetProfile).await? {
         QueryResponse::Profile {
-            four_words,
+            agent_id,
             display_name,
             device_name,
             device_type,
         } => Profile {
-            four_words,
+            four_words: agent_id,
             display_name,
             device_name,
             device_type,

@@ -2,15 +2,14 @@
 resolver = "2"
 members = [
     "communitas-core",
-    "communitas-dioxus",    # Dioxus desktop prototype
-    "communitas-headless",  # Bootstrap nodes
-    "communitas-p2p-test",
-    "communitas-kanban",    # CRDT-based Kanban system
-    "communitas-mcp",       # MCP server for AI agent control (HTTP/HTTPS + stdio)
-    "communitas-ui-api",    # Shared view models for GUI stacks
-    "tests/distributed/orchestrator", "communitas-ui-service",  # Distributed test orchestrator
-    "communitas-bench",  # Distributed test orchestrator
-    "communitas-workspace-hack",      # Criterion benchmarks
+    "communitas-dioxus",
+    "communitas-headless",
+    "communitas-kanban",
+    "communitas-ui-api",
+    "communitas-ui-service",
+    "communitas-bench",
+    "communitas-workspace-hack",
+    "communitas-x0x-client",
 ]
 
 [workspace.package]
@@ -22,49 +21,14 @@ repository = "https://github.com/saorsalabs/communitas"
 homepage = "https://communitas.life"
 
 [workspace.dependencies]
-# Saorsa Core ecosystem (will be phased out in favor of saorsa-gossip)
-# Removed: saorsa-core - migrated to saorsa-gossip-* architecture
-saorsa-mls = "0.1.5"
-saorsa-rsps = "0.2.0"
-saorsa-pqc = "0.4.0"
-
-# Saorsa Gossip ecosystem - updated to 0.5.1
-saorsa-gossip-types = "0.5.5"
-saorsa-gossip-identity = "0.5.5"
-saorsa-gossip-crdt-sync = "0.5.5"
-saorsa-gossip-groups = "0.5.5"
-saorsa-gossip-presence = "0.5.5"
-saorsa-gossip-transport = "0.5.5"
-saorsa-gossip-membership = "0.5.5"
-saorsa-gossip-pubsub = "0.5.5"
-saorsa-gossip-coordinator = "0.5.5"
-saorsa-gossip-rendezvous = "0.5.5"
-saorsa-gossip-runtime = "0.5.5"
-# Security: openh264-sys2 0.9.x requires rustc 1.88+, using 0.8.0 until CI upgrades
-openh264-sys2 = "0.8.0"
-
-# Real-time multimedia (WebRTC over QUIC)
-saorsa-webrtc-core = "0.3.0"
-saorsa-webrtc-codecs = "0.3.0"
-
-# Networking
-four-word-networking = "2.6"
-
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
 
-# Web framework (for bridge server)
-axum = "0.7"
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
-
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-postcard = { version = "1.1.3", features = ["use-std"] }
-toml = "0.8"
 
 # Error handling
 anyhow = "1.0"
@@ -100,8 +64,6 @@ yrs = { version = "0.19", features = ["sync"] }
 # Using crates.io version for publishing compatibility
 canvas-core = { version = "0.1.2", default-features = false, features = ["std"] }
 
-# Security patches for transitive dependencies
-
 [profile.release]
 opt-level = 3
 lto = "thin"
@@ -110,6 +72,3 @@ strip = true
 
 [profile.dev]
 opt-level = 0
-
-# [patch.crates-io] removed — all dependencies use published crates.io versions
-# saorsa-gossip-* 0.5.1 and ant-quic 0.22.2 are published and match local

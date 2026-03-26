@@ -2,7 +2,6 @@
 
 pub mod audit;
 pub mod auth;
-pub mod call;
 pub mod canvas;
 pub mod canvas_convert;
 pub mod contacts;
@@ -21,7 +20,6 @@ use std::sync::Arc;
 
 use audit::AuditService;
 use auth::AuthController;
-use call::{CallService, DeviceEnumerator, ScreenSourceEnumerator};
 use canvas::CanvasService;
 use communitas_core::app::CommunitasApp;
 use communitas_core::generate_id_words;
@@ -47,64 +45,7 @@ pub struct UiServices {
     kanban: Arc<KanbanService>,
     canvas: Arc<CanvasService>,
     drive: Arc<DriveService>,
-    call: Arc<CallService>,
     audit: Arc<AuditService>,
-}
-
-impl UiServices {
-    /// Start a background task that syncs call state to presence.
-    ///
-    /// This should be called after UiServices is constructed to enable
-    /// automatic presence updates when users join/leave calls or start
-    /// screen sharing.
-    pub fn start_call_presence_sync(&self) {
-        let call = self.call.clone();
-        let presence = self.presence.clone();
-
-        tokio::spawn(async move {
-            let mut rx = call.subscribe();
-            loop {
-                if rx.changed().await.is_err() {
-                    break;
-                }
-                let snapshot = rx.borrow().clone();
-
-                // Update presence for each participant in the call
-                let updates: Vec<(String, bool, Option<String>)> = snapshot
-                    .participants
-                    .iter()
-                    .map(|p| {
-                        let call_name = snapshot
-                            .call_info
-                            .as_ref()
-                            .map(|c| c.entity_id.clone())
-                            .unwrap_or_default();
-                        (p.id.clone(), true, Some(call_name))
-                    })
-                    .collect();
-
-                if !updates.is_empty() {
-                    presence.batch_update_call_status(updates);
-                }
-
-                // Update screen sharing status for participants
-                let screen_updates: Vec<(String, bool)> = snapshot
-                    .participants
-                    .iter()
-                    .map(|p| (p.id.clone(), p.is_screen_sharing))
-                    .collect();
-
-                if !screen_updates.is_empty() {
-                    presence.batch_update_screen_sharing(screen_updates);
-                }
-
-                // If no longer in a call, clear all call statuses
-                if !snapshot.state.is_active() {
-                    presence.clear_all_call_status();
-                }
-            }
-        });
-    }
 }
 
 impl UiServices {
@@ -259,7 +200,6 @@ impl UiServices {
             app.clone(),
             Some(Arc::new(storage.clone())),
         ));
-        let call = Arc::new(CallService::new(auth.clone(), app.clone()));
         let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
         Ok(Self {
             storage,
@@ -272,290 +212,8 @@ impl UiServices {
             kanban,
             canvas,
             drive,
-            call,
             audit,
         })
-    }
-
-    /// Create services with a custom device enumerator for call functionality.
-    ///
-    /// Use this method when you have a platform-specific device enumerator
-    /// (e.g., using `cpal` for audio devices) to enable real media device
-    /// discovery.
-    ///
-    /// # Arguments
-    ///
-    /// * `storage` - The storage configuration
-    /// * `app` - The Communitas core application instance
-    /// * `device_enumerator` - Platform-specific device enumerator implementation
-    ///
-    /// # Errors
-    /// Returns [`UiServiceInitError`] if the auth controller or navigation store
-    /// cannot be initialized from the provided storage.
-    pub fn new_with_device_enumerator(
-        storage: UiStorage,
-        app: Arc<CommunitasApp>,
-        device_enumerator: Arc<dyn DeviceEnumerator>,
-    ) -> Result<Self, UiServiceInitError> {
-        let auth = Arc::new(AuthController::new(storage.clone())?);
-        let navigation = Arc::new(NavigationStore::new(storage.clone())?);
-        let directory = Arc::new(DirectoryService::new(auth.clone()));
-        let storage_arc = Arc::new(storage.clone());
-        let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
-        let messaging = Arc::new(MessagingService::new(
-            auth.clone(),
-            app.clone(),
-            storage_arc,
-            presence.subscribe(),
-        ));
-        let kanban = Arc::new(KanbanService::new(
-            auth.clone(),
-            app.clone(),
-            directory.clone(),
-        ));
-        let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
-        let drive = Arc::new(DriveService::with_storage(
-            auth.clone(),
-            app.clone(),
-            Some(Arc::new(storage.clone())),
-        ));
-        let call = Arc::new(CallService::with_device_enumerator(
-            auth.clone(),
-            app.clone(),
-            device_enumerator,
-            Some(storage.call_history_file()),
-        ));
-        let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
-        Ok(Self {
-            storage,
-            app,
-            auth,
-            navigation,
-            directory,
-            messaging,
-            presence,
-            kanban,
-            canvas,
-            drive,
-            call,
-            audit,
-        })
-    }
-
-    /// Create services with custom device and screen source enumerators.
-    ///
-    /// This is the most flexible constructor for production use with platform-specific
-    /// device and screen capture enumeration.
-    ///
-    /// # Arguments
-    ///
-    /// * `storage` - The storage configuration
-    /// * `app` - The Communitas core application instance
-    /// * `device_enumerator` - Platform-specific device enumerator implementation
-    /// * `screen_source_enumerator` - Platform-specific screen source enumerator
-    ///
-    /// # Errors
-    /// Returns [`UiServiceInitError`] if the auth controller or navigation store
-    /// cannot be initialized from the provided storage.
-    pub fn new_with_enumerators(
-        storage: UiStorage,
-        app: Arc<CommunitasApp>,
-        device_enumerator: Arc<dyn DeviceEnumerator>,
-        screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
-    ) -> Result<Self, UiServiceInitError> {
-        let auth = Arc::new(AuthController::new(storage.clone())?);
-        let navigation = Arc::new(NavigationStore::new(storage.clone())?);
-        let directory = Arc::new(DirectoryService::new(auth.clone()));
-        let storage_arc = Arc::new(storage.clone());
-        let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
-        let messaging = Arc::new(MessagingService::new(
-            auth.clone(),
-            app.clone(),
-            storage_arc,
-            presence.subscribe(),
-        ));
-        let kanban = Arc::new(KanbanService::new(
-            auth.clone(),
-            app.clone(),
-            directory.clone(),
-        ));
-        let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
-        let drive = Arc::new(DriveService::with_storage(
-            auth.clone(),
-            app.clone(),
-            Some(Arc::new(storage.clone())),
-        ));
-        let call = Arc::new(CallService::with_enumerators(
-            auth.clone(),
-            app.clone(),
-            device_enumerator,
-            screen_source_enumerator,
-            Some(storage.call_history_file()),
-        ));
-        let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
-        Ok(Self {
-            storage,
-            app,
-            auth,
-            navigation,
-            directory,
-            messaging,
-            presence,
-            kanban,
-            canvas,
-            drive,
-            call,
-            audit,
-        })
-    }
-
-    /// Bootstrap with a custom device enumerator (async).
-    ///
-    /// This is the recommended way to initialize UiServices when you have
-    /// platform-specific device enumeration and are running in an async context.
-    ///
-    /// # Errors
-    /// Returns an error if storage discovery fails or the app cannot be initialized.
-    #[tracing::instrument(name = "bootstrap_with_device_enumerator_async", skip_all)]
-    pub async fn bootstrap_with_device_enumerator_async(
-        device_enumerator: Arc<dyn DeviceEnumerator>,
-    ) -> Result<Self, UiServiceInitError> {
-        let storage = UiStorage::discover()?;
-        let storage_path = storage.root_string()?;
-
-        let id_words =
-            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        tracing::info!("Creating CommunitasApp with device enumerator");
-        let app = CommunitasApp::new(
-            id_words,
-            "Bootstrap User".to_string(),
-            "Desktop".to_string(),
-            storage_path,
-        )
-        .await
-        .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        Self::new_with_device_enumerator(storage, Arc::new(app), device_enumerator)
-    }
-
-    /// Bootstrap with a custom device enumerator.
-    ///
-    /// This is the recommended way to initialize UiServices when you have
-    /// platform-specific device enumeration. It combines the auto-discovery
-    /// of storage and bootstrap identity with real device support.
-    ///
-    /// **Note**: Prefer `bootstrap_with_device_enumerator_async()` when running
-    /// in an async context to avoid creating a nested Tokio runtime.
-    ///
-    /// # Errors
-    /// Returns an error if storage discovery fails or the app cannot be initialized.
-    #[tracing::instrument(name = "bootstrap_with_device_enumerator_sync", skip_all)]
-    pub fn bootstrap_with_device_enumerator(
-        device_enumerator: Arc<dyn DeviceEnumerator>,
-    ) -> Result<Self, UiServiceInitError> {
-        let storage = UiStorage::discover()?;
-        let storage_path = storage.root_string()?;
-
-        let id_words =
-            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| UiServiceInitError::AppInit(format!("failed to create runtime: {e}")))?;
-
-        let app = rt
-            .block_on(async {
-                CommunitasApp::new(
-                    id_words,
-                    "Bootstrap User".to_string(),
-                    "Desktop".to_string(),
-                    storage_path,
-                )
-                .await
-            })
-            .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        Self::new_with_device_enumerator(storage, Arc::new(app), device_enumerator)
-    }
-
-    /// Bootstrap with custom device and screen source enumerators (async).
-    ///
-    /// This is the most flexible bootstrap for production use with platform-specific
-    /// device and screen capture enumeration when running in an async context.
-    ///
-    /// # Errors
-    /// Returns an error if storage discovery fails or the app cannot be initialized.
-    #[tracing::instrument(name = "bootstrap_with_enumerators_async", skip_all)]
-    pub async fn bootstrap_with_enumerators_async(
-        device_enumerator: Arc<dyn DeviceEnumerator>,
-        screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
-    ) -> Result<Self, UiServiceInitError> {
-        let storage = UiStorage::discover()?;
-        let storage_path = storage.root_string()?;
-
-        let id_words =
-            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        tracing::info!("Creating CommunitasApp with device and screen enumerators");
-        let app = CommunitasApp::new(
-            id_words,
-            "Bootstrap User".to_string(),
-            "Desktop".to_string(),
-            storage_path,
-        )
-        .await
-        .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        Self::new_with_enumerators(
-            storage,
-            Arc::new(app),
-            device_enumerator,
-            screen_source_enumerator,
-        )
-    }
-
-    /// Bootstrap with custom device and screen source enumerators.
-    ///
-    /// This is the most flexible bootstrap for production use with platform-specific
-    /// device and screen capture enumeration.
-    ///
-    /// **Note**: Prefer `bootstrap_with_enumerators_async()` when running
-    /// in an async context to avoid creating a nested Tokio runtime.
-    ///
-    /// # Errors
-    /// Returns an error if storage discovery fails or the app cannot be initialized.
-    #[tracing::instrument(name = "bootstrap_with_enumerators_sync", skip_all)]
-    pub fn bootstrap_with_enumerators(
-        device_enumerator: Arc<dyn DeviceEnumerator>,
-        screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
-    ) -> Result<Self, UiServiceInitError> {
-        let storage = UiStorage::discover()?;
-        let storage_path = storage.root_string()?;
-
-        let id_words =
-            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| UiServiceInitError::AppInit(format!("failed to create runtime: {e}")))?;
-
-        let app = rt
-            .block_on(async {
-                CommunitasApp::new(
-                    id_words,
-                    "Bootstrap User".to_string(),
-                    "Desktop".to_string(),
-                    storage_path,
-                )
-                .await
-            })
-            .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
-
-        Self::new_with_enumerators(
-            storage,
-            Arc::new(app),
-            device_enumerator,
-            screen_source_enumerator,
-        )
     }
 
     /// Access the storage configuration.
@@ -603,11 +261,6 @@ impl UiServices {
         self.drive.clone()
     }
 
-    /// Real-time voice/video call service.
-    pub fn call(&self) -> Arc<CallService> {
-        self.call.clone()
-    }
-
     /// Security audit log service.
     pub fn audit(&self) -> Arc<AuditService> {
         self.audit.clone()
@@ -630,12 +283,12 @@ impl UiServices {
     /// Returns an error if networking is already active or fails to start.
     pub async fn start_networking(
         &self,
-        preferred_port: Option<u16>,
+        _preferred_port: Option<u16>,
     ) -> Result<(), UiServiceInitError> {
         use communitas_core::command::Command;
 
         self.app
-            .execute(Command::StartNetworking { preferred_port })
+            .execute(Command::EnsureDaemon)
             .await
             .map_err(|e| UiServiceInitError::AppInit(format!("networking start failed: {e}")))?;
 
@@ -648,14 +301,8 @@ impl UiServices {
     /// # Errors
     /// Returns an error if networking fails to stop.
     pub async fn stop_networking(&self) -> Result<(), UiServiceInitError> {
-        use communitas_core::command::Command;
-
-        self.app
-            .execute(Command::StopNetworking)
-            .await
-            .map_err(|e| UiServiceInitError::AppInit(format!("networking stop failed: {e}")))?;
-
-        tracing::info!("Networking stopped");
+        // Daemon lifecycle is managed independently; stop is a no-op.
+        tracing::info!("Networking stop requested (daemon runs independently)");
         Ok(())
     }
 }
@@ -715,7 +362,6 @@ mod tests {
         let _ = services.kanban();
         let _ = services.canvas();
         let _ = services.drive();
-        let _ = services.call();
         let _ = services.audit();
     }
 

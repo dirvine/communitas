@@ -250,12 +250,12 @@ impl CommunitasApi {
     pub async fn get_profile(&self) -> Result<UiUserProfile, String> {
         match execute_query(&self.app, Query::GetProfile).await? {
             QueryResponse::Profile {
-                four_words,
+                agent_id,
                 display_name,
                 device_name,
                 device_type,
             } => Ok(UiUserProfile {
-                four_words,
+                four_words: agent_id,
                 display_name,
                 device_name,
                 device_type,
@@ -269,69 +269,40 @@ impl CommunitasApi {
     }
 
     // =====================
-    // Networking (Gossip)
+    // Networking (x0x daemon)
     // =====================
 
-    pub async fn gossip_start(&self, port: Option<u16>) -> Result<Vec<UiEvent>, String> {
+    /// Ensure the x0x daemon is running
+    pub async fn ensure_daemon(&self) -> Result<Vec<UiEvent>, String> {
+        execute_command(&self.app, Command::EnsureDaemon).await
+    }
+
+    /// Connect to a remote agent by agent ID
+    pub async fn connect_to_agent(&self, agent_id: String) -> Result<Vec<UiEvent>, String> {
         execute_command(
             &self.app,
-            Command::StartNetworking {
-                preferred_port: port,
-            },
+            Command::ConnectToAgent { agent_id },
         )
         .await
     }
 
-    pub async fn gossip_stop(&self) -> Result<Vec<UiEvent>, String> {
-        execute_command(&self.app, Command::StopNetworking).await
-    }
-
-    pub async fn gossip_connect_to_peer(&self, four_words: String) -> Result<Vec<UiEvent>, String> {
-        execute_command(
-            &self.app,
-            Command::ConnectToPeer {
-                peer_four_words: four_words,
-            },
-        )
-        .await
-    }
-
+    /// Get network info (stubbed - migrating to x0x)
     pub async fn gossip_get_network_info(&self) -> Result<UiNetworkInfo, String> {
-        let ctx = self.app.context();
-        let ctx = ctx.read().await;
-        let is_active = ctx.is_networking_active();
-        let bound_port = ctx.listen_address.map(|addr| addr.port());
-        let external_address = ctx.external_address.map(|addr| addr.to_string());
-
-        let peer_count = if let Some(gossip) = ctx.gossip.as_ref() {
-            let membership = gossip.membership.read().await;
-            membership.active_view().len() as i32
-        } else {
-            0
-        };
-
-        // Get bootstrap node count from peer cache
-        let bootstrap_count = if let Some(gossip) = ctx.gossip.as_ref() {
-            gossip.peer_cache.seed_addresses().await.len() as i32
-        } else {
-            0
-        };
-
-        let bootstrap_connected = peer_count > 0;
-
+        // TODO: query x0x daemon for network info
         Ok(UiNetworkInfo {
-            is_active,
-            bound_port,
-            peer_count,
-            external_address,
-            bootstrap_connected,
-            bootstrap_count,
+            is_active: false,
+            bound_port: None,
+            peer_count: 0,
+            external_address: None,
+            bootstrap_connected: false,
+            bootstrap_count: 0,
         })
     }
 
-    pub async fn gossip_get_connection_words(&self) -> Result<Option<String>, String> {
-        match execute_query(&self.app, Query::GetConnectionWords).await? {
-            QueryResponse::OptionalString(words) => Ok(words),
+    /// Get agent identity
+    pub async fn get_agent_identity(&self) -> Result<Option<String>, String> {
+        match execute_query(&self.app, Query::GetAgentIdentity).await? {
+            QueryResponse::OptionalString(id) => Ok(id),
             _ => Err("Unexpected response for GetConnectionWords".to_string()),
         }
     }
@@ -685,14 +656,14 @@ impl CommunitasApi {
     pub async fn contact_create(
         &self,
         display_name: String,
-        four_words: Option<String>,
+        agent_id: Option<String>,
         is_favourite: bool,
     ) -> Result<Vec<UiEvent>, String> {
         execute_command(
             &self.app,
             Command::CreateContact {
                 display_name,
-                four_words,
+                agent_id,
                 is_favourite,
             },
         )
@@ -723,27 +694,27 @@ impl CommunitasApi {
     pub async fn contact_link(
         &self,
         contact_id: String,
-        four_words: String,
+        agent_id: String,
     ) -> Result<Vec<UiEvent>, String> {
         execute_command(
             &self.app,
             Command::LinkContact {
                 contact_id,
-                four_words,
+                agent_id,
             },
         )
         .await
     }
 
-    pub async fn contact_set_favourite(&self, four_words: String) -> Result<Vec<UiEvent>, String> {
-        execute_command(&self.app, Command::SetFavouriteContact { four_words }).await
+    pub async fn contact_set_favourite(&self, agent_id: String) -> Result<Vec<UiEvent>, String> {
+        execute_command(&self.app, Command::SetFavouriteContact { agent_id }).await
     }
 
     pub async fn contact_remove_favourite(
         &self,
-        four_words: String,
+        agent_id: String,
     ) -> Result<Vec<UiEvent>, String> {
-        execute_command(&self.app, Command::RemoveFavouriteContact { four_words }).await
+        execute_command(&self.app, Command::RemoveFavouriteContact { agent_id }).await
     }
 
     // =====================
@@ -754,54 +725,34 @@ impl CommunitasApi {
         execute_command(&self.app, Command::AnnouncePresence).await
     }
 
-    pub async fn presence_get_our_record(&self) -> Result<Option<UiPresenceRecord>, String> {
-        match execute_query(&self.app, Query::GetOurPresenceRecord).await? {
-            QueryResponse::OurPresenceRecord(record) => Ok(record.map(UiPresenceRecord::from)),
-            _ => Err("Unexpected response for GetOurPresenceRecord".to_string()),
+    pub async fn presence_get_our_status(&self) -> Result<Option<UiPresenceStatus>, String> {
+        match execute_query(&self.app, Query::GetOurPresence).await? {
+            QueryResponse::OurPresence(presence) => Ok(presence.map(UiPresenceStatus::from)),
+            _ => Err("Unexpected response for GetOurPresence".to_string()),
         }
     }
 
-    pub async fn presence_get_status(&self, peer_id: String) -> Result<UiPresenceStatus, String> {
-        match execute_query(&self.app, Query::GetPresence { peer_id }).await? {
+    pub async fn presence_get_status(&self, agent_id: String) -> Result<UiPresenceStatus, String> {
+        match execute_query(&self.app, Query::GetPresence { agent_id }).await? {
             QueryResponse::Presence(presence) => Ok(UiPresenceStatus::from(presence)),
             _ => Err("Unexpected response for GetPresence".to_string()),
         }
     }
 
-    pub async fn presence_get_cached_peer(
+    pub async fn presence_get_cached_agent(
         &self,
-        pubkey_hex: String,
-    ) -> Result<Option<UiPresenceRecord>, String> {
-        let bytes = hex::decode(pubkey_hex).map_err(|e| format!("Invalid pubkey hex: {e}"))?;
-        match execute_query(&self.app, Query::GetCachedPeerPresence { pubkey: bytes }).await? {
-            QueryResponse::CachedPeerPresence(record) => Ok(record.map(UiPresenceRecord::from)),
-            _ => Err("Unexpected response for GetCachedPeerPresence".to_string()),
+        agent_id: String,
+    ) -> Result<Option<UiPresenceStatus>, String> {
+        match execute_query(&self.app, Query::GetCachedAgentPresence { agent_id }).await? {
+            QueryResponse::CachedAgentPresence(presence) => Ok(presence.map(UiPresenceStatus::from)),
+            _ => Err("Unexpected response for GetCachedAgentPresence".to_string()),
         }
     }
 
-    pub async fn presence_query_peer(
-        &self,
-        pubkey_hex: String,
-    ) -> Result<Option<UiPresenceRecord>, String> {
-        let bytes = hex::decode(&pubkey_hex).map_err(|e| format!("Invalid pubkey hex: {e}"))?;
-        let _ = execute_command(
-            &self.app,
-            Command::QueryPeerPresence {
-                target_pubkey: bytes.clone(),
-            },
-        )
-        .await?;
-
-        match execute_query(&self.app, Query::GetCachedPeerPresence { pubkey: bytes }).await? {
-            QueryResponse::CachedPeerPresence(record) => Ok(record.map(UiPresenceRecord::from)),
-            _ => Err("Unexpected response for GetCachedPeerPresence".to_string()),
-        }
-    }
-
-    pub async fn presence_list_online_peers(&self) -> Result<Vec<String>, String> {
-        match execute_query(&self.app, Query::ListOnlinePeers).await? {
-            QueryResponse::PeerList(peers) => Ok(peers),
-            _ => Err("Unexpected response for ListOnlinePeers".to_string()),
+    pub async fn presence_list_online_agents(&self) -> Result<Vec<String>, String> {
+        match execute_query(&self.app, Query::ListOnlineAgents).await? {
+            QueryResponse::AgentList(agents) => Ok(agents),
+            _ => Err("Unexpected response for ListOnlineAgents".to_string()),
         }
     }
 
@@ -1230,7 +1181,7 @@ impl From<EntityResponse> for UiEntity {
             created_at: value.created_at,
             member_count: value.member_count as u64,
             parent_org_id: value.parent_org_id,
-            network_four_words: value.network_four_words,
+            network_four_words: value.network_agent_id,
             is_local_only: value.is_local_only,
         }
     }
@@ -1543,7 +1494,7 @@ impl From<ContactResponse> for UiContact {
         Self {
             id: value.id,
             display_name: value.display_name,
-            four_words: value.four_words,
+            four_words: value.agent_id,
             is_favourite: value.is_favourite,
             is_online: value.is_online,
             created_at: value.created_at,
@@ -1677,12 +1628,11 @@ pub struct UiPresenceRecord {
 
 impl From<PresenceRecord> for UiPresenceRecord {
     fn from(value: PresenceRecord) -> Self {
-        let verified = value.verify().unwrap_or(false);
         Self {
             pubkey_hex: hex::encode(&value.pubkey),
             connection_words: value.connection_words,
             timestamp: value.timestamp,
-            is_verified: verified,
+            is_verified: false, // x0x handles verification
         }
     }
 }
@@ -1698,7 +1648,7 @@ pub struct UiPresenceStatus {
 impl From<PresenceResponse> for UiPresenceStatus {
     fn from(value: PresenceResponse) -> Self {
         Self {
-            peer_id: value.peer_id,
+            peer_id: value.agent_id,
             status: value.status,
             last_seen: value.last_seen,
         }
@@ -1738,23 +1688,16 @@ async fn execute_query(app: &Arc<CommunitasApp>, query: Query) -> Result<QueryRe
 
 fn map_event(event: Event) -> Option<UiEvent> {
     match event {
-        Event::NetworkingStarted {
-            listen_address,
-            connection_identity,
-        } => Some(UiEvent::NetworkingStarted {
-            address: if !connection_identity.is_empty() {
-                connection_identity
-            } else {
-                listen_address
-            },
+        Event::DaemonRunning { agent_id } => Some(UiEvent::NetworkingStarted {
+            address: agent_id,
         }),
-        Event::NetworkingStopped => Some(UiEvent::NetworkingStopped),
-        Event::PeerConnected { peer_four_words } => Some(UiEvent::PeerConnected {
-            peer_id: peer_four_words,
+        Event::DaemonStopped => Some(UiEvent::NetworkingStopped),
+        Event::AgentConnected { agent_id } => Some(UiEvent::PeerConnected {
+            peer_id: agent_id,
         }),
-        Event::ConnectionFailed { reason, .. } => Some(UiEvent::Error {
+        Event::AgentConnectionFailed { agent_id, reason } => Some(UiEvent::Error {
             code: "CONNECTION_FAILED".to_string(),
-            message: reason,
+            message: format!("Failed to connect to {}: {}", agent_id, reason),
         }),
         Event::EntityCreated { entity_id, .. } => Some(UiEvent::EntityCreated { entity_id }),
         Event::EntityUpdated { entity_id, .. } => Some(UiEvent::EntityUpdated { entity_id }),

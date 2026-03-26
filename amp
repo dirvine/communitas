@@ -1,4 +1,0 @@
-[1m[32m    Checking[0m communitas-core v0.1.20 (/Users/davidirvine/Desktop/Devel/projects/communitas/communitas-core)
-[0m[1m[38;5;9merror[0m[0m[1m: multiple input filenames provided (first two filenames are `communitas-core/src/lib.rs` and `2`)[0m
-
-[1m[31merror[0m[1m:[0m could not compile `communitas-core` (lib) due to 1 previous error

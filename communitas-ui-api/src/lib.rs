@@ -8,17 +8,12 @@
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
-pub mod call;
 pub mod canvas;
 pub mod drive;
 pub mod kanban;
 pub mod messaging;
 pub mod sync;
 
-pub use call::{
-    CallInfo, CallSettings, CallSnapshot, CallState, DeviceType, MediaDevice, MediaError,
-    MediaErrorKind, Participant,
-};
 pub use canvas::{
     CanvasElement, CanvasInfo, CanvasSnapshot, CanvasState, ElementType, HistoryActionType,
     HistoryEntry, Layer, OfflineOperation, OfflineStatus, OperationType, Point, RemoteCursor,

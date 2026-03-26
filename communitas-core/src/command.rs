@@ -47,10 +47,10 @@
 
 use crate::crdt::EntityType;
 use crate::invite::InviteStatus;
-use crate::peer_presence::{
-    PresenceQuery as PeerPresenceQuery, PresenceRecord as PeerPresenceRecord,
-};
 use serde::{Deserialize, Serialize};
+
+/// x0x agent identifier (64-character hex string).
+pub type AgentId = String;
 
 // ============================================================================
 // Commands - All mutations to application state
@@ -70,7 +70,7 @@ pub enum Command {
     // ========================================================================
     /// Initialize the application with a new or existing identity
     Initialize {
-        four_words: String,
+        agent_id: AgentId,
         display_name: String,
         device_name: String,
         storage_dir: String,
@@ -82,29 +82,14 @@ pub enum Command {
     // ========================================================================
     // Networking Commands
     // ========================================================================
-    /// Start P2P networking with gossip overlay
-    StartNetworking { preferred_port: Option<u16> },
+    /// Ensure the x0x daemon is running on localhost:12700
+    EnsureDaemon,
 
-    /// Stop P2P networking gracefully
-    StopNetworking,
+    /// Connect to a remote agent by their x0x agent ID
+    ConnectToAgent { agent_id: AgentId },
 
-    /// Connect to a peer by their four-word identity
-    ConnectToPeer { peer_four_words: String },
-
-    /// Request external address discovery via NAT reflection
-    RequestExternalAddress,
-
-    /// Announce our presence to the network (ADR-014)
-    ///
-    /// Broadcasts a signed PresenceRecord containing our current connection
-    /// words to the gossip network so other peers can find us.
+    /// Announce our presence to the network via x0x daemon
     AnnouncePresence,
-
-    /// Query the network for a peer's current presence (ADR-014)
-    ///
-    /// Sends a PresenceQuery to find another peer's current location.
-    /// Only peers connected to the target will respond.
-    QueryPeerPresence { target_pubkey: Vec<u8> },
 
     // ========================================================================
     // Entity Management Commands
@@ -127,7 +112,7 @@ pub enum Command {
     /// Link a local entity to a network identity
     LinkEntityToNetwork {
         entity_id: String,
-        four_words: String,
+        agent_id: AgentId,
     },
 
     /// Mark an entity as synced with network
@@ -444,39 +429,12 @@ pub enum Command {
     DeleteKanbanBoard { board_id: String },
 
     // ========================================================================
-    // WebRTC Commands (Voice/Video/Screen)
-    // ========================================================================
-    /// Start a voice/video call
-    StartCall {
-        entity_id: String,
-        video_enabled: bool,
-    },
-
-    /// Join an existing call
-    JoinCall { call_id: String },
-
-    /// Leave a call
-    LeaveCall { call_id: String },
-
-    /// Toggle video in a call
-    ToggleVideo { call_id: String, enabled: bool },
-
-    /// Toggle audio in a call
-    ToggleAudio { call_id: String, enabled: bool },
-
-    /// Start screen sharing
-    StartScreenShare { call_id: String },
-
-    /// Stop screen sharing
-    StopScreenShare { call_id: String },
-
-    // ========================================================================
     // Contact Management Commands
     // ========================================================================
     /// Create a new contact (local-only or network-linked)
     CreateContact {
         display_name: String,
-        four_words: Option<String>,
+        agent_id: Option<AgentId>,
         is_favourite: bool,
     },
 
@@ -493,14 +451,14 @@ pub enum Command {
     /// Link a local-only contact to a network identity
     LinkContact {
         contact_id: String,
-        four_words: String,
+        agent_id: AgentId,
     },
 
     /// Set a contact as favourite
-    SetFavouriteContact { four_words: String },
+    SetFavouriteContact { agent_id: AgentId },
 
     /// Remove a contact from favourites
-    RemoveFavouriteContact { four_words: String },
+    RemoveFavouriteContact { agent_id: AgentId },
 
     // ========================================================================
     // Website Publishing Commands
@@ -659,7 +617,7 @@ pub enum Event {
     // ========================================================================
     /// Application was initialized
     Initialized {
-        four_words: String,
+        agent_id: AgentId,
         display_name: String,
         device_name: String,
     },
@@ -670,38 +628,30 @@ pub enum Event {
     // ========================================================================
     // Networking Events
     // ========================================================================
-    /// Networking started
-    NetworkingStarted {
-        listen_address: String,
-        connection_identity: String,
+    /// x0x daemon is running and reachable
+    DaemonRunning {
+        /// Agent identity from the daemon
+        agent_id: AgentId,
     },
 
-    /// Networking stopped
-    NetworkingStopped,
+    /// x0x daemon is not reachable
+    DaemonStopped,
 
-    /// Connected to a peer
-    PeerConnected { peer_four_words: String },
+    /// Connected to a remote agent
+    AgentConnected { agent_id: AgentId },
 
-    /// External address discovered
-    ExternalAddressDiscovered { address: String },
+    /// Connection to a remote agent failed
+    AgentConnectionFailed { agent_id: AgentId, reason: String },
 
-    /// Connection failed
-    ConnectionFailed {
-        peer_four_words: String,
-        reason: String,
+    /// Our presence was announced to the network via x0x daemon
+    PresenceAnnounced { agent_id: AgentId, timestamp: u64 },
+
+    /// Received presence information for a remote agent
+    AgentPresenceReceived {
+        agent_id: AgentId,
+        status: String,
+        last_seen: u64,
     },
-
-    /// Our presence was announced to the network (ADR-014)
-    PresenceAnnounced {
-        connection_words: String,
-        timestamp: u64,
-    },
-
-    /// Received a presence query from another peer (ADR-014)
-    PeerPresenceQueryReceived { query: PeerPresenceQuery },
-
-    /// Received a presence record for a peer (ADR-014)
-    PeerPresenceReceived { record: PeerPresenceRecord },
 
     // ========================================================================
     // Entity Events
@@ -717,7 +667,7 @@ pub enum Event {
     /// Entity was linked to network
     EntityLinkedToNetwork {
         entity_id: String,
-        four_words: String,
+        agent_id: AgentId,
     },
 
     /// Entity was synced with network
@@ -860,13 +810,13 @@ pub enum Event {
     /// Thread was marked as read
     ThreadMarkedRead { thread_id: String, identity: String },
 
-    /// Typing indicator received from a peer
+    /// Typing indicator received from a remote agent
     TypingIndicatorReceived {
-        /// Thread where the peer is typing
+        /// Thread where the agent is typing
         thread_id: String,
-        /// Four words identity of the peer who is typing
-        peer_id: String,
-        /// Whether the peer is currently typing
+        /// Agent ID of the remote agent who is typing
+        agent_id: AgentId,
+        /// Whether the agent is currently typing
         is_typing: bool,
     },
 
@@ -1046,81 +996,13 @@ pub enum Event {
     KanbanBoardDeleted { board_id: String },
 
     // ========================================================================
-    // WebRTC Events
-    // ========================================================================
-    /// Call started
-    CallStarted { call_id: String, entity_id: String },
-
-    /// Joined a call
-    CallJoined { call_id: String },
-
-    /// Left a call
-    CallLeft { call_id: String },
-
-    /// Video toggled
-    VideoToggled { call_id: String, enabled: bool },
-
-    /// Audio toggled
-    AudioToggled { call_id: String, enabled: bool },
-
-    /// Screen sharing started
-    ScreenShareStarted { call_id: String },
-
-    /// Screen sharing stopped
-    ScreenShareStopped { call_id: String },
-
-    /// Remote participant joined the call
-    ParticipantJoined {
-        call_id: String,
-        participant_id: String,
-        display_name: String,
-        four_words: Option<String>,
-    },
-
-    /// Remote participant left the call
-    ParticipantLeft {
-        call_id: String,
-        participant_id: String,
-    },
-
-    /// Remote participant's mute state changed
-    ParticipantMuteChanged {
-        call_id: String,
-        participant_id: String,
-        is_muted: bool,
-    },
-
-    /// Remote participant's video state changed
-    ParticipantVideoChanged {
-        call_id: String,
-        participant_id: String,
-        is_video_enabled: bool,
-    },
-
-    /// Remote participant's screen share state changed
-    ParticipantScreenShareChanged {
-        call_id: String,
-        participant_id: String,
-        is_screen_sharing: bool,
-    },
-
-    /// Call is attempting to reconnect after connection loss
-    CallReconnecting { call_id: String },
-
-    /// Call reconnection succeeded
-    CallReconnected { call_id: String },
-
-    /// Call ended (for all participants)
-    CallEnded { call_id: String, reason: String },
-
-    // ========================================================================
     // Contact Events
     // ========================================================================
     /// Contact was created
     ContactCreated {
         contact_id: String,
         display_name: String,
-        four_words: Option<String>,
+        agent_id: Option<AgentId>,
     },
 
     /// Contact was updated
@@ -1136,14 +1018,14 @@ pub enum Event {
     /// Contact was linked to network identity
     ContactLinked {
         contact_id: String,
-        four_words: String,
+        agent_id: AgentId,
     },
 
     /// Contact was set as favourite
-    ContactFavouriteSet { four_words: String },
+    ContactFavouriteSet { agent_id: AgentId },
 
     /// Contact was removed from favourites
-    ContactFavouriteRemoved { four_words: String },
+    ContactFavouriteRemoved { agent_id: AgentId },
 
     // ========================================================================
     // Website Events
@@ -1275,21 +1157,11 @@ pub enum Query {
     /// Get the current user profile
     GetProfile,
 
-    /// Check if networking is active
-    IsNetworkingActive,
+    /// Check if the x0x daemon is running and reachable
+    IsDaemonRunning,
 
-    /// Get connection identity
-    GetConnectionIdentity,
-
-    /// Get external address
-    GetExternalAddress,
-
-    /// Get connection words (external address encoded as 4 memorable words)
-    ///
-    /// Returns the external IP:port encoded as 4 words using `FourWordAdaptiveEncoder`.
-    /// Share these words out-of-band so others can connect to you for the first time.
-    /// When they connect, they'll receive your cryptographic identity packet.
-    GetConnectionWords,
+    /// Get the local agent's x0x identity
+    GetAgentIdentity,
 
     // ========================================================================
     // Entity Queries
@@ -1486,35 +1358,17 @@ pub enum Query {
     // ========================================================================
     // Presence Queries
     // ========================================================================
-    /// Get presence info for a peer
-    GetPresence { peer_id: String },
+    /// Get presence info for a remote agent
+    GetPresence { agent_id: AgentId },
 
-    /// List online peers
-    ListOnlinePeers,
+    /// List online agents
+    ListOnlineAgents,
 
-    /// Get our current presence record (ADR-014)
-    ///
-    /// Returns our most recently created PresenceRecord with current
-    /// connection words and timestamp.
-    GetOurPresenceRecord,
+    /// Get our current presence status
+    GetOurPresence,
 
-    /// Get cached presence for a peer (ADR-014)
-    ///
-    /// Looks up a peer's presence record from our local cache.
-    /// Returns None if we don't have a cached record for this peer.
-    GetCachedPeerPresence { pubkey: Vec<u8> },
-
-    // ========================================================================
-    // WebRTC Queries
-    // ========================================================================
-    /// List active calls
-    ListActiveCalls,
-
-    /// Get call participants
-    GetCallParticipants { call_id: String },
-
-    /// Get call status including mute/video state
-    GetCallStatus { call_id: String },
+    /// Get cached presence for a remote agent
+    GetCachedAgentPresence { agent_id: AgentId },
 
     // ========================================================================
     // Contact Queries
@@ -1559,7 +1413,7 @@ pub enum Query {
 pub enum QueryResponse {
     /// Profile information
     Profile {
-        four_words: String,
+        agent_id: AgentId,
         display_name: String,
         device_name: String,
         device_type: String,
@@ -1655,17 +1509,8 @@ pub enum QueryResponse {
     /// Presence information
     Presence(PresenceResponse),
 
-    /// List of peer IDs
-    PeerList(Vec<String>),
-
-    /// Call information
-    CallList(Vec<CallResponse>),
-
-    /// Call participants
-    CallParticipants(Vec<String>),
-
-    /// Call status with mute/video state
-    CallStatus(CallStatusResponse),
+    /// List of agent IDs
+    AgentList(Vec<AgentId>),
 
     /// Contact information
     Contact(ContactResponse),
@@ -1676,11 +1521,11 @@ pub enum QueryResponse {
     /// Website information
     Website(WebsiteResponse),
 
-    /// Our presence record (ADR-014)
-    OurPresenceRecord(Option<PeerPresenceRecord>),
+    /// Our current presence status
+    OurPresence(Option<PresenceResponse>),
 
-    /// Cached peer presence record (ADR-014)
-    CachedPeerPresence(Option<PeerPresenceRecord>),
+    /// Cached presence for a remote agent
+    CachedAgentPresence(Option<PresenceResponse>),
 
     /// Canvas snapshot with all elements and view state
     CanvasSnapshot(CanvasSnapshotResponse),
@@ -1707,7 +1552,7 @@ pub struct EntityResponse {
     pub created_at: i64,
     pub member_count: usize,
     pub parent_org_id: Option<String>,
-    pub network_four_words: Option<String>,
+    pub network_agent_id: Option<AgentId>,
     pub is_local_only: bool,
 }
 
@@ -1964,30 +1809,9 @@ pub struct KanbanCardResponse {
 /// Presence response data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PresenceResponse {
-    pub peer_id: String,
+    pub agent_id: AgentId,
     pub status: String,
     pub last_seen: i64,
-}
-
-/// Call response data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CallResponse {
-    pub id: String,
-    pub entity_id: String,
-    pub participant_count: usize,
-    pub started_at: i64,
-}
-
-/// Call status response with detailed state
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CallStatusResponse {
-    pub call_id: String,
-    pub entity_id: String,
-    pub participant_count: usize,
-    pub started_at: i64,
-    pub is_muted: bool,
-    pub is_video_enabled: bool,
-    pub is_screen_sharing: bool,
 }
 
 /// Contact response data
@@ -1995,7 +1819,7 @@ pub struct CallStatusResponse {
 pub struct ContactResponse {
     pub id: String,
     pub display_name: String,
-    pub four_words: Option<String>,
+    pub agent_id: Option<AgentId>,
     pub is_favourite: bool,
     pub is_online: bool,
     pub created_at: i64,
@@ -2078,9 +1902,6 @@ pub enum Subscription {
 
     /// Subscribe to Kanban events for an entity
     KanbanEvents { entity_id: String },
-
-    /// Subscribe to call events
-    CallEvents,
 
     /// Subscribe to canvas events for an entity
     CanvasEvents { entity_id: String },

@@ -5,6 +5,7 @@ mod components;
 pub mod contrast;
 pub mod design_tokens;
 pub mod hooks;
+pub mod models;
 pub mod onboarding;
 pub mod pages;
 mod platform;
@@ -72,16 +73,10 @@ async fn main() {
         std::process::exit(1);
     }
 
-    // Use async bootstrap with lazy device enumeration for faster startup.
-    // Device enumerator is initialized lazily when call UI is first accessed,
-    // saving 100-300ms on initial render.
     let services = UiServices::bootstrap_async().await.unwrap_or_else(|err| {
         eprintln!("failed to initialize UI services: {err}");
         std::process::exit(1);
     });
-
-    // Start call-to-presence sync so call/screen share status updates presence
-    services.start_call_presence_sync();
     if UI_SERVICES.set(Arc::new(services)).is_err() {
         eprintln!("UI services already initialized");
         std::process::exit(1);
@@ -105,6 +100,8 @@ enum Route {
     DashboardRoute {},
     #[route("/messages")]
     MessagesRoute {},
+    #[route("/channels")]
+    ChannelsRoute {},
     #[route("/projects")]
     ProjectsRoute {},
     #[route("/contacts")]
@@ -386,6 +383,9 @@ fn App() -> Element {
 
         // Screen reader announcer for accessibility (aria-live regions)
         Announcer {}
+
+        // x0xd daemon status bar (shows connectivity, peer count, install/start button)
+        components::DaemonStatusBar {}
 
         AppLifecycleManager {}
         // Note: RouteObserver removed - it used use_route() which panics outside Router context
@@ -1405,6 +1405,100 @@ fn MessagesRoute() -> Element {
                                 }
                                 p { class: "text-slate-400", "Select a conversation" }
                                 p { class: "text-slate-500 text-sm mt-1", "Choose a thread from the sidebar to start chatting" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
+#[component]
+fn ChannelsRoute() -> Element {
+    let mut selected_channel =
+        use_signal(|| Option::<components::channel_sidebar::SelectedChannel>::None);
+    let mut thread_message = use_signal(|| Option::<models::channel::ChatMessage>::None);
+
+    render_authenticated_page(
+        "Channels",
+        rsx! {
+            div {
+                style: "display: flex; height: calc(100vh - 4rem); overflow: hidden;",
+
+                // Channel sidebar
+                div {
+                    style: "width: 240px; flex-shrink: 0; border-right: 1px solid rgba(52, 211, 153, 0.08);",
+                    components::ChannelSidebar {
+                        selected: selected_channel(),
+                        on_select: move |ch: components::channel_sidebar::SelectedChannel| {
+                            selected_channel.set(Some(ch));
+                            thread_message.set(None);
+                        },
+                        on_create_channel: move |_group_id: String| {
+                            // Channel creation modal placeholder
+                            info!(target: "ui.channels", "Create channel requested");
+                        },
+                    }
+                }
+
+                // Main chat area
+                div {
+                    style: "flex: 1; display: flex; overflow: hidden;",
+
+                    if let Some(channel) = selected_channel() {
+                        div {
+                            style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
+                            components::ChannelChatView {
+                                channel: channel.clone(),
+                                on_open_thread: move |msg: models::channel::ChatMessage| {
+                                    thread_message.set(Some(msg));
+                                },
+                            }
+                        }
+
+                        // Thread panel
+                        if let Some(ref parent_msg) = thread_message() {
+                            if let Some(ref ch) = selected_channel() {
+                                components::ThreadPanel {
+                                    parent_message: parent_msg.clone(),
+                                    channel: ch.clone(),
+                                    on_close: move |_| {
+                                        thread_message.set(None);
+                                    },
+                                }
+                            }
+                        }
+                    } else {
+                        // No channel selected
+                        div {
+                            style: format!(
+                                "flex: 1; display: flex; align-items: center; justify-content: center; \
+                                 background: {};",
+                                design_tokens::semantic::BG_PRIMARY
+                            ),
+                            div {
+                                style: "text-align: center;",
+                                div {
+                                    style: format!(
+                                        "width: 80px; height: 80px; border-radius: {}; \
+                                         background: {}; display: flex; align-items: center; \
+                                         justify-content: center; margin: 0 auto {}; font-size: {};",
+                                        design_tokens::radius::XXL,
+                                        design_tokens::semantic::BG_TERTIARY,
+                                        design_tokens::spacing::BASE,
+                                        design_tokens::typography::SIZE_4XL
+                                    ),
+                                    "#"
+                                }
+                                p {
+                                    style: format!(
+                                        "color: {}; font-size: {};",
+                                        design_tokens::semantic::TEXT_MUTED,
+                                        design_tokens::typography::SIZE_SM
+                                    ),
+                                    "Select a channel from the sidebar to start chatting"
+                                }
                             }
                         }
                     }

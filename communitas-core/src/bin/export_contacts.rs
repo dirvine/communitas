@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
             ContactWithPresence {
                 id: c.id,
                 display_name: c.display_name,
-                four_words: c.four_words.unwrap_or_default(),
+                four_words: c.agent_id.unwrap_or_default(),
                 is_favourite: c.is_favourite,
                 is_online,
                 last_seen,

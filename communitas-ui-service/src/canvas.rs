@@ -1982,27 +1982,14 @@ impl CanvasService {
         let bytes =
             serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
 
-        // Access gossip context and publish
-        let context_arc = self.app.context();
-        let ctx = context_arc.read().await;
-        if let Some(gossip) = ctx.gossip.as_ref() {
-            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
-                tracing::warn!(
-                    entity_id = %entity_id,
-                    error = %e,
-                    "failed to broadcast canvas operation; continuing locally"
-                );
-            } else {
-                tracing::debug!(
-                    entity_id = %entity_id,
-                    element_id = %element_id,
-                    op_type = ?op_type,
-                    "broadcast canvas operation"
-                );
-            }
-        } else {
-            tracing::debug!("gossip not available; operation remains local-only");
-        }
+        // TODO: broadcast canvas operation via x0x daemon when available
+        let _ = bytes;
+        tracing::debug!(
+            entity_id = %entity_id,
+            element_id = %element_id,
+            op_type = ?op_type,
+            "canvas operation applied locally (network broadcast not yet migrated to x0x)"
+        );
 
         Ok(())
     }
@@ -2222,19 +2209,11 @@ impl CanvasService {
         // Note: The actual handler is set via GossipContext::set_entity_message_handler.
         // The CanvasService needs to be wired into the message routing at the app level.
         // For now, we join the entity topic to receive messages.
-        let context_arc = self.app.context();
-        let ctx = context_arc.read().await;
-        if let Some(gossip) = ctx.gossip.as_ref() {
-            if let Err(e) = gossip.join_entity(&entity_id, "canvas").await {
-                tracing::warn!(
-                    entity_id = %entity_id,
-                    error = %e,
-                    "failed to join canvas entity; continuing in local-only mode"
-                );
-            } else {
-                tracing::info!(entity_id = %entity_id, "subscribed to canvas messages");
-            }
-        }
+        // TODO: join canvas entity via x0x daemon when available
+        tracing::debug!(
+            entity_id = %entity_id,
+            "canvas entity subscription not yet migrated to x0x; running in local-only mode"
+        );
 
         Ok(())
     }
@@ -2259,19 +2238,12 @@ impl CanvasService {
         let bytes =
             serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
 
-        let context_arc = self.app.context();
-        let ctx = context_arc.read().await;
-        if let Some(gossip) = ctx.gossip.as_ref() {
-            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
-                tracing::warn!(
-                    entity_id = %entity_id,
-                    error = %e,
-                    "failed to request canvas state"
-                );
-            } else {
-                tracing::debug!(entity_id = %entity_id, "sent canvas state request");
-            }
-        }
+        // TODO: request canvas state via x0x daemon when available
+        let _ = bytes;
+        tracing::debug!(
+            entity_id = %entity_id,
+            "canvas state request not yet migrated to x0x"
+        );
 
         Ok(())
     }
@@ -2328,23 +2300,13 @@ impl CanvasService {
         let bytes =
             serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
 
-        let context_arc = self.app.context();
-        let ctx = context_arc.read().await;
-        if let Some(gossip) = ctx.gossip.as_ref() {
-            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
-                tracing::warn!(
-                    entity_id = %entity_id,
-                    error = %e,
-                    "failed to send canvas state response"
-                );
-            } else {
-                tracing::debug!(
-                    entity_id = %entity_id,
-                    requester = %request.requester_peer_id,
-                    "sent canvas state response"
-                );
-            }
-        }
+        // TODO: send canvas state response via x0x daemon when available
+        let _ = bytes;
+        tracing::debug!(
+            entity_id = %entity_id,
+            requester = %request.requester_peer_id,
+            "canvas state response not yet migrated to x0x"
+        );
 
         Ok(())
     }
@@ -2550,14 +2512,9 @@ impl CanvasService {
         let bytes =
             serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
 
-        // Access gossip context and publish
-        let context_arc = self.app.context();
-        let ctx = context_arc.read().await;
-        if let Some(gossip) = ctx.gossip.as_ref()
-            && let Err(e) = gossip.publish_to_entity(entity_id, bytes).await
-        {
-            tracing::warn!(error = %e, "failed to broadcast cursor update");
-        }
+        // TODO: broadcast cursor update via x0x daemon when available
+        let _ = bytes;
+        tracing::trace!("cursor update broadcast not yet migrated to x0x");
 
         tracing::trace!(entity_id, x, y, "broadcast cursor update");
         Ok(true)

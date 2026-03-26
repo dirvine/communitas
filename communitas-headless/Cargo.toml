@@ -6,26 +6,15 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Communitas headless node and CLI - bootstrap and seed node for the network"
+description = "Communitas headless node - thin wrapper around x0xd daemon"
 
 [[bin]]
 name = "communitas-headless"
 path = "src/main.rs"
 
 [dependencies]
-# Core business logic
-communitas-core = { version = "=0.8.6", path = "../communitas-core" }
-
-
-# Networking provided by saorsa-gossip
-saorsa-gossip-transport.workspace = true
-saorsa-gossip-coordinator.workspace = true
-saorsa-gossip-types.workspace = true
-saorsa-gossip-pubsub.workspace = true
-# Post-Quantum Cryptography (ML-DSA-87 for application identity)
-saorsa-pqc = "0.4.0"
-four-word-networking = "2.6"
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
+# x0xd client for daemon management and REST API
+communitas-x0x-client = { path = "../communitas-x0x-client" }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
@@ -33,53 +22,11 @@ clap = { version = "4.5", features = ["derive"] }
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }
 
-# Web server for API
-warp = "0.3"
-
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-toml = "0.8"
-
 # Error handling
 anyhow = "1.0"
-thiserror = "2.0"
 
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Directories
-dirs = "5.0"
-
-# Utils
-base64 = "0.22"
-uuid = { version = "1", features = ["v4", "v7", "serde"] }
-rand = "0.8"
-hex = "0.4"
-blake3 = "1.0"
-zeroize = "1.7"
-keyring = "3.2"
-sha2 = "0.10"
-tempfile = "3.0"
-# Ed25519 for QUIC transport layer (ant-quic requirement)
-# Application-layer identity uses ML-DSA-87 from crypto module
-ed25519-dalek = "2"
-
-# Self-update functionality (signed archives)
-self_update = { version = "0.41", features = [
-    "signatures",
-    "archive-tar",
-    "archive-zip",
-    "compression-flate2",
-    "compression-zip-deflate",
-] }
-
-# Network
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-local-ip-address = "0.6"
-
-# Utils
-once_cell = "1.19"
-chrono = { version = "0.4", features = ["serde"] }
 communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }

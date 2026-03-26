@@ -19,12 +19,11 @@ futures.workspace = true
 chrono.workspace = true
 base64.workspace = true
 native-dialog = "0.7"
-notify-rust = "4"
 dirs = "5.0"
-cpal = "0.15"
-async-trait = "0.1"
-nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
-scap = "0.0.8"
+communitas-x0x-client = { path = "../communitas-x0x-client" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
 communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }
 
 [dependencies.tokio]

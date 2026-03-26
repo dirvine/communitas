@@ -352,16 +352,16 @@ impl MessagingService {
                     // Handle typing indicator updates
                     if let Event::TypingIndicatorReceived {
                         thread_id,
-                        peer_id,
+                        agent_id,
                         is_typing,
                     } = &event
                     {
                         if let Ok(mut state) = typing_state.write() {
-                            state.update(thread_id, peer_id, *is_typing);
+                            state.update(thread_id, agent_id, *is_typing);
                             // Cleanup expired indicators while we have the lock
                             state.cleanup_expired();
                         }
-                        trace!(thread_id, peer_id, is_typing, "Typing indicator updated");
+                        trace!(thread_id, agent_id, is_typing, "Typing indicator updated");
                     }
 
                     let should_refresh = matches!(
@@ -553,7 +553,7 @@ impl MessagingService {
             for contact in contacts {
                 // Use the contact's four_words as the contact_id for DMs
                 let contact_id = contact
-                    .four_words
+                    .agent_id
                     .clone()
                     .unwrap_or_else(|| contact.id.clone());
 

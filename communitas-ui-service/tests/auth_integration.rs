@@ -117,14 +117,15 @@ fn test_recovery_deterministic_pubkey() {
         "Same mnemonic should produce same pubkey"
     );
 
-    // Verify pubkey is non-empty (it's a large hex string)
+    // Verify pubkey is non-empty (BLAKE3-derived seed = 32 bytes = 64 hex chars)
     assert!(
         !preview1.pubkey_hex.is_empty(),
         "Pubkey should not be empty"
     );
     assert!(
-        preview1.pubkey_hex.len() > 100,
-        "Pubkey should be a substantial hex string (ML-DSA-87 key)"
+        preview1.pubkey_hex.len() >= 64,
+        "Pubkey should be at least 64 hex chars (32-byte BLAKE3 seed derivation), got {}",
+        preview1.pubkey_hex.len()
     );
 }
 

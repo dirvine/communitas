@@ -3,10 +3,12 @@
 pub mod announcer;
 pub mod app_shell;
 pub mod auth_v2;
-pub mod call;
 pub mod canvas;
+pub mod channel_chat;
+pub mod channel_sidebar;
 mod composer;
 pub mod confirm_dialog;
+pub mod daemon_status;
 pub mod drive;
 pub mod entity_view;
 pub mod error_boundary;
@@ -23,17 +25,9 @@ pub mod settings;
 pub mod sidebar;
 pub mod skeleton;
 mod thread_list;
+pub mod thread_panel;
 pub mod virtual_list;
 
-// Re-export call components (will be used when call UI is integrated into routes)
-#[allow(unused_imports)]
-pub use call::{
-    CallButton, CallControls, CallLobby, CallStatusBar, CallView, DeviceSelector,
-    IncomingCallBanner, InlineCallControls, MediaErrorBanner, MediaErrorIndicator, MiniCallView,
-    MissedCallBadge, MissedCallsPanel, ParticipantGrid, ParticipantTile, QualityDetailsPanel,
-    QualityDot, QualityIndicator, ReactiveMissedCallBadge, RecordingControls, RecordingDot,
-    RecordingIndicator,
-};
 // Re-export canvas components (will be used when canvas UI is integrated into routes)
 #[allow(unused_imports)]
 pub use canvas::{
@@ -147,3 +141,11 @@ pub use filter_chips::{FilterChips, FilterOption};
 // Re-export confirm dialog for user confirmations
 #[allow(unused_imports)]
 pub use confirm_dialog::ConfirmDialog;
+
+// Re-export daemon status bar for x0xd connectivity
+pub use daemon_status::DaemonStatusBar;
+
+// Re-export channel and thread components for space-based messaging
+pub use channel_chat::ChannelChatView;
+pub use channel_sidebar::ChannelSidebar;
+pub use thread_panel::ThreadPanel;

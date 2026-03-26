@@ -82,11 +82,6 @@ impl UiStorage {
         self.root.join("pending_messages.json")
     }
 
-    /// Disk location for call history persistence.
-    pub fn call_history_file(&self) -> PathBuf {
-        self.root.join("call_history.json")
-    }
-
     /// Disk location for active uploads persistence (for resume support).
     pub fn active_uploads_file(&self) -> PathBuf {
         self.root.join("active_uploads.json")

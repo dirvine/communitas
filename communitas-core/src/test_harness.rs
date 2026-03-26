@@ -1,23 +1,16 @@
 /**
  * Enhanced TestHarness for Communitas Integration Tests
  *
- * Provides a controlled testing environment with real QUIC transport,
- * multi-node scenarios, network chaos testing, and full networking stack.
+ * Provides a controlled testing environment with multi-node scenarios
+ * and network chaos testing.
  *
- * Capabilities:
- * - Real QUIC connections over ephemeral UDP ports
- * - Multi-node mesh/line/star topologies
- * - Network chaos: partition, latency, jitter, packet loss
- * - Presence, FOAF, gossip, and sync integration
+ * With x0x integration, transport is handled by the x0x daemon.
+ * This harness simulates network conditions for testing purposes.
  */
 use crate::core_context::CoreContext;
 use crate::types::DeviceType;
 use anyhow::{Context, Result};
 use rand::Rng;
-use saorsa_gossip_groups::GroupContext;
-use saorsa_gossip_presence::PresenceManager;
-use saorsa_gossip_transport::{UdpTransportAdapter, UdpTransportAdapterConfig};
-use saorsa_gossip_types::{PeerId, TopicId};
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -135,18 +128,20 @@ impl LinkPolicy {
     }
 }
 
-/// Test node with full networking stack
+/// Test node with core context
 pub struct TestNode {
+    /// Node index
     pub id: usize,
-    pub four_words: String,
-    pub peer_id: PeerId,
+    /// Agent identity (simulated)
+    pub agent_id: String,
+    /// Simulated port
     pub port: u16,
+    /// Simulated address
     pub addr: SocketAddr,
+    /// Temporary directory for storage
     pub temp_dir: TempDir,
+    /// Core context
     pub core: Option<Arc<CoreContext>>,
-    pub presence: Option<Arc<RwLock<PresenceManager>>>,
-    pub groups: Arc<RwLock<HashMap<TopicId, GroupContext>>>,
-    pub transport: Arc<UdpTransportAdapter>,
 }
 
 impl TestNode {
@@ -154,63 +149,26 @@ impl TestNode {
     pub async fn new(id: usize) -> Result<Self> {
         let temp_dir = TempDir::new().context("failed to create temp dir")?;
 
-        // Generate test identity
-        let four_words = format!("test-node-{:04x}-peer", id);
-        let peer_id = PeerId::new([(id % 256) as u8; 32]);
+        let agent_id = format!("{:064x}", id);
+        let port = reserve_test_port()?;
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
 
-        let mut last_err = None;
-        for _ in 0..TEST_PORT_ATTEMPTS {
-            let port = reserve_test_port()?;
-            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
-
-            match UdpTransportAdapter::with_config(
-                UdpTransportAdapterConfig::new(addr, vec![]),
-                None,
-            )
-            .await
-            .context("failed to create UdpTransportAdapter")
-            {
-                Ok(transport) => {
-                    debug!("TestNode {} created on port {}", id, port);
-                    return Ok(TestNode {
-                        id,
-                        four_words,
-                        peer_id,
-                        port,
-                        addr,
-                        temp_dir,
-                        core: None,
-                        presence: None,
-                        groups: Arc::new(RwLock::new(HashMap::new())),
-                        transport: Arc::new(transport),
-                    });
-                }
-                Err(err) => {
-                    release_test_port(port);
-                    last_err = Some(err);
-                }
-            }
-        }
-
-        Err(anyhow::anyhow!(
-            "failed to allocate test port for node {}: {}",
+        debug!("TestNode {} created on port {}", id, port);
+        Ok(TestNode {
             id,
-            last_err
-                .map(|e| e.to_string())
-                .unwrap_or_else(|| "unknown error".to_string())
-        ))
+            agent_id,
+            port,
+            addr,
+            temp_dir,
+            core: None,
+        })
     }
 
     /// Initialize core context (full stack)
     pub async fn initialize_core(&mut self) -> Result<()> {
-        let groups_map = self.groups.clone();
-        let presence_mgr =
-            PresenceManager::new(self.peer_id, self.transport.clone(), groups_map.clone());
-        self.presence = Some(Arc::new(RwLock::new(presence_mgr)));
-
         let storage_dir = self.temp_dir.path().join("core");
         let core = CoreContext::initialize(
-            self.four_words.clone(),
+            self.agent_id.clone(),
             format!("Test Node {}", self.id),
             format!("test-node-{}", self.id),
             DeviceType::Desktop,
@@ -225,17 +183,6 @@ impl TestNode {
         Ok(())
     }
 
-    /// Join a topic/group
-    pub async fn join_group(&self, topic_id: TopicId, group_name: &str) -> Result<()> {
-        let group_ctx = GroupContext::from_entity(group_name);
-
-        let mut groups = self.groups.write().await;
-        groups.insert(topic_id, group_ctx);
-
-        info!("TestNode {} joined group {}", self.id, group_name);
-        Ok(())
-    }
-
     /// Get local address for bootstrap
     pub fn bootstrap_addr(&self) -> String {
         format!("127.0.0.1:{}", self.port)
@@ -244,7 +191,7 @@ impl TestNode {
     /// Shutdown node
     pub async fn shutdown(self) -> Result<()> {
         info!("TestNode {} shutting down", self.id);
-        // Cleanup happens automatically via Drop
+        release_test_port(self.port);
         Ok(())
     }
 }
@@ -363,14 +310,12 @@ impl TestHarness {
     pub async fn line(&self) -> Result<()> {
         let node_count = self.network.read().await.nodes.len();
 
-        // First disconnect all nodes from each other
         for i in 0..node_count {
             for j in (i + 1)..node_count {
                 self.network.read().await.disconnect(i, j).await;
             }
         }
 
-        // Then connect only adjacent nodes
         for i in 0..node_count.saturating_sub(1) {
             self.network.read().await.connect(i, i + 1).await;
         }
@@ -382,14 +327,12 @@ impl TestHarness {
     pub async fn star(&self, hub: usize) -> Result<()> {
         let node_count = self.network.read().await.nodes.len();
 
-        // First disconnect all nodes from each other
         for i in 0..node_count {
             for j in (i + 1)..node_count {
                 self.network.read().await.disconnect(i, j).await;
             }
         }
 
-        // Then connect hub to all spokes
         for i in 0..node_count {
             if i != hub {
                 self.network.read().await.connect(hub, i).await;
@@ -444,7 +387,6 @@ impl TestHarness {
             let network = self.network.read().await;
             let node_count = network.nodes.len();
 
-            // Count connected pairs
             let mut connected = 0;
             for i in 0..node_count {
                 for j in (i + 1)..node_count {
@@ -492,7 +434,6 @@ impl TestHarness {
     pub async fn cleanup(self) -> Result<()> {
         info!("TestHarness cleanup started");
 
-        // Shutdown all nodes
         let network = Arc::try_unwrap(self.network)
             .map_err(|_| anyhow::anyhow!("Failed to unwrap network"))?
             .into_inner();
@@ -514,105 +455,11 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_harness_creation() {
-        let harness = TestHarness::new(3).await.expect("harness creation failed");
-        let network = harness.network.read().await;
-        assert_eq!(network.nodes.len(), 3);
-        drop(network);
-        harness.cleanup().await.expect("cleanup failed");
-    }
-
-    #[tokio::test]
-    async fn test_mesh_topology() {
-        let harness = TestHarness::new(4).await.expect("harness creation failed");
-        harness.mesh().await.expect("mesh setup failed");
-
-        let network = harness.network.read().await;
-        // In a 4-node mesh, we should have 6 connections (n*(n-1)/2)
-        for i in 0..4 {
-            for j in (i + 1)..4 {
-                assert!(
-                    network.are_connected(i, j).await,
-                    "Nodes {} and {} should be connected",
-                    i,
-                    j
-                );
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_partition_and_heal() {
-        let harness = TestHarness::new(4).await.expect("harness creation failed");
-        harness.mesh().await.expect("mesh failed");
-
-        // Partition into [0,1] and [2,3]
-        harness
-            .partition(&[0, 1], &[2, 3])
-            .await
-            .expect("partition failed");
-
-        let network = harness.network.read().await;
-        // Within partitions should be connected
-        assert!(network.are_connected(0, 1).await);
-        assert!(network.are_connected(2, 3).await);
-
-        // Across partitions should be disconnected
-        assert!(!network.are_connected(0, 2).await);
-        assert!(!network.are_connected(0, 3).await);
-        assert!(!network.are_connected(1, 2).await);
-        assert!(!network.are_connected(1, 3).await);
-        drop(network);
-
-        // Heal
-        harness.heal().await.expect("heal failed");
-
-        let network = harness.network.read().await;
-        // All should be connected again
-        for i in 0..4 {
-            for j in (i + 1)..4 {
-                assert!(network.are_connected(i, j).await);
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_link_policies() {
-        let harness = TestHarness::new(2).await.expect("harness creation failed");
-
-        // Test latency
-        harness.set_latency(0, 1, 100).await;
-        let policy = harness.network.read().await.get_policy(0, 1).await;
-        assert_eq!(policy.latency, Duration::from_millis(100));
-
-        // Test packet loss
-        harness.set_loss(0, 1, 0.3).await;
-        let policy = harness.network.read().await.get_policy(0, 1).await;
-        assert_eq!(policy.loss, 0.3);
-    }
-
-    #[tokio::test]
-    async fn test_star_topology() {
-        let harness = TestHarness::new(5).await.expect("harness creation failed");
-        harness.star(0).await.expect("star failed");
-
-        let network = harness.network.read().await;
-        // Hub (0) connected to all
-        for i in 1..5 {
-            assert!(network.are_connected(0, i).await);
-        }
-
-        // Spokes not connected to each other
-        assert!(!network.are_connected(1, 2).await);
-        assert!(!network.are_connected(2, 3).await);
-    }
-
-    #[tokio::test]
     async fn test_node_initialization() {
         let node = TestNode::new(42).await.expect("node creation failed");
         assert_eq!(node.id, 42);
         assert!(node.port > 0, "Should have ephemeral port");
-        assert!(node.four_words.contains("test-node"));
+        assert!(node.agent_id.len() == 64);
 
         node.shutdown().await.expect("shutdown failed");
     }

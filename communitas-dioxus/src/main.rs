@@ -7,87 +7,95 @@ pub mod design_tokens;
 pub mod hooks;
 pub mod models;
 pub mod onboarding;
+#[allow(dead_code, unused_imports, unused_variables)]
 pub mod pages;
 mod platform;
 pub mod styles;
 pub mod styles_v2;
 pub mod tokens;
 pub mod version;
+mod x0x_contract;
 
-use communitas_ui_api::{
-    OrganizationCategory, PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType,
-};
-use communitas_ui_service::{
-    UiServices,
-    auth::{AuthController, AuthService, AuthSession},
-    directory::DirectorySnapshot,
-    navigation::{EntityNavigationKey, NavigationService, NavigationStateSnapshot},
-};
+use communitas_ui_service::UiServices;
+use communitas_x0x_client::X0xClient;
 use dioxus::prelude::*;
 use dioxus_logger::tracing::Level;
-use futures::StreamExt;
-use hooks::CategorizedEntities;
 use native_dialog::{MessageDialog, MessageType};
-use onboarding::{TOUR_STEPS, TourOverlay, TourState, use_tour_state};
-use std::{
-    borrow::Cow,
-    sync::{Arc, OnceLock},
-    time::Instant,
-};
-use tokens::colors;
-use tracing::{error, info, warn};
+use std::sync::{Arc, OnceLock};
+use tracing::{error, info};
 
-// V2 auth components with Digital Forest Sanctuary theme
-use components::auth_v2::{AuthLayoutV2, ErrorBanner, FormField, FormTextarea, PrimaryButton};
-// Accessibility: Screen reader announcer
-use components::Announcer;
-use design_tokens::{palette, radius, semantic, spacing, typography};
+use communitas_ui_service::auth::AuthSession;
+use components::{ContactEntry, GroupEntry};
+use tokens::colors;
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
-static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
-/// Main entry point for the Dioxus application.
-///
-/// Uses `#[tokio::main]` to provide an async runtime, allowing the use of
-/// `bootstrap_with_device_enumerator_async()` which avoids creating a nested
-/// Tokio runtime for better startup performance.
-#[tokio::main]
-async fn main() {
-    // Record startup time for metrics (first thing we do)
-    let _ = STARTUP_TIME.set(Instant::now());
+// ── Legacy compat layer (used by pages.rs, kept to avoid rewriting it) ──────
 
-    if let Err(err) = dioxus_logger::init(Level::INFO) {
-        eprintln!("failed to init logger: {err}");
-    }
-    // Check WebView availability BEFORE expensive service initialization
-    if let Err(err) = platform::check_webview_available() {
-        eprintln!("WebView not available: {err}");
-        // Show native dialog since Dioxus UI won't work without WebView
-        let _ = MessageDialog::new()
-            .set_type(MessageType::Error)
-            .set_title("Communitas - Missing Dependency")
-            .set_text(&format!(
-                "Communitas cannot start because a required component is missing.\n\n{err}"
-            ))
-            .show_alert();
-        std::process::exit(1);
-    }
-
-    let services = UiServices::bootstrap_async().await.unwrap_or_else(|err| {
-        eprintln!("failed to initialize UI services: {err}");
-        std::process::exit(1);
-    });
-    if UI_SERVICES.set(Arc::new(services)).is_err() {
-        eprintln!("UI services already initialized");
-        std::process::exit(1);
-    }
-    info!("starting Communitas Dioxus prototype");
-    dioxus::launch(App);
+/// Auth state kept for backward compatibility with pages.rs.
+#[derive(Clone, PartialEq)]
+#[allow(dead_code)]
+struct AuthState {
+    phase: AuthPhase,
+    session: Option<AuthSession>,
+    error: Option<String>,
+    pending_mnemonic: Option<String>,
+    local_x0x_bypass: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum AuthPhase {
+    LoggedOut,
+    Authenticating,
+    PendingMnemonic,
+    Authenticated,
+}
+
+impl Default for AuthState {
+    fn default() -> Self {
+        Self {
+            phase: AuthPhase::Authenticated,
+            session: None,
+            error: None,
+            pending_mnemonic: None,
+            local_x0x_bypass: true,
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl AuthState {
+    fn is_authenticated(&self) -> bool {
+        matches!(self.phase, AuthPhase::Authenticated)
+    }
+}
+
+#[allow(dead_code)]
+fn use_auth() -> Signal<AuthState> {
+    use_context::<Signal<AuthState>>()
+}
+
+// ── Routes ──────────────────────────────────────────────────────────────────
+
 #[derive(Clone, Routable, Debug, PartialEq)]
-#[allow(clippy::enum_variant_names)] // Dioxus router convention uses Route suffix
+#[allow(clippy::enum_variant_names)]
 enum Route {
+    #[route("/")]
+    Dashboard {},
+    #[route("/space/:space_id")]
+    SpaceView { space_id: String },
+    #[route("/space/:space_id/:tab")]
+    SpaceTab { space_id: String, tab: String },
+    #[route("/dm/:agent_id")]
+    DirectMessage { agent_id: String },
+    #[route("/people")]
+    People {},
+    #[route("/network")]
+    Network {},
+    #[route("/settings")]
+    Settings {},
+    // Legacy routes kept for backward compatibility with pages.rs
     #[route("/login")]
     LoginRoute {},
     #[route("/create")]
@@ -96,7 +104,7 @@ enum Route {
     RecoverIdentityRoute {},
     #[route("/login-other")]
     LoginOtherRoute {},
-    #[route("/")]
+    #[route("/dashboard-legacy")]
     DashboardRoute {},
     #[route("/messages")]
     MessagesRoute {},
@@ -106,7 +114,7 @@ enum Route {
     ProjectsRoute {},
     #[route("/contacts")]
     ContactsRoute {},
-    #[route("/network")]
+    #[route("/network-legacy")]
     NetworkRoute {},
     #[route("/more")]
     MoreRoute {},
@@ -133,2626 +141,525 @@ enum Route {
     ContactChatRoute { contact_id: String },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum AuthPhase {
-    LoggedOut,
-    Authenticating,
-    PendingMnemonic,
-    Authenticated,
-}
+// ── Entry point ─────────────────────────────────────────────────────────────
 
-#[derive(Clone)]
-struct AuthState {
-    phase: AuthPhase,
-    session: Option<AuthSession>,
-    error: Option<String>,
-    pending_mnemonic: Option<String>,
-}
-
-impl AuthState {
-    fn is_authenticated(&self) -> bool {
-        matches!(self.phase, AuthPhase::Authenticated)
+#[tokio::main]
+async fn main() {
+    if let Err(err) = dioxus_logger::init(Level::INFO) {
+        eprintln!("failed to init logger: {err}");
     }
-}
 
-impl Default for AuthState {
-    fn default() -> Self {
-        Self {
-            phase: AuthPhase::LoggedOut,
-            session: None,
-            error: None,
-            pending_mnemonic: None,
-        }
+    // Check WebView availability before anything else
+    if let Err(err) = platform::check_webview_available() {
+        eprintln!("WebView not available: {err}");
+        let _ = MessageDialog::new()
+            .set_type(MessageType::Error)
+            .set_title("Communitas - Missing Dependency")
+            .set_text(&format!(
+                "Communitas cannot start because a required component is missing.\n\n{err}"
+            ))
+            .show_alert();
+        std::process::exit(1);
     }
-}
 
-impl PartialEq for AuthState {
-    fn eq(&self, other: &Self) -> bool {
-        self.phase == other.phase
-            && self.error == other.error
-            && self.pending_mnemonic == other.pending_mnemonic
-    }
-}
-
-fn use_auth() -> Signal<AuthState> {
-    use_context::<Signal<AuthState>>()
-}
-
-#[allow(dead_code)] // Kept for future use in sidebar navigation tracking
-fn use_navigation_snapshot() -> Signal<NavigationStateSnapshot> {
-    let services = use_context::<Arc<UiServices>>();
-    let snapshot = use_signal(|| services.navigation().current_snapshot());
-    let mut nav_signal = snapshot;
-    use_future(move || {
-        let mut rx = services.navigation().subscribe();
-        async move {
-            loop {
-                if rx.changed().await.is_err() {
-                    break;
-                }
-                nav_signal.set(rx.borrow().clone());
-            }
-        }
+    let services = UiServices::bootstrap_async().await.unwrap_or_else(|err| {
+        eprintln!("failed to initialize UI services: {err}");
+        std::process::exit(1);
     });
-    snapshot
+    if UI_SERVICES.set(Arc::new(services)).is_err() {
+        eprintln!("UI services already initialized");
+        std::process::exit(1);
+    }
+
+    info!("starting Communitas (Deep Space Operations Console)");
+    dioxus::launch(App);
 }
 
-fn use_directory_snapshot() -> Signal<DirectorySnapshot> {
-    let services = use_context::<Arc<UiServices>>();
-    let snapshot = use_signal(|| services.directory().current_snapshot());
-    let mut dir_signal = snapshot;
-    use_future(move || {
-        let mut rx = services.directory().subscribe();
-        async move {
-            loop {
-                if rx.changed().await.is_err() {
-                    break;
-                }
-                dir_signal.set(rx.borrow().clone());
-            }
-        }
-    });
-    snapshot
-}
+// ── Global CSS ──────────────────────────────────────────────────────────────
 
-/// Global CSS styles including keyframe animations.
 const GLOBAL_STYLES: &str = r#"
-/* Modal animations */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background-color: #0a0c14; color: #e4e6f0; font-family: system-ui, -apple-system, sans-serif; }
+#main { height: 100vh; display: flex; flex-direction: column; }
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
 }
 
-@keyframes fadeOut {
-    from { opacity: 1; }
-    to { opacity: 0; }
-}
-
-@keyframes slideInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-@keyframes slideOutDown {
-    from {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-    to {
-        opacity: 0;
-        transform: translateY(20px) scale(0.98);
-    }
-}
-
-/* Skeleton loading animation */
 @keyframes shimmer {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
 }
 
 .skeleton {
-    background: linear-gradient(
-        90deg,
-        rgba(52, 211, 153, 0.05) 0%,
-        rgba(52, 211, 153, 0.12) 50%,
-        rgba(52, 211, 153, 0.05) 100%
-    );
+    background: linear-gradient(90deg, rgba(0,212,255,0.03) 0%, rgba(0,212,255,0.08) 50%, rgba(0,212,255,0.03) 100%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite ease-in-out;
     border-radius: 0.375rem;
 }
 
-/* Tab transition */
-.tab-content {
-    animation: fadeIn 200ms ease-out;
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
-/* Sidebar collapse animation */
-.sidebar-collapsible {
-    transition: height 200ms cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
-    overflow: hidden;
-}
+.tab-content { animation: fadeIn 200ms ease-out; }
 
-.sidebar-collapsible.collapsed {
-    height: 0;
-    opacity: 0;
-}
-
-/* Toast animations */
-@keyframes toastSlideIn {
-    from {
-        opacity: 0;
-        transform: translateX(100%);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-@keyframes toastSlideOut {
-    from {
-        opacity: 1;
-        transform: translateX(0);
-    }
-    to {
-        opacity: 0;
-        transform: translateX(100%);
-    }
-}
-
-/* Focus ring */
 :focus-visible {
-    outline: 2px solid #10b981;
+    outline: 2px solid #00d4ff;
     outline-offset: 2px;
 }
 
-/* Smooth scrolling */
-* {
-    scroll-behavior: smooth;
-}
+* { scroll-behavior: smooth; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #252940; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #353a52; }
 "#;
+
+// ── App component ───────────────────────────────────────────────────────────
 
 #[component]
 fn App() -> Element {
-    // Get UI services from global singleton
-    // This is guaranteed to be initialized before dioxus::launch(App) in main()
     let services = match UI_SERVICES.get().cloned() {
         Some(svc) => svc,
         None => {
-            error!("UI services not initialized - this should never happen");
+            error!("UI services not initialized");
             std::process::exit(1);
         }
     };
-    let services_clone = services.clone();
-    use_context_provider(|| services_clone);
-    use_context_provider(|| Signal::new(AuthState::default()));
+    use_context_provider(|| services);
+    use_context_provider(components::AnnouncerContext::new);
 
-    // Onboarding tour state
-    let mut tour_state = use_context_provider(|| Signal::new(TourState::new(TOUR_STEPS.len())));
+    rsx! {
+        style { {GLOBAL_STYLES} }
+        components::Announcer {}
+        Router::<Route> {}
+    }
+}
 
-    // Log startup timing on first render (runs once)
-    use_effect(|| {
-        if let Some(start) = STARTUP_TIME.get() {
-            let elapsed = start.elapsed();
-            info!(
-                elapsed_ms = elapsed.as_millis(),
-                "First render complete, total startup: {:.1}ms",
-                elapsed.as_secs_f64() * 1000.0
-            );
+// ── App shell (sidebar + content + status bar) ──────────────────────────────
+
+/// Shared layout: sidebar | content | status bar.
+#[component]
+fn AppShell(children: Element) -> Element {
+    let navigator = use_navigator();
+    let route: Route = use_route();
+
+    // Gather sidebar data from x0x daemon
+    let mut groups = use_signal(Vec::<GroupEntry>::new);
+    let mut contacts = use_signal(Vec::<ContactEntry>::new);
+    let mut agent_id = use_signal(|| None::<String>);
+    let mut connected = use_signal(|| false);
+
+    // Poll groups, contacts, agent
+    use_coroutine(move |_: UnboundedReceiver<()>| async move {
+        let client = X0xClient::new();
+
+        loop {
+            match client.health().await {
+                Ok(_) => connected.set(true),
+                Err(_) => connected.set(false),
+            }
+
+            if let Ok(agent) = client.agent().await {
+                agent_id.set(Some(agent.agent_id));
+            }
+
+            if let Ok(group_list) = client.list_groups().await {
+                let entries: Vec<GroupEntry> = group_list
+                    .into_iter()
+                    .map(|g| GroupEntry {
+                        id: g.group_id,
+                        name: g.name,
+                        member_count: g.member_count.unwrap_or(0),
+                    })
+                    .collect();
+                groups.set(entries);
+            }
+
+            if let Ok(contact_list) = client.list_contacts().await {
+                let entries: Vec<ContactEntry> = contact_list
+                    .into_iter()
+                    .map(|c| ContactEntry {
+                        agent_id: c.agent_id.clone(),
+                        label: c.label.unwrap_or_else(|| {
+                            if c.agent_id.len() > 12 {
+                                format!("{}..{}", &c.agent_id[..6], &c.agent_id[c.agent_id.len() - 4..])
+                            } else {
+                                c.agent_id.clone()
+                            }
+                        }),
+                        online: false, // presence will be wired later
+                    })
+                    .collect();
+                contacts.set(entries);
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(8)).await;
         }
     });
 
-    // Tour navigation handlers
-    let on_next = move |_: ()| {
-        tour_state.with_mut(|state| {
-            state.next();
-        });
-    };
-
-    let on_previous = move |_: ()| {
-        tour_state.with_mut(|state| {
-            state.previous();
-        });
-    };
-
-    let on_skip = move |_: ()| {
-        tour_state.with_mut(|state| {
-            state.skip();
-        });
-        info!(target: "ui.onboarding", "Tour skipped by user");
-    };
-
-    let on_finish = move |_: ()| {
-        tour_state.with_mut(|state| {
-            state.complete();
-        });
-        info!(target: "ui.onboarding", "Tour completed successfully");
+    let current_path = match &route {
+        Route::Dashboard {} => "/".to_string(),
+        Route::SpaceView { space_id } => format!("/space/{space_id}"),
+        Route::SpaceTab { space_id, tab } => format!("/space/{space_id}/{tab}"),
+        Route::DirectMessage { agent_id } => format!("/dm/{agent_id}"),
+        Route::People {} => "/people".to_string(),
+        Route::Network {} => "/network".to_string(),
+        Route::Settings {} => "/settings".to_string(),
+        // Legacy routes all map to "/"
+        _ => "/".to_string(),
     };
 
     rsx! {
-        // Global styles for animations
-        style { {GLOBAL_STYLES} }
+        div {
+            style: "display: flex; flex-direction: column; height: 100vh; overflow: hidden;",
 
-        // Screen reader announcer for accessibility (aria-live regions)
-        Announcer {}
+            // Main area: sidebar + content
+            div {
+                style: "display: flex; flex: 1; overflow: hidden;",
 
-        // x0xd daemon status bar (shows connectivity, peer count, install/start button)
-        components::DaemonStatusBar {}
+                components::AppSidebar {
+                    current_path: current_path,
+                    groups: groups().clone(),
+                    contacts: contacts().clone(),
+                    agent_id: agent_id().clone(),
+                    connected: connected(),
+                    on_navigate: move |path: String| {
+                        let route = match path.as_str() {
+                            "/" => Route::Dashboard {},
+                            "/people" => Route::People {},
+                            "/network" => Route::Network {},
+                            "/settings" => Route::Settings {},
+                            other => {
+                                if let Some(space_id) = other.strip_prefix("/space/") {
+                                    Route::SpaceView {
+                                        space_id: space_id.to_string(),
+                                    }
+                                } else if let Some(agent_id) = other.strip_prefix("/dm/") {
+                                    Route::DirectMessage {
+                                        agent_id: agent_id.to_string(),
+                                    }
+                                } else {
+                                    Route::Dashboard {}
+                                }
+                            }
+                        };
+                        navigator.push(route);
+                    },
+                }
 
-        AppLifecycleManager {}
-        // Note: RouteObserver removed - it used use_route() which panics outside Router context
-        // Navigation tracking can be added inside MainLayout if needed
-        Router::<Route> {}
+                // Content area
+                div {
+                    style: format!(
+                        "flex: 1; overflow: hidden; background-color: {};",
+                        colors::SURFACE_BG,
+                    ),
+                    {children}
+                }
+            }
 
-        // Onboarding tour overlay (rendered above all content)
-        TourOverlay {
-            tour_state: tour_state,
-            on_next: on_next,
-            on_previous: on_previous,
-            on_skip: on_skip,
-            on_finish: on_finish,
+            // Status bar
+            components::StatusBar {}
+        }
+    }
+}
+
+// ── Route components ────────────────────────────────────────────────────────
+
+#[component]
+fn Dashboard() -> Element {
+    rsx! {
+        AppShell {
+            components::Dashboard {}
         }
     }
 }
 
 #[component]
-fn AppLifecycleManager() -> Element {
-    let services = use_context::<Arc<UiServices>>();
-    let mut auth = use_auth();
-    let phase = auth.read().phase;
-    let mut tour_state = use_tour_state();
-
-    // Track whether auto-login has been attempted to prevent duplicate attempts
-    // when auth state flickers or component re-renders
-    let mut auto_login_attempted = use_signal(|| false);
-
-    // Track whether tour has been triggered for this session
-    let mut tour_triggered = use_signal(|| false);
-
-    // Clone services for each future
-    let services_for_autologin = services.clone();
-    let services_for_directory = services;
-
-    // Try auto-login on startup (only when logged out and not yet attempted)
-    use_future(move || {
-        let services = services_for_autologin.clone();
-        async move {
-            // Guard: Only attempt auto-login if logged out AND not already attempted
-            if matches!(phase, AuthPhase::LoggedOut) && !auto_login_attempted() {
-                // Set flag immediately to prevent duplicate attempts
-                auto_login_attempted.set(true);
-
-                info!(target: "ui.auth", "attempting auto-login");
-                match services.auth().try_auto_login().await {
-                    Ok(Some(session)) => {
-                        info!(target: "ui.auth", "auto-login successful for {}", session.four_words);
-                        auth.with_mut(|state| {
-                            state.session = Some(session);
-                            state.phase = AuthPhase::Authenticated;
-                            state.error = None;
-                        });
-                    }
-                    Ok(None) => {
-                        info!(target: "ui.auth", "no identity available for auto-login");
-                    }
-                    Err(err) => {
-                        info!(target: "ui.auth", "auto-login failed: {err}");
-                    }
-                }
+fn SpaceView(space_id: String) -> Element {
+    rsx! {
+        AppShell {
+            components::SpaceView {
+                space_id: space_id,
             }
         }
-    });
-
-    // Refresh directory when authenticated (debounced to prevent network cascades
-    // when auth state flickers during startup or reconnection)
-    use_future(move || {
-        let services = services_for_directory.clone();
-        async move {
-            if matches!(phase, AuthPhase::Authenticated)
-                && let Err(err) = services.directory().refresh_debounced().await
-            {
-                error!("failed to refresh directory snapshot: {err}");
-            }
-        }
-    });
-
-    // Trigger onboarding tour for new users after first authentication
-    use_effect(move || {
-        if matches!(phase, AuthPhase::Authenticated) && !tour_triggered() {
-            // Mark as triggered to prevent re-triggering
-            tour_triggered.set(true);
-
-            // Check if user should see onboarding (first run or version upgrade)
-            // For now, start tour for demonstration - in production, check AppConfig
-            // TODO: Integrate with AppConfig.should_show_onboarding() when service is available
-            let should_show = !tour_state.read().skipped;
-            if should_show {
-                info!(target: "ui.onboarding", "Starting onboarding tour for authenticated user");
-                tour_state.with_mut(|state| {
-                    state.start();
-                });
-            }
-        }
-    });
-
-    rsx! { Fragment {} }
+    }
 }
 
 #[component]
-fn RouteObserver() -> Element {
-    let services = use_context::<Arc<UiServices>>();
-    let route = use_route::<Route>();
-    use_effect(move || {
-        let services = services.clone();
-        let current_route = route.clone();
-        spawn(async move {
-            info!(target = "ui.nav", route = ?current_route);
-            match route_navigation_event(&current_route) {
-                Some(RouteNavigationEvent::Entity(key)) => {
-                    if let Err(err) = services.navigation().record_entity(key).await {
-                        warn!(target = "ui.nav", "failed to record entity visit: {err}");
-                    }
-                }
-                Some(RouteNavigationEvent::Contact(contact_id)) => {
-                    if let Err(err) = services.navigation().record_contact(contact_id).await {
-                        warn!(target = "ui.nav", "failed to record contact visit: {err}");
-                    }
-                }
-                None => {}
+fn SpaceTab(space_id: String, tab: String) -> Element {
+    rsx! {
+        AppShell {
+            components::SpaceView {
+                space_id: space_id,
+                initial_tab: Some(tab),
             }
-        });
-    });
-    rsx! { Fragment {} }
+        }
+    }
 }
+
+#[component]
+fn DirectMessage(agent_id: String) -> Element {
+    rsx! {
+        AppShell {
+            components::DmView { agent_id: agent_id }
+        }
+    }
+}
+
+#[component]
+fn People() -> Element {
+    rsx! {
+        AppShell {
+            components::PeopleView {}
+        }
+    }
+}
+
+#[component]
+fn Network() -> Element {
+    rsx! {
+        AppShell {
+            components::NetworkView {}
+        }
+    }
+}
+
+#[component]
+fn Settings() -> Element {
+    rsx! {
+        AppShell {
+            components::SettingsView {}
+        }
+    }
+}
+
+// ── Legacy route components (redirect to new routes) ────────────────────────
 
 #[component]
 fn LoginRoute() -> Element {
-    let navigator = use_navigator();
-    use_effect(move || {
-        navigator.replace(Route::CreateIdentityRoute {});
-    });
-    rsx! {
-        div { class: "min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center", "Redirecting..." }
-    }
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn CreateIdentityRoute() -> Element {
-    let mut auth = use_auth();
-    let navigator = use_navigator();
-    let services = use_context::<Arc<UiServices>>();
-    let auth_service = services.auth();
-
-    if matches!(auth.read().phase, AuthPhase::Authenticated) {
-        navigator.replace(Route::DashboardRoute {});
-    }
-
-    let mut acknowledged = use_signal(|| false);
-
-    if matches!(auth.read().phase, AuthPhase::PendingMnemonic) {
-        let mnemonic = auth.read().pending_mnemonic.clone().unwrap_or_default();
-        let words: Vec<&str> = mnemonic.split_whitespace().collect();
-
-        return rsx! {
-            AuthLayoutV2 {
-                title: "Your recovery phrase".to_string(),
-                subtitle: Some("Write these words down on paper. This is the only time you will see them.".to_string()),
-                footer: Some(rsx! {
-                    div {
-                        style: format!(
-                            "display: flex; \
-                             flex-direction: column; \
-                             gap: {}; \
-                             align-items: center;",
-                            spacing::SM
-                        ),
-                        span {
-                            style: format!(
-                                "font-size: {}; \
-                                 color: {};",
-                                typography::SIZE_XS,
-                                semantic::TEXT_MUTED
-                            ),
-                            "We do not store your recovery phrase. If you lose it, we cannot recover your identity."
-                        }
-                    }
-                }),
-
-                div {
-                    style: format!(
-                        "display: grid; \
-                         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); \
-                         gap: {}; \
-                         margin-bottom: {};",
-                        spacing::SM,
-                        spacing::XL
-                    ),
-                    {words.iter().enumerate().map(|(idx, word)| {
-                        rsx! {
-                            div {
-                                key: "{idx}",
-                                style: format!(
-                                    "padding: {} {}; \
-                                     border-radius: {}; \
-                                     background: {}; \
-                                     border: 1px solid {}; \
-                                     font-family: {}; \
-                                     font-size: {};",
-                                    spacing::SM,
-                                    spacing::BASE,
-                                    radius::MD,
-                                    semantic::BG_TERTIARY,
-                                    semantic::BORDER_SUBTLE,
-                                    typography::FONT_MONO,
-                                    typography::SIZE_SM
-                                ),
-                                span {
-                                    style: format!("opacity: 0.6; margin-right: {};", spacing::XS),
-                                    "{idx + 1}."
-                                }
-                                "{word}"
-                            }
-                        }
-                    })}
-                }
-
-                div {
-                    style: format!(
-                        "display: flex; \
-                         align-items: center; \
-                         gap: {}; \
-                         margin-bottom: {};",
-                        spacing::SM,
-                        spacing::LG
-                    ),
-                    input {
-                        r#type: "checkbox",
-                        checked: acknowledged(),
-                        onclick: move |_| acknowledged.set(!acknowledged()),
-                    }
-                    span {
-                        style: format!("font-size: {}; color: {};", typography::SIZE_SM, semantic::TEXT_SECONDARY),
-                        "I have written this phrase down"
-                    }
-                }
-
-                PrimaryButton {
-                    disabled: !acknowledged(),
-                    onclick: move |_| {
-                        auth.with_mut(|state| {
-                            state.phase = AuthPhase::Authenticated;
-                            state.pending_mnemonic = None;
-                            state.error = None;
-                        });
-                        navigator.replace(Route::DashboardRoute {});
-                    },
-                    "Continue"
-                }
-            }
-        };
-    }
-
-    let mut display_name = use_signal(String::new);
-
-    let create_action = {
-        let mut auth = auth;
-        let auth_service = auth_service.clone();
-        use_coroutine(move |mut rx: UnboundedReceiver<CreateRequest>| {
-            let auth_service = auth_service.clone();
-            async move {
-                while let Some(payload) = rx.next().await {
-                    if let Err(err) = process_create(auth, auth_service.clone(), payload).await {
-                        auth.with_mut(|state| {
-                            state.error = Some(err);
-                            state.phase = AuthPhase::LoggedOut;
-                        });
-                    }
-                }
-            }
-        })
-    };
-
-    let busy = matches!(auth.read().phase, AuthPhase::Authenticating);
-    let error_msg = auth.read().error.clone();
-
-    // Validation
-    let name_valid = !display_name().trim().is_empty();
-    let can_submit = name_valid;
-
-    rsx! {
-        AuthLayoutV2 {
-            title: "Begin your journey".to_string(),
-            subtitle: Some("Create your identity to join a decentralized community where you own your data.".to_string()),
-            footer: Some(rsx! {
-                div {
-                    style: format!(
-                        "display: flex; \
-                         flex-direction: column; \
-                         gap: {}; \
-                         align-items: center;",
-                        spacing::MD
-                    ),
-                    // Recovery option
-                    div {
-                        style: format!(
-                            "display: flex; \
-                             align-items: center; \
-                             gap: {}; \
-                             padding: {} {}; \
-                             background: {}; \
-                             border-radius: {}; \
-                             border: 1px solid {};",
-                            spacing::SM,
-                            spacing::MD,
-                            spacing::BASE,
-                            semantic::BG_TERTIARY,
-                            radius::MD,
-                            semantic::BORDER_SUBTLE
-                        ),
-                        span {
-                            style: format!("font-size: 1.2em; color: {};", palette::AMBER_400),
-                            "🔑"
-                        }
-                        div {
-                            span {
-                                style: format!(
-                                    "font-size: {}; \
-                                     color: {};",
-                                    typography::SIZE_SM,
-                                    semantic::TEXT_SECONDARY
-                                ),
-                                "Already have a recovery phrase? "
-                            }
-                            Link {
-                                to: Route::RecoverIdentityRoute {},
-                                style: format!(
-                                    "font-size: {}; \
-                                     color: {}; \
-                                     font-weight: {}; \
-                                     text-decoration: none;",
-                                    typography::SIZE_SM,
-                                    semantic::PRIMARY,
-                                    typography::WEIGHT_MEDIUM
-                                ),
-                                "Recover identity"
-                            }
-                        }
-                    }
-                }
-            }),
-
-            // What is Communitas - brief explanation
-            div {
-                style: format!(
-                    "margin-bottom: {}; \
-                     padding: {}; \
-                     background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 78, 59, 0.05) 100%); \
-                     border-radius: {}; \
-                     border: 1px solid {};",
-                    spacing::XL,
-                    spacing::BASE,
-                    radius::LG,
-                    semantic::BORDER_SUBTLE
-                ),
-                div {
-                    style: format!(
-                        "display: flex; \
-                         gap: {}; \
-                         font-size: {}; \
-                         color: {};",
-                        spacing::SM,
-                        typography::SIZE_SM,
-                        semantic::TEXT_SECONDARY
-                    ),
-                    span {
-                        style: format!("color: {}; flex-shrink: 0;", palette::JADE_400),
-                        "✦"
-                    }
-                    span {
-                        strong {
-                            style: format!("color: {};", semantic::TEXT_PRIMARY),
-                            "Your data stays yours"
-                        }
-                        " — All messages, files, and activity are encrypted and stored on your device. No servers, no surveillance."
-                    }
-                }
-            }
-
-            // Error banner
-            if let Some(err) = &error_msg {
-                ErrorBanner { message: err.clone() }
-            }
-
-            form {
-                onsubmit: move |evt| {
-                    evt.prevent_default();
-                    create_action.send(CreateRequest {
-                        display_name: display_name().trim().to_string(),
-                    });
-                },
-
-                // Display name input
-                FormField {
-                    label: "Display name".to_string(),
-                    input_type: "text".to_string(),
-                    placeholder: Some("How you'll appear to others".to_string()),
-                    value: display_name(),
-                    disabled: busy,
-                    required: true,
-                    oninput: move |evt: FormEvent| display_name.set(evt.value()),
-                }
-
-                // Submit button
-                PrimaryButton {
-                    disabled: busy || !can_submit,
-                    loading: busy,
-                    if busy { "Creating your identity..." } else { "Create identity" }
-                }
-
-                // Security note
-                div {
-                    style: format!(
-                        "margin-top: {}; \
-                         text-align: center; \
-                         font-size: {}; \
-                         color: {};",
-                        spacing::BASE,
-                        typography::SIZE_XS,
-                        semantic::TEXT_MUTED
-                    ),
-                    "A recovery phrase will be generated after creation. Write it down."
-                }
-            }
-        }
-    }
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn RecoverIdentityRoute() -> Element {
-    rsx! {
-        RecoverIdentityForm {
-            title: "Recover identity".to_string(),
-            subtitle: "Restore your vault using your recovery phrase.".to_string(),
-            temporary: false,
-            allow_cancel: false,
-        }
-    }
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn LoginOtherRoute() -> Element {
-    rsx! {
-        RecoverIdentityForm {
-            title: "Login other user".to_string(),
-            subtitle: "Temporary session. Data will be wiped when you log out.".to_string(),
-            temporary: true,
-            allow_cancel: true,
-        }
-    }
-}
-
-#[derive(Clone, Props, PartialEq)]
-struct RecoverIdentityFormProps {
-    title: String,
-    subtitle: String,
-    temporary: bool,
-    #[props(default = false)]
-    allow_cancel: bool,
-}
-
-#[component]
-fn RecoverIdentityForm(props: RecoverIdentityFormProps) -> Element {
-    let auth = use_auth();
-    let navigator = use_navigator();
-    let services = use_context::<Arc<UiServices>>();
-    let auth_service = services.auth();
-    let title = props.title.clone();
-    let subtitle = props.subtitle.clone();
-    let allow_cancel = props.allow_cancel;
-    let temporary = props.temporary;
-
-    if auth.read().is_authenticated() && !temporary {
-        navigator.replace(Route::DashboardRoute {});
-    }
-
-    let mut mnemonic = use_signal(String::new);
-    let mut display_name = use_signal(String::new);
-    let mut friend_words = use_signal(String::new);
-
-    let recover_action = {
-        let mut auth = auth;
-        let auth_service = auth_service.clone();
-        use_coroutine(move |mut rx: UnboundedReceiver<RecoverRequest>| {
-            let auth_service = auth_service.clone();
-            async move {
-                while let Some(payload) = rx.next().await {
-                    if let Err(err) = process_recover(auth, auth_service.clone(), payload).await {
-                        auth.with_mut(|state| {
-                            state.error = Some(err);
-                            state.phase = AuthPhase::LoggedOut;
-                        });
-                    } else {
-                        navigator.replace(Route::DashboardRoute {});
-                    }
-                }
-            }
-        })
-    };
-
-    let busy = matches!(auth.read().phase, AuthPhase::Authenticating);
-    let error_msg = auth.read().error.clone();
-
-    // Validation
-    let mnemonic_text = mnemonic();
-    let mnemonic_word_count = mnemonic_text.split_whitespace().count();
-    let mnemonic_valid = mnemonic_word_count == 12 || mnemonic_word_count == 24;
-    let name_valid = !display_name().trim().is_empty();
-    let can_submit = mnemonic_valid && name_valid;
-
-    rsx! {
-        AuthLayoutV2 {
-            title: title,
-            subtitle: Some(subtitle),
-            footer: Some(rsx! {
-                div {
-                    style: format!(
-                        "display: flex; \
-                         flex-direction: column; \
-                         gap: {}; \
-                         align-items: center;",
-                        spacing::SM
-                    ),
-                    span {
-                        style: format!(
-                            "font-size: {}; \
-                             color: {};",
-                            typography::SIZE_SM,
-                            semantic::TEXT_SECONDARY
-                        ),
-                            "Don't have a phrase? "
-                        Link {
-                            to: Route::CreateIdentityRoute {},
-                            style: format!(
-                                "color: {}; \
-                                 font-weight: {}; \
-                                 text-decoration: none;",
-                                semantic::PRIMARY,
-                                typography::WEIGHT_MEDIUM
-                            ),
-                            "Create new identity"
-                        }
-                    }
-                    if allow_cancel {
-                        span {
-                            style: format!(
-                                "font-size: {}; \
-                                 color: {};",
-                                typography::SIZE_SM,
-                                semantic::TEXT_MUTED
-                            ),
-                            "Return to your account "
-                            Link {
-                                to: Route::DashboardRoute {},
-                                style: format!(
-                                    "color: {}; \
-                                     text-decoration: none;",
-                                    semantic::TEXT_SECONDARY
-                                ),
-                                "Go back"
-                            }
-                        }
-                    }
-                }
-            }),
-
-            // Security notice
-            div {
-                style: format!(
-                    "margin-bottom: {}; \
-                     padding: {}; \
-                     background: rgba(251, 191, 36, 0.1); \
-                     border-radius: {}; \
-                     border: 1px solid rgba(251, 191, 36, 0.2);",
-                    spacing::XL,
-                    spacing::BASE,
-                    radius::LG
-                ),
-                div {
-                    style: format!(
-                        "display: flex; \
-                         gap: {}; \
-                         font-size: {}; \
-                         color: {};",
-                        spacing::SM,
-                        typography::SIZE_SM,
-                        palette::AMBER_400
-                    ),
-                    span { "⚠" }
-                    span {
-                        "Never share your recovery phrase with anyone. Communitas will never ask for it outside this recovery screen."
-                    }
-                }
-            }
-
-            // Error banner
-            if let Some(err) = &error_msg {
-                ErrorBanner { message: err.clone() }
-            }
-
-            form {
-                onsubmit: move |evt| {
-                    evt.prevent_default();
-                    let friend = friend_words().trim().to_string();
-                    recover_action.send(RecoverRequest {
-                        mnemonic: mnemonic().trim().to_string(),
-                        display_name: display_name().trim().to_string(),
-                        friend_four_words: if friend.is_empty() { None } else { Some(friend) },
-                        temporary,
-                    });
-                },
-
-                // Mnemonic textarea
-                FormTextarea {
-                    label: "Recovery phrase".to_string(),
-                    placeholder: Some("Enter your 12 or 24 word phrase...".to_string()),
-                    value: mnemonic(),
-                    disabled: busy,
-                    rows: 3,
-                    oninput: move |evt: FormEvent| mnemonic.set(evt.value()),
-                }
-
-                // Word count indicator
-                if !mnemonic().is_empty() {
-                    div {
-                        style: format!(
-                            "margin-top: -{}; \
-                             margin-bottom: {}; \
-                             font-size: {}; \
-                             color: {};",
-                            spacing::MD,
-                            spacing::XL,
-                            typography::SIZE_XS,
-                            if mnemonic_valid { semantic::SUCCESS } else { semantic::TEXT_MUTED }
-                        ),
-                        "{mnemonic_word_count} words"
-                        if mnemonic_valid {
-                            " ✓"
-                        } else {
-                            " (need 12 or 24)"
-                        }
-                    }
-                }
-
-                // Display name
-                FormField {
-                    label: "Display name".to_string(),
-                    input_type: "text".to_string(),
-                    placeholder: Some("How you'll appear to others".to_string()),
-                    value: display_name(),
-                    disabled: busy,
-                    required: true,
-                    oninput: move |evt: FormEvent| display_name.set(evt.value()),
-                }
-
-                // Friend connection words (optional)
-                FormField {
-                    label: "Friend connection words (optional)".to_string(),
-                    input_type: "text".to_string(),
-                    placeholder: Some("four-word connection from a friend".to_string()),
-                    value: friend_words(),
-                    disabled: busy,
-                    oninput: move |evt: FormEvent| friend_words.set(evt.value()),
-                }
-                if temporary {
-                    div {
-                        style: format!(
-                            "margin-top: -{}; \
-                             margin-bottom: {}; \
-                             font-size: {}; \
-                             color: {};",
-                            spacing::SM,
-                            spacing::LG,
-                            typography::SIZE_XS,
-                            semantic::TEXT_MUTED
-                        ),
-                        "Temporary session: data stored locally will be wiped when you log out."
-                    }
-                }
-
-                // Submit button
-                PrimaryButton {
-                    disabled: busy || !can_submit,
-                    loading: busy,
-                    if busy { "Recovering..." } else { "Recover identity" }
-                }
-            }
-        }
-    }
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn DashboardRoute() -> Element {
-    render_authenticated_page(
-        "Home",
-        rsx! {
-            HomeOverview {}
-        },
-    )
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
-#[component]
-fn HomeOverview() -> Element {
-    let directory = use_directory_snapshot();
-    let snapshot = directory();
-
-    // Show skeleton while directory is loading (no identity yet)
-    if snapshot.identity.is_none() {
-        return rsx! {
-            div { class: "flex flex-col gap-8",
-                SkeletonWelcomeCard {}
-                SkeletonStatsGrid {}
-                SkeletonSpacesSection {}
-            }
-        };
-    }
-
-    let display_name = snapshot
-        .identity
-        .as_ref()
-        .map(|identity| identity.display_name.clone())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "Explorer".to_string());
-
-    // Single-pass entity categorization (O(n) instead of O(n*6)) - memoized
-    let categorized = use_memo(move || {
-        let snapshot = directory();
-        CategorizedEntities::from_entities(&snapshot.entities)
-    });
-
-    let stats = vec![
-        StatItem {
-            label: "Organizations",
-            value: categorized().organizations.len(),
-        },
-        StatItem {
-            label: "Communities",
-            value: categorized().communities.len(),
-        },
-        StatItem {
-            label: "Projects",
-            value: categorized().projects.len(),
-        },
-        StatItem {
-            label: "Groups",
-            value: categorized().groups.len(),
-        },
-        StatItem {
-            label: "Channels",
-            value: categorized().channels.len(),
-        },
-        StatItem {
-            label: "Contacts",
-            value: snapshot.contacts.len(),
-        },
-    ];
-
-    rsx! {
-        div { class: "flex flex-col gap-8",
-            WelcomeCard { display_name }
-            StatsGrid { stats }
-            SpacesSection {
-                personal: categorized().personal_groups,
-                communities: categorized().communities,
-                organizations: categorized().organizations,
-                projects: categorized().projects,
-            }
-        }
-    }
-}
-
-#[derive(Props, PartialEq, Clone)]
-struct WelcomeCardProps {
-    display_name: String,
-}
-
-#[component]
-fn WelcomeCard(props: WelcomeCardProps) -> Element {
-    rsx! {
-        div {
-            class: "rounded-2xl border p-6 shadow-lg",
-            style: format!(
-                "background: linear-gradient(to right, {}40, {}20); border-color: {};",
-                colors::PRIMARY_HOVER,
-                colors::PRIMARY,
-                colors::BORDER_DEFAULT
-            ),
-            span {
-                class: "text-xs uppercase tracking-[0.4em]",
-                style: format!("color: {};", colors::PRIMARY),
-                "Communitas"
-            }
-            h2 {
-                class: "mt-2 text-3xl font-semibold",
-                style: format!("color: {};", colors::TEXT_PRIMARY),
-                "Welcome back, {props.display_name}"
-            }
-            p {
-                style: format!("color: {};", colors::TEXT_SECONDARY),
-                "Your local-first collaboration hub"
-            }
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq)]
-struct StatItem {
-    label: &'static str,
-    value: usize,
-}
-
-#[derive(Props, PartialEq, Clone)]
-struct StatsGridProps {
-    stats: Vec<StatItem>,
-}
-
-#[component]
-fn StatsGrid(props: StatsGridProps) -> Element {
-    rsx! {
-        div { class: "grid gap-4 md:grid-cols-3",
-            {props.stats.iter().map(|item| {
-                rsx! {
-                    div {
-                        class: "rounded-2xl border p-4",
-                        style: format!(
-                            "background-color: {}; border-color: {};",
-                            colors::SURFACE_CARD,
-                            colors::BORDER_DEFAULT
-                        ),
-                        span {
-                            class: "text-sm uppercase tracking-[0.3em]",
-                            style: format!("color: {};", colors::TEXT_MUTED),
-                            "{item.label}"
-                        }
-                        h3 {
-                            class: "text-2xl font-semibold",
-                            style: format!("color: {};", colors::TEXT_PRIMARY),
-                            "{item.value}"
-                        }
-                    }
-                }
-            })}
-        }
-    }
-}
-
-#[derive(Props, PartialEq, Clone)]
-struct SpacesSectionProps {
-    personal: Vec<UnifiedEntity>,
-    communities: Vec<UnifiedEntity>,
-    organizations: Vec<UnifiedEntity>,
-    projects: Vec<UnifiedEntity>,
-}
-
-#[component]
-fn SpacesSection(props: SpacesSectionProps) -> Element {
-    rsx! {
-        div { class: "flex flex-col gap-4",
-            h3 {
-                class: "text-2xl font-semibold",
-                style: format!("color: {};", colors::TEXT_PRIMARY),
-                "Your Spaces"
-            }
-            div { class: "grid gap-4 lg:grid-cols-2",
-                EntityListPanel {
-                    title: "Personal",
-                    entities: props.personal.clone(),
-                    empty_label: "No personal groups yet",
-                }
-                EntityListPanel {
-                    title: "Communities",
-                    entities: props.communities.clone(),
-                    empty_label: "No communities yet",
-                }
-                EntityListPanel {
-                    title: "Organizations",
-                    entities: props.organizations.clone(),
-                    empty_label: "No organizations yet",
-                }
-                EntityListPanel {
-                    title: "Projects",
-                    entities: props.projects.clone(),
-                    empty_label: "No projects yet",
-                }
-            }
-        }
-    }
-}
-
-#[derive(Props, PartialEq, Clone)]
-struct EntityListPanelProps {
-    title: &'static str,
-    entities: Vec<UnifiedEntity>,
-    empty_label: &'static str,
-}
-
-#[component]
-fn EntityListPanel(props: EntityListPanelProps) -> Element {
-    let services = use_context::<Arc<UiServices>>();
-    rsx! {
-        div {
-            class: "rounded-2xl border p-4",
-            style: format!(
-                "background-color: {}; border-color: {};",
-                colors::SURFACE_CARD,
-                colors::BORDER_DEFAULT
-            ),
-            h4 {
-                class: "text-lg font-semibold",
-                style: format!("color: {};", colors::TEXT_PRIMARY),
-                "{props.title}"
-            }
-            if props.entities.is_empty() {
-                p {
-                    class: "text-sm",
-                    style: format!("color: {};", colors::TEXT_MUTED),
-                    "{props.empty_label}"
-                }
-            } else {
-                div { class: "mt-3 flex flex-col gap-2",
-                    {props.entities.iter().take(5).map(|entity| {
-                        let services = services.clone();
-                        let nav_key = nav_key_for(entity);
-                        let route = entity_route(entity);
-                        let entity_name = entity.name.clone();
-                        let member_count = entity.member_count;
-                        rsx! {
-                            Link {
-                                to: route.clone(),
-                                class: "flex flex-col rounded-xl border px-3 py-2 text-left transition-colors",
-                                style: format!(
-                                    "background-color: {}; border-color: {};",
-                                    colors::SURFACE_ELEVATED,
-                                    colors::BORDER_DEFAULT
-                                ),
-                                onclick: move |_| {
-                                    record_entity_visit(services.clone(), nav_key.clone());
-                                },
-                                span {
-                                    class: "text-sm font-semibold",
-                                    style: format!("color: {};", colors::TEXT_PRIMARY),
-                                    "{entity_name}"
-                                }
-                                span {
-                                    class: "text-xs",
-                                    style: format!("color: {};", colors::TEXT_MUTED),
-                                    "{member_count} members"
-                                }
-                            }
-                        }
-                    })}
-                }
-            }
-        }
-    }
-}
 #[component]
 fn MessagesRoute() -> Element {
-    let mut selected_thread = use_signal(|| Option::<String>::None);
-    let mut reply_to = use_signal(|| Option::<communitas_ui_api::Message>::None);
-
-    let handle_thread_select = move |thread_id: String| {
-        selected_thread.set(Some(thread_id.clone()));
-        reply_to.set(None); // Clear reply when switching threads
-        info!(target = "ui.messages", event = "thread_selected", thread_id = %thread_id);
-    };
-
-    render_authenticated_page(
-        "Messages",
-        rsx! {
-            div {
-                class: "flex gap-6 h-[calc(100vh-16rem)]",
-                // Thread list sidebar
-                div {
-                    class: "w-80 flex-shrink-0 rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden",
-                    components::ThreadListSidebar {
-                        selected_thread_id: selected_thread(),
-                        on_thread_select: handle_thread_select,
-                    }
-                }
-                // Message area
-                div {
-                    class: "flex-1 rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col overflow-hidden",
-                    if let Some(thread_id) = selected_thread() {
-                        // Thread selected - show message list and composer
-                        div {
-                            class: "flex-1 overflow-hidden",
-                            components::MessageList {
-                                thread_id: thread_id.clone(),
-                                on_reply: move |msg: communitas_ui_api::Message| {
-                                    reply_to.set(Some(msg));
-                                },
-                            }
-                        }
-                        // Composer at bottom
-                        components::MessageComposer {
-                            thread_id: thread_id.clone(),
-                            reply_to: reply_to(),
-                            on_send: move |msg: communitas_ui_api::Message| {
-                                info!(target = "ui.messages", event = "message_sent", message_id = %msg.id);
-                                reply_to.set(None);
-                            },
-                            on_cancel_reply: Some(EventHandler::new(move |_| {
-                                reply_to.set(None);
-                            })),
-                        }
-                    } else {
-                        // No thread selected - show empty state
-                        div {
-                            class: "flex-1 flex items-center justify-center",
-                            div {
-                                class: "text-center",
-                                div {
-                                    class: "w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center mb-4 mx-auto",
-                                    span { class: "text-3xl", "💬" }
-                                }
-                                p { class: "text-slate-400", "Select a conversation" }
-                                p { class: "text-slate-500 text-sm mt-1", "Choose a thread from the sidebar to start chatting" }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-    )
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn ChannelsRoute() -> Element {
-    let mut selected_channel =
-        use_signal(|| Option::<components::channel_sidebar::SelectedChannel>::None);
-    let mut thread_message = use_signal(|| Option::<models::channel::ChatMessage>::None);
-
-    render_authenticated_page(
-        "Channels",
-        rsx! {
-            div {
-                style: "display: flex; height: calc(100vh - 4rem); overflow: hidden;",
-
-                // Channel sidebar
-                div {
-                    style: "width: 240px; flex-shrink: 0; border-right: 1px solid rgba(52, 211, 153, 0.08);",
-                    components::ChannelSidebar {
-                        selected: selected_channel(),
-                        on_select: move |ch: components::channel_sidebar::SelectedChannel| {
-                            selected_channel.set(Some(ch));
-                            thread_message.set(None);
-                        },
-                        on_create_channel: move |_group_id: String| {
-                            // Channel creation modal placeholder
-                            info!(target: "ui.channels", "Create channel requested");
-                        },
-                    }
-                }
-
-                // Main chat area
-                div {
-                    style: "flex: 1; display: flex; overflow: hidden;",
-
-                    if let Some(channel) = selected_channel() {
-                        div {
-                            style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
-                            components::ChannelChatView {
-                                channel: channel.clone(),
-                                on_open_thread: move |msg: models::channel::ChatMessage| {
-                                    thread_message.set(Some(msg));
-                                },
-                            }
-                        }
-
-                        // Thread panel
-                        if let Some(ref parent_msg) = thread_message() {
-                            if let Some(ref ch) = selected_channel() {
-                                components::ThreadPanel {
-                                    parent_message: parent_msg.clone(),
-                                    channel: ch.clone(),
-                                    on_close: move |_| {
-                                        thread_message.set(None);
-                                    },
-                                }
-                            }
-                        }
-                    } else {
-                        // No channel selected
-                        div {
-                            style: format!(
-                                "flex: 1; display: flex; align-items: center; justify-content: center; \
-                                 background: {};",
-                                design_tokens::semantic::BG_PRIMARY
-                            ),
-                            div {
-                                style: "text-align: center;",
-                                div {
-                                    style: format!(
-                                        "width: 80px; height: 80px; border-radius: {}; \
-                                         background: {}; display: flex; align-items: center; \
-                                         justify-content: center; margin: 0 auto {}; font-size: {};",
-                                        design_tokens::radius::XXL,
-                                        design_tokens::semantic::BG_TERTIARY,
-                                        design_tokens::spacing::BASE,
-                                        design_tokens::typography::SIZE_4XL
-                                    ),
-                                    "#"
-                                }
-                                p {
-                                    style: format!(
-                                        "color: {}; font-size: {};",
-                                        design_tokens::semantic::TEXT_MUTED,
-                                        design_tokens::typography::SIZE_SM
-                                    ),
-                                    "Select a channel from the sidebar to start chatting"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-    )
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn ProjectsRoute() -> Element {
-    render_authenticated_page(
-        "Projects",
-        rsx! {
-            components::kanban::BoardListPage {}
-        },
-    )
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn ContactsRoute() -> Element {
-    render_authenticated_page(
-        "Contacts",
-        rsx! {
-            PlaceholderPanel { title: "Contacts".into(), body: "Presence indicators, favorites, and quick actions.".into() }
-        },
-    )
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::People {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn NetworkRoute() -> Element {
-    render_authenticated_page(
-        "Network",
-        rsx! {
-            PlaceholderPanel { title: "Network diagnostics".into(), body: "Gossip peers, bootstrap connections, and MCP wiring.".into() }
-        },
-    )
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Network {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn MoreRoute() -> Element {
-    let mut tour_state = use_tour_state();
-    let auth = use_auth();
-    let services = use_context::<Arc<UiServices>>();
-    let auth_service = services.auth();
-
-    let start_tour = move |_| {
-        tour_state.with_mut(|state| {
-            state.start();
-        });
-        info!(target: "ui.onboarding", "Tour started from Settings");
-    };
-
-    let logout_action = move |_| {
-        let mut auth_signal = auth;
-        let auth_service = auth_service.clone();
-        spawn(async move {
-            if let Err(err) = process_logout(auth_signal, auth_service).await {
-                auth_signal.with_mut(|state| {
-                    state.error = Some(err);
-                });
-            }
-        });
-    };
-
-    render_authenticated_page(
-        "More",
-        rsx! {
-            div { class: "space-y-6",
-                // Version info section
-                div {
-                    class: "rounded-xl border border-slate-800 bg-slate-950/60 p-6",
-                    h2 { class: "mb-4 text-lg font-semibold text-slate-100", "About" }
-                    div { class: "space-y-2 text-sm text-slate-400",
-                        p { "Version: {version::CURRENT.version}" }
-                        p { "Build: {version::CURRENT.commit_hash}" }
-                        p { "Platform: {version::CURRENT.target}" }
-                    }
-                }
-
-                // Help section with tour restart
-                div {
-                    class: "rounded-xl border border-slate-800 bg-slate-950/60 p-6",
-                    h2 { class: "mb-4 text-lg font-semibold text-slate-100", "Help" }
-                    p { class: "mb-4 text-sm text-slate-400",
-                        "New to Communitas? Take a guided tour of the main features."
-                    }
-                    button {
-                        class: "rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950",
-                        r#type: "button",
-                        onclick: start_tour,
-                        "Start Tour"
-                    }
-                }
-
-                div {
-                    class: "rounded-xl border border-slate-800 bg-slate-950/60 p-6",
-                    h2 { class: "mb-4 text-lg font-semibold text-slate-100", "Account" }
-                    div { class: "flex flex-col gap-3 text-sm text-slate-300",
-                        Link {
-                            to: Route::LoginOtherRoute {},
-                            class: "rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-200 hover:border-emerald-500 hover:text-emerald-200",
-                            "Login other user (temporary)"
-                        }
-                        button {
-                            class: "rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-200 hover:border-rose-400 hover:text-rose-200",
-                            r#type: "button",
-                            onclick: logout_action,
-                            "Log out"
-                        }
-                    }
-                }
-
-                // Placeholder for additional settings
-                PlaceholderPanel { title: "Settings".into(), body: "Additional settings and MCP tools coming soon.".into() }
-            }
-        },
-    )
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Settings {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn EntityDetailRoute(entity_type: String, entity_id: String) -> Element {
-    // Suppress unused warning - entity_type kept for route signature but not needed by EntityPageV2
-    let _ = entity_type;
-    render_authenticated_page(
-        "Entity",
-        rsx! {
-            pages::EntityPageV2 { entity_id: entity_id.clone() }
-        },
-    )
+    let _ = (entity_type, entity_id);
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn EntityChatRoute(entity_type: String, entity_id: String) -> Element {
-    render_authenticated_page(
-        "Entity Chat",
-        rsx! {
-            PlaceholderPanel { title: "Entity Chat".into(), body: format!("Chat for {entity_type} {entity_id}").into() }
-        },
-    )
+    let _ = (entity_type, entity_id);
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn EntityDriveRoute(entity_type: String, entity_id: String) -> Element {
-    render_authenticated_page(
-        "Entity Drive",
-        rsx! {
-            components::DriveBrowser { entity_id: entity_id.clone() }
-        },
-    )
+    let _ = (entity_type, entity_id);
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn ProjectBoardRoute(project_id: String) -> Element {
-    render_authenticated_page(
-        "Project Board",
-        rsx! {
-            components::kanban::BoardView { board_id: project_id }
-        },
-    )
+    let _ = project_id;
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::Dashboard {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn ContactDetailRoute(contact_id: String) -> Element {
-    render_authenticated_page(
-        "Contact",
-        rsx! {
-            ContactDetailView { contact_id }
-        },
-    )
+    let _ = contact_id;
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::People {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
 #[component]
 fn ContactChatRoute(contact_id: String) -> Element {
-    render_authenticated_page(
-        "Contact Chat",
-        rsx! {
-            PlaceholderPanel { title: "Contact Chat".into(), body: format!("Chat with {contact_id}").into() }
-        },
-    )
+    let _ = contact_id;
+    let nav = use_navigator();
+    use_effect(move || { nav.replace(Route::People {}); });
+    rsx! { div { "Redirecting..." } }
 }
 
-#[derive(Props, PartialEq, Clone)]
-struct EntityDetailsViewProps {
-    entity_type: String,
-    entity_id: String,
-}
+// ── Channel creation helper ─────────────────────────────────────────────────
 
-#[component]
-fn EntityDetailsView(props: EntityDetailsViewProps) -> Element {
-    let directory = use_directory_snapshot();
-    let snapshot = directory();
-    let entity = snapshot
-        .entities
-        .iter()
-        .find(|entity| entity.id == props.entity_id)
-        .cloned();
-    let mut reply_to = use_signal(|| Option::<communitas_ui_api::Message>::None);
-    let mut show_chat = use_signal(|| true);
-
-    if let Some(entity) = entity {
-        let entity_for_header = entity.clone();
-        let thread_id = props.entity_id.clone();
-        let thread_id_for_composer = thread_id.clone();
-        let entity_id_for_edit = props.entity_id.clone();
-        let entity_id_for_leave = props.entity_id.clone();
-        let entity_id_for_members = props.entity_id.clone();
-
-        rsx! {
-            div {
-                class: "entity-detail-view flex flex-col h-[calc(100vh-16rem)]",
-                role: "main",
-                aria_label: format!("{} details", entity.name),
-                // Entity header
-                EntityHeader {
-                    entity: entity_for_header,
-                    on_edit: move |_| {
-                        info!(target = "ui.entity", event = "edit_clicked", entity_id = %entity_id_for_edit);
-                    },
-                    on_leave: move |_| {
-                        info!(target = "ui.entity", event = "leave_clicked", entity_id = %entity_id_for_leave);
-                    },
-                }
-                // Content area with tabs
-                div {
-                    class: "flex border-b border-slate-800 mt-4",
-                    button {
-                        class: format!(
-                            "px-4 py-2 text-sm font-medium transition {}",
-                            if show_chat() { "text-emerald-400 border-b-2 border-emerald-400" } else { "text-slate-400 hover:text-slate-200" }
-                        ),
-                        onclick: move |_| show_chat.set(true),
-                        "Chat"
-                    }
-                    button {
-                        class: format!(
-                            "px-4 py-2 text-sm font-medium transition {}",
-                            if !show_chat() { "text-emerald-400 border-b-2 border-emerald-400" } else { "text-slate-400 hover:text-slate-200" }
-                        ),
-                        onclick: move |_| show_chat.set(false),
-                        "Members"
-                    }
-                }
-                // Tab content
-                if show_chat() {
-                    // Chat panel
-                    div {
-                        class: "flex-1 flex flex-col overflow-hidden mt-4",
-                        div {
-                            class: "flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/30",
-                            components::MessageList {
-                                thread_id: thread_id.clone(),
-                                on_reply: move |msg: communitas_ui_api::Message| {
-                                    reply_to.set(Some(msg));
-                                },
-                            }
-                        }
-                        div {
-                            class: "mt-2",
-                            components::MessageComposer {
-                                thread_id: thread_id_for_composer,
-                                reply_to: reply_to(),
-                                on_send: move |msg: communitas_ui_api::Message| {
-                                    info!(target = "ui.entity", event = "message_sent", message_id = %msg.id);
-                                    reply_to.set(None);
-                                },
-                                on_cancel_reply: Some(EventHandler::new(move |_| {
-                                    reply_to.set(None);
-                                })),
-                            }
-                        }
-                    }
-                } else {
-                    // Members panel
-                    EntityMemberList {
-                        entity_id: entity_id_for_members.clone(),
-                    }
-                }
-            }
-        }
-    } else {
-        rsx! {
-            EntityNotFound { entity_id: props.entity_id.clone() }
-        }
+pub(crate) async fn create_channel(
+    group_id: &str,
+    raw_name: &str,
+    raw_description: &str,
+) -> Result<models::channel::ChannelMeta, String> {
+    let channel_name = x0x_contract::normalize_channel_name(raw_name);
+    if channel_name.is_empty() {
+        return Err("Channel name must contain letters, numbers, or dashes.".to_string());
     }
-}
 
-/// Entity header showing name, type badge, description, and actions.
-#[derive(Props, Clone, PartialEq)]
-struct EntityHeaderProps {
-    entity: UnifiedEntity,
-    on_edit: EventHandler<()>,
-    on_leave: EventHandler<()>,
-}
+    let client = X0xClient::new();
+    let group = client
+        .get_group(group_id)
+        .await
+        .map_err(|err| format!("Failed to load space details: {err}"))?;
 
-#[component]
-fn EntityHeader(props: EntityHeaderProps) -> Element {
-    let entity = &props.entity;
-    let type_badge = match entity.entity_type {
-        UnifiedEntityType::Organization => match entity.category {
-            Some(OrganizationCategory::Community) => (
-                "Community",
-                "bg-purple-500/20 text-purple-300 border-purple-500/30",
-            ),
-            Some(OrganizationCategory::Organization) | None => (
-                "Organization",
-                "bg-blue-500/20 text-blue-300 border-blue-500/30",
-            ),
-        },
-        UnifiedEntityType::Project => (
-            "Project",
-            "bg-amber-500/20 text-amber-300 border-amber-500/30",
-        ),
-        UnifiedEntityType::Group => (
-            "Group",
-            "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-        ),
-        UnifiedEntityType::Channel => {
-            ("Channel", "bg-cyan-500/20 text-cyan-300 border-cyan-500/30")
-        }
-        UnifiedEntityType::Person => ("Person", "bg-pink-500/20 text-pink-300 border-pink-500/30"),
+    let store_id = x0x_contract::channel_store_id(group_id);
+    let stores = client
+        .list_stores()
+        .await
+        .map_err(|err| format!("Failed to list x0x stores: {err}"))?;
+
+    if !stores.iter().any(|store| store.id == store_id) {
+        client
+            .create_store("Channels", &store_id)
+            .await
+            .map_err(|err| format!("Failed to create channel store: {err}"))?;
+    }
+
+    let mut channels = x0x_contract::load_group_channels(&client, &group).await;
+
+    if channels.iter().any(|channel| channel.name == channel_name) {
+        return Err(format!("Channel #{channel_name} already exists."));
+    }
+
+    let agent = client
+        .agent()
+        .await
+        .map_err(|err| format!("Failed to load agent identity: {err}"))?;
+    let new_channel = models::channel::ChannelMeta {
+        name: channel_name.clone(),
+        description: raw_description.trim().to_string(),
+        creator: agent.agent_id,
+        created_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0),
+        topic: x0x_contract::channel_topic(group_id, &channel_name),
     };
 
-    rsx! {
-        header {
-            class: "entity-header rounded-xl border border-slate-800 bg-slate-900/50 p-5",
-            role: "banner",
-            div {
-                class: "flex flex-col gap-3 md:flex-row md:items-start md:justify-between",
-                // Entity info
-                div {
-                    class: "flex-1",
-                    // Type badge
-                    span {
-                        class: format!("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border {}", type_badge.1),
-                        "{type_badge.0}"
-                    }
-                    // Name
-                    h1 {
-                        class: "mt-2 text-2xl font-semibold text-white",
-                        "{entity.name}"
-                    }
-                    // Description
-                    if !entity.description.is_empty() {
-                        p {
-                            class: "mt-1 text-sm text-slate-400",
-                            "{entity.description}"
-                        }
-                    }
-                    // Member count
-                    div {
-                        class: "mt-3 flex items-center gap-4 text-sm text-slate-500",
-                        span {
-                            class: "flex items-center gap-1",
-                            span { class: "text-slate-600", "👥" }
-                            {format!("{} member{}", entity.member_count, if entity.member_count != 1 { "s" } else { "" })}
-                        }
-                    }
-                }
-                // Actions
-                div {
-                    class: "flex gap-2 mt-3 md:mt-0",
-                    button {
-                        class: "px-4 py-2 text-sm font-medium text-slate-300 border border-slate-700 rounded-lg hover:border-slate-600 hover:text-slate-200 transition",
-                        onclick: move |_| props.on_edit.call(()),
-                        "Edit"
-                    }
-                    button {
-                        class: "px-4 py-2 text-sm font-medium text-red-400 border border-red-500/30 rounded-lg hover:border-red-500/50 hover:bg-red-500/10 transition",
-                        onclick: move |_| props.on_leave.call(()),
-                        "Leave"
-                    }
-                }
-            }
-        }
-    }
-}
+    channels.push(new_channel.clone());
+    x0x_contract::sort_channels(&mut channels);
 
-/// Member list panel for entity.
-#[derive(Props, Clone, PartialEq)]
-struct EntityMemberListProps {
-    entity_id: String,
-}
-
-#[component]
-fn EntityMemberList(props: EntityMemberListProps) -> Element {
-    // TODO: Load actual members from service based on props.entity_id
-    let _entity_id = &props.entity_id;
-
-    rsx! {
-        aside {
-            class: "entity-member-list flex-1 overflow-y-auto mt-4 rounded-lg border border-slate-800 bg-slate-900/30 p-4",
-            role: "complementary",
-            aria_label: "Entity members",
-            h3 {
-                class: "text-sm font-medium text-slate-400 uppercase tracking-wider mb-4",
-                "Members"
-            }
-            // Placeholder members
-            div {
-                class: "space-y-2",
-                for i in 0..5 {
-                    div {
-                        key: "{i}",
-                        class: "flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition",
-                        // Avatar
-                        div {
-                            class: "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm text-slate-300",
-                            "{(b'A' + i as u8) as char}"
-                        }
-                        // Info
-                        div {
-                            class: "flex-1 min-w-0",
-                            p {
-                                class: "text-sm font-medium text-slate-200 truncate",
-                                "Member {i + 1}"
-                            }
-                            p {
-                                class: "text-xs text-slate-500",
-                                "connection-address"
-                            }
-                        }
-                        // Presence dot placeholder
-                        span {
-                            class: "w-2 h-2 rounded-full bg-emerald-400",
-                            title: "Online",
-                        }
-                    }
-                }
-            }
-            // Load more hint
-            p {
-                class: "mt-4 text-center text-xs text-slate-600",
-                "Member list integration coming soon"
-            }
-        }
-    }
-}
-
-/// Not found state for entity.
-#[derive(Props, Clone, PartialEq)]
-struct EntityNotFoundProps {
-    entity_id: String,
-}
-
-#[component]
-fn EntityNotFound(props: EntityNotFoundProps) -> Element {
-    rsx! {
-        div {
-            class: "flex flex-col items-center justify-center py-16",
-            role: "alert",
-            div {
-                class: "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4",
-                span { class: "text-2xl", "🔍" }
-            }
-            h2 {
-                class: "text-xl font-semibold text-slate-200",
-                "Entity not found"
-            }
-            p {
-                class: "mt-2 text-sm text-slate-500",
-                "The entity \"{props.entity_id}\" could not be found."
-            }
-            Link {
-                to: Route::DashboardRoute {},
-                class: "mt-4 px-4 py-2 text-sm font-medium text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/10 transition",
-                "Return to Dashboard"
-            }
-        }
-    }
-}
-
-// --- Contact Detail View ---
-
-#[derive(Props, PartialEq, Clone)]
-struct ContactDetailViewProps {
-    contact_id: String,
-}
-
-#[component]
-fn ContactDetailView(props: ContactDetailViewProps) -> Element {
-    let directory = use_directory_snapshot();
-    let snapshot = directory();
-    let contact = snapshot
-        .contacts
-        .iter()
-        .find(|c| c.id == props.contact_id)
-        .cloned();
-
-    let mut reply_to = use_signal(|| Option::<communitas_ui_api::Message>::None);
-
-    // Mock presence for now - will be wired to PresenceService
-    let presence = PresenceStatus::Online;
-    let last_seen: Option<u64> = None;
-
-    if let Some(contact) = contact {
-        let contact_id_for_edit = props.contact_id.clone();
-        let contact_id_for_block = props.contact_id.clone();
-        let contact_id_for_remove = props.contact_id.clone();
-        let thread_id = props.contact_id.clone();
-        let thread_id_for_composer = thread_id.clone();
-
-        rsx! {
-            div {
-                class: "contact-detail-view flex flex-col h-[calc(100vh-16rem)]",
-                role: "main",
-                aria_label: format!("{} contact details", contact.display_name),
-                // Contact header card
-                ContactCard {
-                    contact: contact.clone(),
-                    presence,
-                    last_seen,
-                    on_edit: move |_| {
-                        info!(target = "ui.contact", event = "edit_clicked", contact_id = %contact_id_for_edit);
-                    },
-                    on_block: move |_| {
-                        info!(target = "ui.contact", event = "block_clicked", contact_id = %contact_id_for_block);
-                    },
-                    on_remove: move |_| {
-                        info!(target = "ui.contact", event = "remove_clicked", contact_id = %contact_id_for_remove);
-                    },
-                }
-                // DM chat panel
-                div {
-                    class: "flex-1 flex flex-col overflow-hidden mt-4",
-                    div {
-                        class: "flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/30",
-                        components::MessageList {
-                            thread_id: thread_id.clone(),
-                            on_reply: move |msg: communitas_ui_api::Message| {
-                                reply_to.set(Some(msg));
-                            },
-                        }
-                    }
-                    div {
-                        class: "mt-2",
-                        components::MessageComposer {
-                            thread_id: thread_id_for_composer,
-                            reply_to: reply_to(),
-                            on_send: move |msg: communitas_ui_api::Message| {
-                                info!(target = "ui.contact", event = "message_sent", message_id = %msg.id);
-                                reply_to.set(None);
-                            },
-                            on_cancel_reply: Some(EventHandler::new(move |_| {
-                                reply_to.set(None);
-                            })),
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        rsx! {
-            ContactNotFound { contact_id: props.contact_id.clone() }
-        }
-    }
-}
-
-/// Contact card showing avatar, name, presence badge, and actions.
-#[derive(Props, Clone, PartialEq)]
-struct ContactCardProps {
-    contact: UnifiedContact,
-    presence: PresenceStatus,
-    last_seen: Option<u64>,
-    on_edit: EventHandler<()>,
-    on_block: EventHandler<()>,
-    on_remove: EventHandler<()>,
-}
-
-#[component]
-fn ContactCard(props: ContactCardProps) -> Element {
-    let contact = &props.contact;
-    let first_char = contact
-        .display_name
-        .chars()
-        .next()
-        .unwrap_or('?')
-        .to_uppercase()
-        .to_string();
-
-    rsx! {
-        header {
-            class: "contact-card rounded-xl border border-slate-800 bg-slate-900/50 p-5",
-            role: "banner",
-            div {
-                class: "flex flex-col gap-4 md:flex-row md:items-center md:justify-between",
-                // Contact info
-                div {
-                    class: "flex items-center gap-4",
-                    // Avatar with presence dot
-                    div {
-                        class: "relative",
-                        div {
-                            class: "w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-2xl text-slate-200 font-semibold",
-                            "{first_char}"
-                        }
-                        // Presence dot in corner
-                        div {
-                            class: "absolute -bottom-0.5 -right-0.5",
-                            components::PresenceDot {
-                                status: props.presence,
-                                size: "md",
-                            }
-                        }
-                    }
-                    // Name and details
-                    div {
-                        class: "flex flex-col",
-                        h1 {
-                            class: "text-xl font-semibold text-white",
-                            "{contact.display_name}"
-                        }
-                        // Four-word ID
-                        p {
-                            class: "text-sm text-slate-500 font-mono",
-                            "{contact.id}"
-                        }
-                        // Presence badge with text
-                        div {
-                            class: "mt-2",
-                            components::PresenceBadge {
-                                status: props.presence,
-                                size: "sm",
-                            }
-                        }
-                        // Last seen (if offline)
-                        if props.presence == PresenceStatus::Offline {
-                            if let Some(last_seen) = props.last_seen {
-                                p {
-                                    class: "text-xs text-slate-600 mt-1",
-                                    "Last seen {format_relative_time(last_seen)}"
-                                }
-                            }
-                        }
-                    }
-                }
-                // Actions
-                div {
-                    class: "flex gap-2 mt-3 md:mt-0",
-                    button {
-                        class: "px-4 py-2 text-sm font-medium text-slate-300 border border-slate-700 rounded-lg hover:border-slate-600 hover:text-slate-200 transition",
-                        onclick: move |_| props.on_edit.call(()),
-                        "Edit"
-                    }
-                    button {
-                        class: "px-4 py-2 text-sm font-medium text-amber-400 border border-amber-500/30 rounded-lg hover:border-amber-500/50 hover:bg-amber-500/10 transition",
-                        onclick: move |_| props.on_block.call(()),
-                        "Block"
-                    }
-                    button {
-                        class: "px-4 py-2 text-sm font-medium text-red-400 border border-red-500/30 rounded-lg hover:border-red-500/50 hover:bg-red-500/10 transition",
-                        onclick: move |_| props.on_remove.call(()),
-                        "Remove"
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Not found state for contact.
-#[derive(Props, Clone, PartialEq)]
-struct ContactNotFoundProps {
-    contact_id: String,
-}
-
-#[component]
-fn ContactNotFound(props: ContactNotFoundProps) -> Element {
-    rsx! {
-        div {
-            class: "flex flex-col items-center justify-center py-16",
-            role: "alert",
-            div {
-                class: "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4",
-                span { class: "text-2xl", "👤" }
-            }
-            h2 {
-                class: "text-xl font-semibold text-slate-200",
-                "Contact not found"
-            }
-            p {
-                class: "mt-2 text-sm text-slate-500",
-                "The contact \"{props.contact_id}\" could not be found."
-            }
-            Link {
-                to: Route::ContactsRoute {},
-                class: "mt-4 px-4 py-2 text-sm font-medium text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/10 transition",
-                "Return to Contacts"
-            }
-        }
-    }
-}
-
-/// Format timestamp as relative time.
-fn format_relative_time(timestamp_ms: u64) -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-
-    let diff_ms = now.saturating_sub(timestamp_ms);
-    let diff_secs = diff_ms / 1000;
-    let diff_mins = diff_secs / 60;
-    let diff_hours = diff_mins / 60;
-    let diff_days = diff_hours / 24;
-
-    if diff_mins < 1 {
-        "just now".to_string()
-    } else if diff_mins < 60 {
-        format!("{} min ago", diff_mins)
-    } else if diff_hours < 24 {
-        format!(
-            "{} hour{} ago",
-            diff_hours,
-            if diff_hours == 1 { "" } else { "s" }
+    let bytes = x0x_contract::serialize_channels_index(&channels)
+        .map_err(|err| format!("Failed to encode channel metadata: {err}"))?;
+    client
+        .put(
+            &store_id,
+            x0x_contract::CHANNELS_INDEX_KEY,
+            &bytes,
+            Some("application/json"),
         )
-    } else {
-        format!(
-            "{} day{} ago",
-            diff_days,
-            if diff_days == 1 { "" } else { "s" }
-        )
-    }
-}
+        .await
+        .map_err(|err| format!("Failed to write channel metadata: {err}"))?;
 
-fn render_authenticated_page(_title: &'static str, body: Element) -> Element {
-    let auth = use_auth();
-    let navigator = use_navigator();
-    if !auth.read().is_authenticated() {
-        navigator.replace(Route::CreateIdentityRoute {});
-        return rsx! {
-            div { class: "min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center", "Redirecting..." }
-        };
-    }
-    rsx! {
-        pages::MainAppV2 {
-            {body}
-        }
-    }
-}
-
-fn nav_key_for(entity: &UnifiedEntity) -> EntityNavigationKey {
-    EntityNavigationKey::new(entity_type_segment(entity.entity_type), entity.id.clone())
-}
-
-fn entity_route(entity: &UnifiedEntity) -> Route {
-    Route::EntityDetailRoute {
-        entity_type: entity_type_segment(entity.entity_type).to_string(),
-        entity_id: entity.id.clone(),
-    }
-}
-
-fn entity_type_segment(entity_type: UnifiedEntityType) -> &'static str {
-    match entity_type {
-        UnifiedEntityType::Organization => "organisation",
-        UnifiedEntityType::Project => "project",
-        UnifiedEntityType::Group => "group",
-        UnifiedEntityType::Channel => "channel",
-        UnifiedEntityType::Person => "person",
-    }
-}
-
-fn record_entity_visit(services: Arc<UiServices>, key: EntityNavigationKey) {
-    let nav = services.navigation();
-    spawn(async move {
-        let _ = nav.record_entity(key).await;
-    });
-}
-
-// Note: Old AppShell removed - now using pages::MainAppV2 with v2 design system
-
-// Used by RouteObserver (currently disabled) and tests
-#[allow(dead_code)]
-enum RouteNavigationEvent {
-    Entity(EntityNavigationKey),
-    Contact(String),
-}
-
-// Used by RouteObserver (currently disabled) and tests
-#[allow(dead_code)]
-fn route_navigation_event(route: &Route) -> Option<RouteNavigationEvent> {
-    match route {
-        Route::EntityDetailRoute {
-            entity_type,
-            entity_id,
-        }
-        | Route::EntityChatRoute {
-            entity_type,
-            entity_id,
-        }
-        | Route::EntityDriveRoute {
-            entity_type,
-            entity_id,
-        } => Some(RouteNavigationEvent::Entity(EntityNavigationKey::new(
-            entity_type.clone(),
-            entity_id.clone(),
-        ))),
-        Route::ProjectBoardRoute { project_id } => Some(RouteNavigationEvent::Entity(
-            EntityNavigationKey::new("project", project_id.clone()),
-        )),
-        Route::ContactDetailRoute { contact_id } | Route::ContactChatRoute { contact_id } => {
-            Some(RouteNavigationEvent::Contact(contact_id.clone()))
-        }
-        _ => None,
-    }
+    Ok(new_channel)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use communitas_ui_service::UiServices;
-    use dioxus::prelude::{Element, VirtualDom, rsx, use_context_provider, use_hook, use_signal};
-    use dioxus_history::{MemoryHistory, provide_history_context};
-    use dioxus_ssr::render;
-    use std::{rc::Rc, sync::Arc};
-    use tempfile::TempDir;
 
     #[test]
-    fn route_event_detects_entity_links() {
-        let route = Route::EntityDetailRoute {
-            entity_type: "project".into(),
-            entity_id: "abc".into(),
+    fn route_dashboard_is_root() {
+        let route = Route::Dashboard {};
+        assert_eq!(format!("{route:?}"), "Dashboard");
+    }
+
+    #[test]
+    fn route_space_view_parses() {
+        let route = Route::SpaceView {
+            space_id: "abc123".into(),
         };
-        match route_navigation_event(&route) {
-            Some(RouteNavigationEvent::Entity(key)) => {
-                assert_eq!(key.entity_id, "abc");
-                assert_eq!(key.entity_type, "project");
-            }
-            _ => panic!("expected entity event"),
-        }
-    }
-
-    #[test]
-    fn route_event_detects_contacts() {
-        let route = Route::ContactChatRoute {
-            contact_id: "alice".into(),
-        };
-        match route_navigation_event(&route) {
-            Some(RouteNavigationEvent::Contact(contact)) => assert_eq!(contact, "alice"),
-            _ => panic!("expected contact event"),
-        }
-    }
-
-    #[test]
-    fn route_event_detects_contact_detail() {
-        let route = Route::ContactDetailRoute {
-            contact_id: "bob".into(),
-        };
-        match route_navigation_event(&route) {
-            Some(RouteNavigationEvent::Contact(contact)) => assert_eq!(contact, "bob"),
-            _ => panic!("expected contact event for detail route"),
-        }
-    }
-
-    #[test]
-    #[ignore = "requires UiServices test infrastructure update"]
-    fn login_route_renders_copy() {
-        let env = TestEnv::new();
-        let html = render_route_html("/login", env.services(), AuthState::default());
-        assert!(
-            html.contains("Unlock your Communitas vault"),
-            "login copy missing:\n{html}"
+        assert_eq!(
+            format!("{route:?}"),
+            "SpaceView { space_id: \"abc123\" }"
         );
     }
 
     #[test]
-    #[ignore = "requires UiServices test infrastructure update"]
-    fn create_identity_route_shows_display_name_field() {
-        let env = TestEnv::new();
-        let html = render_route_html("/create", env.services(), AuthState::default());
-        assert!(
-            html.contains("Create identity") && html.contains("Display name"),
-            "create identity layout missing display name field:\n{html}"
-        );
+    fn route_people_is_slash_people() {
+        let route = Route::People {};
+        assert_eq!(format!("{route:?}"), "People");
     }
-
-    #[test]
-    #[ignore = "requires UiServices test infrastructure update"]
-    fn recover_identity_route_includes_mnemonic_field() {
-        let env = TestEnv::new();
-        let html = render_route_html("/recover", env.services(), AuthState::default());
-        assert!(
-            html.contains("Mnemonic phrase") && html.contains("Recover identity"),
-            "recover identity layout missing mnemonic instructions:\n{html}"
-        );
-    }
-
-    #[test]
-    #[ignore = "requires UiServices test infrastructure update"]
-    fn unauthenticated_routes_redirect_to_login() {
-        let env = TestEnv::new();
-        let html = render_route_html("/messages", env.services(), AuthState::default());
-        assert!(
-            html.contains("Redirecting"),
-            "expected redirect placeholder when user is logged out:\n{html}"
-        );
-    }
-
-    #[test]
-    #[ignore = "requires UiServices test infrastructure update"]
-    fn dashboard_renders_authenticated_session_name() {
-        let env = TestEnv::new();
-        let authed = AuthState {
-            phase: AuthPhase::Authenticated,
-            session: Some(AuthSession {
-                pubkey_hex: "deadbeef".into(),
-                four_words: "forest-ocean-light-house".into(),
-                display_name: "Test Pilot".into(),
-                device_name: "Test Device".into(),
-                expires_at: u64::MAX, // Test session never expires
-            }),
-            ..Default::default()
-        };
-        let html = render_route_html("/", env.services(), authed);
-        assert!(
-            html.contains("Test Pilot") && html.contains("forest-ocean-light-house"),
-            "dashboard missing authenticated session info:\n{html}"
-        );
-    }
-
-    struct TestEnv {
-        _temp: TempDir,
-        services: Arc<UiServices>,
-    }
-
-    impl TestEnv {
-        fn new() -> Self {
-            let temp = TempDir::new().expect("create temp dir");
-            // SAFETY: Tests run in isolation, setting env var for storage path
-            unsafe {
-                std::env::set_var("COMMUNITAS_STORAGE_PATH", temp.path());
-            }
-            let services = UiServices::bootstrap().expect("ui services");
-            Self {
-                _temp: temp,
-                services: Arc::new(services),
-            }
-        }
-
-        fn services(&self) -> Arc<UiServices> {
-            self.services.clone()
-        }
-    }
-
-    #[derive(Clone)]
-    struct ServicesHandle(Arc<UiServices>);
-
-    impl ServicesHandle {
-        fn get(&self) -> Arc<UiServices> {
-            self.0.clone()
-        }
-    }
-
-    impl PartialEq for ServicesHandle {
-        fn eq(&self, other: &Self) -> bool {
-            Arc::ptr_eq(&self.0, &other.0)
-        }
-    }
-
-    #[derive(Props, Clone, PartialEq)]
-    struct ProviderProps {
-        services: ServicesHandle,
-        initial_auth: AuthState,
-        children: Element,
-    }
-
-    #[component]
-    fn TestProviders(props: ProviderProps) -> Element {
-        let services = props.services.get();
-        let initial_auth = props.initial_auth.clone();
-        use_context_provider(|| services);
-        let auth_state = use_signal(move || initial_auth.clone());
-        use_context_provider(|| auth_state);
-        rsx! { {props.children} }
-    }
-
-    fn render_route_html(path: &str, services: Arc<UiServices>, auth: AuthState) -> String {
-        #[derive(Props, Clone, PartialEq)]
-        struct RootProps {
-            services: ServicesHandle,
-            auth: AuthState,
-            initial_path: String,
-        }
-
-        #[component]
-        fn Root(props: RootProps) -> Element {
-            let initial_path = props.initial_path.clone();
-            use_hook(move || {
-                let history = Rc::new(MemoryHistory::default());
-                history.replace(initial_path);
-                provide_history_context(history);
-            });
-            rsx! {
-                TestProviders {
-                    services: props.services.clone(),
-                    initial_auth: props.auth.clone(),
-                    Router::<Route> {}
-                }
-            }
-        }
-
-        let mut dom = VirtualDom::new_with_props(
-            Root,
-            RootProps {
-                services: ServicesHandle(services),
-                auth,
-                initial_path: path.to_string(),
-            },
-        );
-        dom.rebuild_in_place();
-        render(&dom)
-    }
-}
-
-// Note: NavItem, nav_items, DashboardCard, SidebarEntityList removed - using v2 components
-
-#[derive(Props, PartialEq, Clone)]
-struct PlaceholderProps {
-    title: Cow<'static, str>,
-    body: Cow<'static, str>,
-}
-
-#[component]
-fn PlaceholderPanel(props: PlaceholderProps) -> Element {
-    rsx! {
-        div { class: "flex flex-col gap-2",
-            h2 { class: "text-2xl font-semibold text-slate-100", "{props.title}" }
-            p { class: "text-slate-400", "{props.body}" }
-            span { class: "text-xs uppercase tracking-[0.4em] text-slate-600", "Coming soon" }
-        }
-    }
-}
-
-#[derive(Props, PartialEq, Clone)]
-struct AuthLayoutProps {
-    title: &'static str,
-    subtitle: &'static str,
-    error: Option<String>,
-    #[props(optional)]
-    footer: Option<Element>,
-    children: Element,
-}
-
-#[component]
-fn AuthLayout(props: AuthLayoutProps) -> Element {
-    rsx! {
-        main {
-            class: "min-h-screen px-4 py-16 sm:px-0",
-            style: format!("background-color: {}; color: {};", colors::SURFACE_BG, colors::TEXT_PRIMARY),
-            div {
-                class: "mx-auto flex max-w-xl flex-col gap-6 rounded-3xl border p-8",
-                style: format!(
-                    "background-color: {}; border-color: {};",
-                    colors::SURFACE_CARD,
-                    colors::BORDER_DEFAULT
-                ),
-                div { class: "flex flex-col gap-1",
-                    span {
-                        class: "text-xs uppercase tracking-[0.5em]",
-                        style: format!("color: {};", colors::PRIMARY),
-                        "Communitas"
-                    }
-                    h1 {
-                        class: "text-3xl font-semibold tracking-tight",
-                        style: format!("color: {};", colors::TEXT_PRIMARY),
-                        "{props.title}"
-                    }
-                    p {
-                        class: "text-sm",
-                        style: format!("color: {};", colors::TEXT_SECONDARY),
-                        "{props.subtitle}"
-                    }
-                }
-                if let Some(err) = props.error {
-                    div {
-                        class: "rounded-xl border px-4 py-3 text-sm",
-                        style: format!(
-                            "border-color: {}; background-color: rgba(239, 68, 68, 0.1); color: {};",
-                            colors::DANGER,
-                            colors::DANGER
-                        ),
-                        "{err}"
-                    }
-                }
-                {props.children}
-                if let Some(content) = props.footer {
-                    div { {content} }
-                }
-            }
-        }
-    }
-}
-
-// --- Skeleton loading components ---
-
-#[component]
-fn SkeletonPulse(class: &'static str) -> Element {
-    rsx! {
-        div {
-            class: format!("animate-pulse rounded {class}"),
-            style: format!("background-color: {};", colors::SURFACE_ELEVATED),
-        }
-    }
-}
-
-#[component]
-fn SkeletonWelcomeCard() -> Element {
-    rsx! {
-        div {
-            class: "rounded-2xl border p-6 shadow-lg",
-            style: format!(
-                "background: linear-gradient(to right, {}40, {}20); border-color: {};",
-                colors::SURFACE_ELEVATED,
-                colors::SURFACE_CARD,
-                colors::BORDER_DEFAULT
-            ),
-            SkeletonPulse { class: "h-3 w-24 mb-4" }
-            SkeletonPulse { class: "h-8 w-64 mb-2" }
-            SkeletonPulse { class: "h-4 w-48" }
-        }
-    }
-}
-
-#[component]
-fn SkeletonStatsGrid() -> Element {
-    rsx! {
-        div { class: "grid gap-4 md:grid-cols-3",
-            for _ in 0..6 {
-                div {
-                    class: "rounded-2xl border p-4",
-                    style: format!(
-                        "background-color: {}; border-color: {};",
-                        colors::SURFACE_CARD,
-                        colors::BORDER_DEFAULT
-                    ),
-                    SkeletonPulse { class: "h-3 w-20 mb-2" }
-                    SkeletonPulse { class: "h-7 w-12" }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn SkeletonSpacesSection() -> Element {
-    rsx! {
-        div { class: "flex flex-col gap-4",
-            SkeletonPulse { class: "h-7 w-32" }
-            div { class: "grid gap-4 lg:grid-cols-2",
-                for _ in 0..4 {
-                    div {
-                        class: "rounded-2xl border p-4",
-                        style: format!(
-                            "background-color: {}; border-color: {};",
-                            colors::SURFACE_CARD,
-                            colors::BORDER_DEFAULT
-                        ),
-                        SkeletonPulse { class: "h-5 w-24 mb-3" }
-                        SkeletonPulse { class: "h-4 w-32" }
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct CreateRequest {
-    display_name: String,
-}
-
-struct RecoverRequest {
-    mnemonic: String,
-    display_name: String,
-    friend_four_words: Option<String>,
-    temporary: bool,
-}
-
-async fn process_create(
-    mut auth: Signal<AuthState>,
-    auth_service: Arc<AuthController>,
-    payload: CreateRequest,
-) -> Result<(), String> {
-    let CreateRequest { display_name } = payload;
-    auth.with_mut(|state| {
-        state.phase = AuthPhase::Authenticating;
-        state.error = None;
-    });
-
-    let result = auth_service
-        .create_identity(display_name.trim())
-        .await
-        .map_err(|err| err.to_string())?;
-
-    auth.with_mut(|state| {
-        state.phase = AuthPhase::PendingMnemonic;
-        state.session = Some(result.session.clone());
-        state.pending_mnemonic = Some(result.mnemonic);
-        state.error = None;
-    });
-    Ok(())
-}
-
-async fn process_recover(
-    mut auth: Signal<AuthState>,
-    auth_service: Arc<AuthController>,
-    payload: RecoverRequest,
-) -> Result<(), String> {
-    let RecoverRequest {
-        mnemonic,
-        display_name,
-        friend_four_words,
-        temporary,
-    } = payload;
-    auth.with_mut(|state| {
-        state.phase = AuthPhase::Authenticating;
-        state.error = None;
-    });
-
-    let session = auth_service
-        .recover_identity(
-            mnemonic.trim(),
-            None,
-            display_name.trim(),
-            friend_four_words.as_deref(),
-            temporary,
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    auth.with_mut(|state| {
-        state.phase = AuthPhase::Authenticated;
-        state.session = Some(session.clone());
-        state.error = None;
-        state.pending_mnemonic = None;
-    });
-    Ok(())
-}
-
-#[allow(dead_code)] // Kept for future use in logout UI
-async fn process_logout(
-    mut auth: Signal<AuthState>,
-    auth_service: Arc<AuthController>,
-) -> Result<(), String> {
-    auth_service.logout().await.map_err(|err| err.to_string())?;
-    auth.with_mut(|state| {
-        if let Some(session) = auth_service.current_session() {
-            state.session = Some(session);
-            state.phase = AuthPhase::Authenticated;
-        } else {
-            state.session = None;
-            state.phase = AuthPhase::LoggedOut;
-        }
-        state.error = None;
-        state.pending_mnemonic = None;
-    });
-    Ok(())
 }

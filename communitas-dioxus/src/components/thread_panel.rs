@@ -7,6 +7,7 @@
 use crate::components::channel_sidebar::SelectedChannel;
 use crate::design_tokens::{layout, motion, palette, radius, semantic, spacing, typography};
 use crate::models::channel::ChatMessage;
+use crate::x0x_contract;
 use communitas_x0x_client::{X0xClient, X0xWebSocket};
 use dioxus::prelude::*;
 use std::collections::HashMap;
@@ -22,6 +23,11 @@ pub fn ThreadPanel(
     channel: SelectedChannel,
     /// Called when the thread panel should close.
     on_close: EventHandler<()>,
+    /// Signal bumped when a reply is sent, carrying the parent message ID and
+    /// a monotonic generation counter so repeated replies to the same thread
+    /// are each counted.
+    #[props(default)]
+    reply_count_bump: Option<Signal<Option<(String, u64)>>>,
 ) -> Element {
     let mut replies = use_signal(Vec::<ChatMessage>::new);
     let mut composer_text = use_signal(String::new);
@@ -29,23 +35,35 @@ pub fn ThreadPanel(
     let mut sending = use_signal(|| false);
     let mut ws_connected = use_signal(|| false);
     let mut composer_focused = use_signal(|| false);
+    let mut bump_generation = use_signal(|| 0u64);
 
     let parent_msg_id = parent_message.id.clone();
     let group_id = channel.group_id.clone();
     let channel_topic = channel.topic.clone();
 
+    let history_group_id = group_id.clone();
+    let history_parent_msg_id = parent_msg_id.clone();
+    use_future(move || {
+        let history_group_id = history_group_id.clone();
+        let history_parent_msg_id = history_parent_msg_id.clone();
+        async move {
+            let history =
+                x0x_contract::load_thread_history(&history_group_id, &history_parent_msg_id).await;
+            replies.set(history);
+        }
+    });
+
     // Build thread topic
-    let group_id_prefix = if group_id.len() >= 16 {
-        group_id[..16].to_string()
-    } else {
-        group_id.clone()
-    };
-    let thread_topic = format!("x0x.group.{group_id_prefix}.thread/{parent_msg_id}");
+    let thread_topic = x0x_contract::thread_topic(&group_id, &parent_msg_id);
 
     // WebSocket coroutine for thread messages
     let thread_topic_ws = thread_topic.clone();
+    let ws_group_id = group_id.clone();
+    let ws_parent_msg_id = parent_msg_id.clone();
     use_coroutine(move |_: UnboundedReceiver<()>| {
         let topic = thread_topic_ws.clone();
+        let group_id = ws_group_id.clone();
+        let parent_msg_id = ws_parent_msg_id.clone();
         async move {
             let ws = match X0xWebSocket::connect().await {
                 Ok(ws) => {
@@ -75,12 +93,21 @@ pub fn ThreadPanel(
                         base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &payload)
                     && let Ok(msg) = serde_json::from_slice::<ChatMessage>(&bytes)
                 {
+                    let history_msg = msg.clone();
                     replies.with_mut(|r| {
-                        if !r.iter().any(|m| m.id == msg.id) {
+                        if !r.iter().any(|m| m.id == history_msg.id) {
                             r.push(msg);
                             r.sort_by_key(|m| m.timestamp);
                         }
                     });
+                    x0x_contract::append_thread_history(&group_id, &parent_msg_id, &history_msg)
+                        .await;
+                    // Notify channel view of new reply count
+                    if let Some(mut bump) = reply_count_bump {
+                        let next_gen = bump_generation() + 1;
+                        bump_generation.set(next_gen);
+                        bump.set(Some((parent_msg_id.clone(), next_gen)));
+                    }
                 }
             }
 
@@ -88,20 +115,36 @@ pub fn ThreadPanel(
         }
     });
 
-    // Get own agent ID
+    // Get own agent identity
     let mut own_agent_id = use_signal(|| Option::<String>::None);
+    let mut own_sender_name = use_signal(|| Option::<String>::None);
     use_future(move || async move {
         let client = X0xClient::new();
         if let Ok(agent) = client.agent().await {
+            let fallback_name = agent
+                .user_id
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| x0x_contract::fallback_sender_name(&agent.agent_id));
+            let display_name = client
+                .agent_card(None, Some(false))
+                .await
+                .ok()
+                .map(|card| card.card.display_name)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(fallback_name);
+
             own_agent_id.set(Some(agent.agent_id));
+            own_sender_name.set(Some(display_name));
         }
     });
 
     let send_reply = {
         let thread_topic = thread_topic.clone();
+        let send_group_id = group_id.clone();
         let channel_topic = channel_topic.clone();
-        let channel_name = channel.channel_name.clone();
-        let parent_msg_id = parent_msg_id.clone();
+        let send_channel_name = channel.channel_name.clone();
+        let send_parent_msg_id = parent_msg_id.clone();
         move || {
             let text = composer_text();
             if text.trim().is_empty() {
@@ -109,27 +152,32 @@ pub fn ThreadPanel(
             }
 
             let thread_topic = thread_topic.clone();
+            let group_id = send_group_id.clone();
             let channel_topic = channel_topic.clone();
-            let channel_name = channel_name.clone();
-            let parent_msg_id = parent_msg_id.clone();
+            let channel_name = send_channel_name.clone();
+            let parent_msg_id = send_parent_msg_id.clone();
             let agent_id = own_agent_id().unwrap_or_default();
+            let sender_name =
+                own_sender_name().unwrap_or_else(|| x0x_contract::fallback_sender_name(&agent_id));
             let broadcast = also_send_to_channel();
 
             sending.set(true);
             composer_text.set(String::new());
 
             spawn(async move {
+                let msg_channel_name = channel_name.clone();
+                let msg_parent_msg_id = parent_msg_id.clone();
                 let msg = ChatMessage {
                     id: uuid::Uuid::new_v4().to_string(),
                     text: text.clone(),
-                    sender_name: "Me".to_string(),
+                    sender_name,
                     sender_id: agent_id,
                     timestamp: SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .map(|d| d.as_millis() as u64)
                         .unwrap_or(0),
-                    channel: channel_name,
-                    thread_root: Some(parent_msg_id),
+                    channel: msg_channel_name,
+                    thread_root: Some(msg_parent_msg_id),
                     broadcast,
                     reply_count: 0,
                     reactions: HashMap::new(),
@@ -154,13 +202,25 @@ pub fn ThreadPanel(
                     replies.with_mut(|r| {
                         if !r.iter().any(|m| m.id == msg.id) {
                             r.push(msg.clone());
+                            r.sort_by_key(|entry| entry.timestamp);
                         }
                     });
+                    x0x_contract::append_thread_history(&group_id, &parent_msg_id, &msg).await;
+                    // Notify channel view of new reply count
+                    if let Some(mut bump) = reply_count_bump {
+                        let next_gen = bump_generation() + 1;
+                        bump_generation.set(next_gen);
+                        bump.set(Some((parent_msg_id.clone(), next_gen)));
+                    }
                 }
 
                 // If "also send to channel", publish to channel topic as well
-                if broadcast && let Err(e) = client.publish(&channel_topic, &json_bytes).await {
-                    warn!(target: "ui.thread_panel", "Failed to broadcast to channel: {e}");
+                if broadcast {
+                    if let Err(e) = client.publish(&channel_topic, &json_bytes).await {
+                        warn!(target: "ui.thread_panel", "Failed to broadcast to channel: {e}");
+                    } else {
+                        x0x_contract::append_channel_history(&group_id, &channel_name, &msg).await;
+                    }
                 }
 
                 sending.set(false);

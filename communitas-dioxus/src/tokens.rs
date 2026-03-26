@@ -8,51 +8,53 @@
 //! - Shadow: box shadow presets
 //! - Transition: animation timing
 
-/// Semantic color tokens following Tailwind's naming convention.
+/// Semantic color tokens -- Deep Space Operations Console theme.
 pub mod colors {
     // Primary brand colors
-    /// Primary action color (emerald-500)
-    pub const PRIMARY: &str = "#10b981";
-    /// Primary hover state (emerald-600)
-    pub const PRIMARY_HOVER: &str = "#059669";
-    /// Secondary accent color (blue-500)
-    pub const SECONDARY: &str = "#3b82f6";
-    /// Danger/error color (red-500)
-    pub const DANGER: &str = "#ef4444";
-    /// Warning color (amber-500)
+    /// Primary action color (cyan)
+    pub const PRIMARY: &str = "#00d4ff";
+    /// Primary hover state (lighter cyan)
+    pub const PRIMARY_HOVER: &str = "#33ddff";
+    /// Secondary accent color (amber)
+    pub const SECONDARY: &str = "#f59e0b";
+    /// Danger/error color (red)
+    pub const DANGER: &str = "#ff4466";
+    /// Warning color (amber)
     pub const WARNING: &str = "#f59e0b";
-    /// Success color (green-500)
-    pub const SUCCESS: &str = "#22c55e";
-    /// Info color (blue-500)
-    pub const INFO: &str = "#3b82f6";
-    /// Error color (red-500)
-    pub const ERROR: &str = "#ef4444";
+    /// Success color (green)
+    pub const SUCCESS: &str = "#10b981";
+    /// Info color (cyan)
+    pub const INFO: &str = "#00d4ff";
+    /// Error color (red)
+    pub const ERROR: &str = "#ff4466";
 
-    // Surface colors (dark theme)
-    /// Main background (slate-900)
-    pub const SURFACE_BG: &str = "#0f172a";
-    /// Card background (slate-800)
-    pub const SURFACE_CARD: &str = "#1e293b";
-    /// Elevated surface (slate-700)
-    pub const SURFACE_ELEVATED: &str = "#334155";
+    // Surface colors (deep space dark theme)
+    /// Main background (deep navy)
+    pub const SURFACE_BG: &str = "#0a0c14";
+    /// Card background (surface)
+    pub const SURFACE_CARD: &str = "#10131e";
+    /// Elevated surface
+    pub const SURFACE_ELEVATED: &str = "#161a2a";
     /// Overlay with transparency
-    pub const SURFACE_OVERLAY: &str = "rgba(15, 23, 42, 0.8)";
+    pub const SURFACE_OVERLAY: &str = "rgba(10, 12, 20, 0.85)";
 
     // Text colors
-    /// Primary text (slate-50)
-    pub const TEXT_PRIMARY: &str = "#f8fafc";
-    /// Secondary text (slate-400)
-    pub const TEXT_SECONDARY: &str = "#94a3b8";
-    /// Muted text (slate-500)
-    pub const TEXT_MUTED: &str = "#64748b";
-    /// Text on primary/light backgrounds (slate-900)
-    pub const TEXT_INVERSE: &str = "#0f172a";
+    /// Primary text
+    pub const TEXT_PRIMARY: &str = "#e4e6f0";
+    /// Secondary text
+    pub const TEXT_SECONDARY: &str = "#b0b3cc";
+    /// Muted text
+    pub const TEXT_MUTED: &str = "#747896";
+    /// Text on primary/light backgrounds
+    pub const TEXT_INVERSE: &str = "#0a0c14";
 
     // Border colors
-    /// Default border (slate-700)
-    pub const BORDER_DEFAULT: &str = "#334155";
-    /// Focus ring color (emerald-500)
-    pub const BORDER_FOCUS: &str = "#10b981";
+    /// Default border
+    pub const BORDER_DEFAULT: &str = "#252940";
+    /// Focus ring color (cyan)
+    pub const BORDER_FOCUS: &str = "#00d4ff";
+    /// Strong border
+    pub const BORDER_STRONG: &str = "#353a52";
 }
 
 /// Spacing tokens using rem units for responsive scaling.
@@ -508,19 +510,22 @@ mod tests {
     #[test]
     fn style_bg_generates_css() {
         let css = style_bg(colors::PRIMARY);
-        assert_eq!(css, "background-color: #10b981;");
+        assert_eq!(css, format!("background-color: {};", colors::PRIMARY));
     }
 
     #[test]
     fn style_text_generates_css() {
         let css = style_text(colors::TEXT_PRIMARY);
-        assert_eq!(css, "color: #f8fafc;");
+        assert_eq!(css, format!("color: {};", colors::TEXT_PRIMARY));
     }
 
     #[test]
     fn style_border_generates_css() {
         let css = style_border(colors::BORDER_DEFAULT, "1px");
-        assert_eq!(css, "border: 1px solid #334155;");
+        assert_eq!(
+            css,
+            format!("border: 1px solid {};", colors::BORDER_DEFAULT)
+        );
     }
 
     #[test]

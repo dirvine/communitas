@@ -2,6 +2,9 @@
 //!
 //! These pages use the v2 components (auth_v2, app_shell, entity_view, messaging_v2)
 //! to create a cohesive, stunning user experience.
+//!
+//! NOTE: These pages are legacy from the pre-Deep-Space-Console era.
+//! They compile but are not wired into the current routing.
 
 use communitas_ui_api::{PresenceStatus, UnifiedContact, UnifiedEntity, UnifiedEntityType};
 use communitas_ui_service::UiServices;
@@ -1572,20 +1575,30 @@ fn EntityDetailsContent(entity: UnifiedEntity) -> Element {
 #[component]
 pub fn MainAppV2(children: Element) -> Element {
     let services = use_context::<Arc<UiServices>>();
+    let auth = crate::use_auth();
     let _nav_snapshot = services.navigation().current_snapshot();
     let dir_snapshot = services.directory().current_snapshot();
-    let is_temporary_session = services.auth().is_temporary_session();
+    // Avoid calling AuthController blocking_read accessors from the Dioxus runtime thread.
+    // The temporary-session banner can return later once auth exposes a nonblocking snapshot.
+    let is_temporary_session = false;
 
     // Navigation hooks
     let navigator = use_navigator();
     let current_route: Route = use_route();
 
     let identity = dir_snapshot.identity.clone();
+    let session = auth.read().session.clone();
     let display_name = identity
         .as_ref()
         .map(|i| i.display_name.clone())
+        .filter(|name| !name.is_empty())
+        .or_else(|| session.as_ref().map(|session| session.display_name.clone()))
+        .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "User".to_string());
-    let four_words_fingerprint = identity.as_ref().map(|i| i.four_words.clone());
+    let four_words_fingerprint = identity
+        .as_ref()
+        .map(|i| i.four_words.clone())
+        .or_else(|| session.as_ref().map(|session| session.four_words.clone()));
 
     let mut search_query = use_signal(String::new);
     let thread_panel_open = use_signal(|| false);
@@ -1635,6 +1648,8 @@ pub fn MainAppV2(children: Element) -> Element {
                     Route::ProjectBoardRoute { project_id: _ } => "Project board".to_string(),
                     Route::ContactDetailRoute { contact_id: _ } => "Contact details".to_string(),
                     Route::ContactChatRoute { contact_id: _ } => "Contact chat".to_string(),
+                    // New routes
+                    _ => "Page".to_string(),
                 };
                 announcer(
                     format!("Navigated to {page_name}"),
@@ -1749,12 +1764,18 @@ pub fn MainAppV2(children: Element) -> Element {
             thread_panel_open: thread_panel_open(),
             thread_panel: thread_panel_content,
             sidebar: rsx! {
-                // Profile Header
-                ProfileHeader {
-                    display_name: display_name.clone(),
-                    pubkey_fingerprint: four_words_fingerprint,
-                    presence: PresenceStatus::Online,
-                    is_networking: true,
+                // Profile Header / local identity entrypoint
+                button {
+                    style: "width: 100%; background: none; border: none; padding: 0; text-align: left; cursor: pointer;",
+                    onclick: move |_| {
+                        navigator.push(Route::MoreRoute {});
+                    },
+                    ProfileHeader {
+                        display_name: display_name.clone(),
+                        pubkey_fingerprint: four_words_fingerprint,
+                        presence: PresenceStatus::Online,
+                        is_networking: true,
+                    }
                 }
 
                 // Search

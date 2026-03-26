@@ -1,6 +1,6 @@
 [package]
 name = "communitas-x0x-client"
-description = "Typed Rust client for the x0xd daemon REST API and WebSocket"
+description = "Thin typed Rust client for the x0xd daemon REST + WebSocket surfaces"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

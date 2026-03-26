@@ -5,6 +5,7 @@
 //! them as `Vec<u8>` with serde helpers for the encoding.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // ── Generic envelope ────────────────────────────────────────────────────────
 
@@ -53,10 +54,23 @@ pub struct AgentIdentity {
     pub user_id: Option<String>,
 }
 
+/// Response from `GET /agent/user-id`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserIdStatus {
+    #[serde(default)]
+    pub user_id: Option<String>,
+}
+
+/// A connected gossip peer from `GET /peers`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PeerInfo {
+    pub id: String,
+}
+
 /// Response from `GET /peers`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PeerList {
-    pub peers: Vec<String>,
+    pub peers: Vec<PeerInfo>,
 }
 
 // ── Discovery ───────────────────────────────────────────────────────────────
@@ -80,22 +94,63 @@ pub struct DiscoveredAgentList {
     pub agents: Vec<DiscoveredAgent>,
 }
 
-/// A presence beacon from `GET /presence`.
-#[derive(Debug, Clone, Deserialize)]
-pub struct PresenceBeacon {
-    pub agent_id: String,
-    #[serde(default)]
-    pub machine_id: Option<String>,
-    #[serde(default)]
-    pub user_id: Option<String>,
-    #[serde(default)]
-    pub last_seen: Option<u64>,
-}
-
 /// Response wrapper for `GET /presence`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PresenceList {
-    pub agents: Vec<PresenceBeacon>,
+    pub agents: Vec<String>,
+}
+
+/// Response from `GET /network/status`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NetworkStatus {
+    #[serde(default)]
+    pub avg_rtt_ms: Option<u64>,
+    #[serde(default)]
+    pub can_receive_direct: bool,
+    #[serde(default)]
+    pub connected_peers: u32,
+    #[serde(default)]
+    pub coordination_sessions: u32,
+    #[serde(default)]
+    pub direct_connections: u32,
+    #[serde(default)]
+    pub external_addrs: Vec<String>,
+    #[serde(default)]
+    pub has_public_ip: bool,
+    #[serde(default)]
+    pub hole_punch_success_rate: Option<f64>,
+    #[serde(default)]
+    pub is_coordinating: bool,
+    #[serde(default)]
+    pub is_relaying: bool,
+    #[serde(default)]
+    pub local_addr: Option<String>,
+    #[serde(default)]
+    pub nat_type: Option<String>,
+    #[serde(default)]
+    pub relay_sessions: u32,
+    #[serde(default)]
+    pub relayed_connections: u32,
+    #[serde(default)]
+    pub uptime_secs: Option<u64>,
+}
+
+/// Response from `GET /network/bootstrap-cache`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BootstrapCacheStatus {
+    #[serde(default)]
+    pub connected_peers: Vec<String>,
+    #[serde(default)]
+    pub connection_count: u32,
+}
+
+/// Request body for `POST /announce`.
+#[derive(Debug, Default, Serialize)]
+pub struct AnnounceRequest {
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub include_user_identity: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub human_consent: bool,
 }
 
 // ── Gossip (pub/sub) ────────────────────────────────────────────────────────
@@ -113,13 +168,72 @@ pub struct SubscribeRequest {
     pub topic: String,
 }
 
+/// A group reference embedded in an agent card.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CardGroup {
+    pub name: String,
+    pub invite_link: String,
+}
+
+/// A store reference embedded in an agent card.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CardStore {
+    pub name: String,
+    pub topic: String,
+}
+
+/// A shareable identity card from `GET /agent/card`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AgentCard {
+    pub display_name: String,
+    pub agent_id: String,
+    pub machine_id: String,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    #[serde(default)]
+    pub addresses: Vec<String>,
+    #[serde(default)]
+    pub groups: Vec<CardGroup>,
+    #[serde(default)]
+    pub stores: Vec<CardStore>,
+    pub created_at: u64,
+}
+
+/// Response from `GET /agent/card`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AgentCardResponse {
+    pub card: AgentCard,
+    pub link: String,
+}
+
+/// Request body for `POST /agent/card/import`.
+#[derive(Debug, Serialize)]
+pub struct ImportCardRequest {
+    pub card: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust_level: Option<TrustLevel>,
+}
+
+/// Response from `POST /agent/card/import`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ImportCardResponse {
+    pub agent_id: String,
+    pub display_name: String,
+    pub trust_level: String,
+    pub groups: usize,
+    pub stores: usize,
+}
+
 /// Response from `POST /subscribe`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubscribeResponse {
-    pub id: String,
+    pub subscription_id: String,
 }
 
-/// A gossip message received via SSE or WebSocket.
+/// A daemon gossip message payload shape.
+///
+/// This type matches the payload shape used by daemon streaming surfaces, even
+/// though this crate is intentionally frozen to REST + WebSocket only.
 #[derive(Debug, Clone, Deserialize)]
 pub struct GossipMessage {
     pub topic: String,
@@ -147,7 +261,8 @@ pub struct DirectSendRequest {
 #[derive(Debug, Clone, Deserialize)]
 pub struct DirectConnection {
     pub agent_id: String,
-    pub machine_id: String,
+    #[serde(default)]
+    pub machine_id: Option<String>,
     #[serde(default)]
     pub connected_at: Option<u64>,
 }
@@ -158,7 +273,10 @@ pub struct DirectConnectionList {
     pub connections: Vec<DirectConnection>,
 }
 
-/// A direct message received via SSE or WebSocket.
+/// A daemon direct-message payload shape.
+///
+/// This type matches the payload shape used by daemon streaming surfaces, even
+/// though this crate is intentionally frozen to REST + WebSocket only.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DirectMessage {
     pub sender: String,
@@ -244,6 +362,13 @@ pub struct MachineList {
     pub machines: Vec<MachineRecord>,
 }
 
+/// Response wrapper for `GET /contacts/:agent_id/revocations`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RevocationList {
+    #[serde(default)]
+    pub revocations: Vec<serde_json::Value>,
+}
+
 /// Request body for `POST /contacts/:id/machines`.
 #[derive(Debug, Serialize)]
 pub struct AddMachineRequest {
@@ -252,6 +377,19 @@ pub struct AddMachineRequest {
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinned: Option<bool>,
+}
+
+/// Request body for `POST /trust/evaluate`.
+#[derive(Debug, Serialize)]
+pub struct EvaluateTrustRequest {
+    pub agent_id: String,
+    pub machine_id: String,
+}
+
+/// Response from `POST /trust/evaluate`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TrustEvaluation {
+    pub decision: String,
 }
 
 // ── MLS groups ──────────────────────────────────────────────────────────────
@@ -291,6 +429,20 @@ pub struct AddMlsMemberRequest {
 pub struct AddMlsMemberResponse {
     pub epoch: u64,
     pub member_count: u32,
+}
+
+/// Request body for `POST /mls/groups/:id/welcome`.
+#[derive(Debug, Serialize)]
+pub struct CreateWelcomeRequest {
+    pub agent_id: String,
+}
+
+/// Response from `POST /mls/groups/:id/welcome`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WelcomeResponse {
+    pub welcome: String,
+    pub group_id: String,
+    pub epoch: u64,
 }
 
 /// Request body for `POST /mls/groups/:id/encrypt`.
@@ -376,6 +528,10 @@ pub struct GroupInfo {
     pub member_count: Option<u32>,
     #[serde(default)]
     pub chat_topic: Option<String>,
+    #[serde(default)]
+    pub metadata_topic: Option<String>,
+    #[serde(default)]
+    pub members: Vec<String>,
 }
 
 /// Request body for `POST /groups/:id/invite`.
@@ -619,6 +775,25 @@ pub struct TransferList {
 pub struct RejectFileRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+/// A WebSocket session from `GET /ws/sessions`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WsSessionInfo {
+    pub session_id: String,
+    #[serde(default)]
+    pub receives_direct: bool,
+    #[serde(default)]
+    pub subscribed_topics: Vec<String>,
+}
+
+/// Response wrapper from `GET /ws/sessions`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WsSessionList {
+    #[serde(default)]
+    pub sessions: Vec<WsSessionInfo>,
+    #[serde(default)]
+    pub shared_subscriptions: HashMap<String, u32>,
 }
 
 // ── WebSocket frames ────────────────────────────────────────────────────────

@@ -6,9 +6,11 @@
 use crate::components::channel_sidebar::SelectedChannel;
 use crate::design_tokens::{motion, palette, radius, semantic, spacing, typography};
 use crate::models::channel::ChatMessage;
+use crate::x0x_contract;
 use base64::Engine as _;
 use communitas_x0x_client::{X0xClient, X0xWebSocket};
 use dioxus::prelude::*;
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 
@@ -19,6 +21,11 @@ pub fn ChannelChatView(
     channel: SelectedChannel,
     /// Called when a thread is opened (clicking thread indicator on a message).
     on_open_thread: EventHandler<ChatMessage>,
+    /// Signal carrying a parent message ID and generation counter when a
+    /// thread reply is sent. Each bump increments the reply count on the
+    /// matching channel message.
+    #[props(default)]
+    reply_count_bump: Option<Signal<Option<(String, u64)>>>,
 ) -> Element {
     let mut messages = use_signal(Vec::<ChatMessage>::new);
     let mut composer_text = use_signal(String::new);
@@ -26,12 +33,47 @@ pub fn ChannelChatView(
     let mut ws_connected = use_signal(|| false);
 
     let topic = channel.topic.clone();
+    let group_id = channel.group_id.clone();
     let channel_name = channel.channel_name.clone();
+
+    let history_group_id = group_id.clone();
+    let history_channel_name = channel_name.clone();
+    use_future(move || {
+        let history_group_id = history_group_id.clone();
+        let history_channel_name = history_channel_name.clone();
+        async move {
+            let history =
+                x0x_contract::load_channel_history(&history_group_id, &history_channel_name).await;
+            messages.set(history);
+        }
+    });
+
+    // When a thread reply is sent, increment the matching parent message's reply count.
+    // The bump signal is set by ThreadPanel with (parent_msg_id, generation).
+    // Track the last processed generation to avoid double-counting on re-renders.
+    let mut last_bump_gen = use_signal(|| 0u64);
+    use_effect(move || {
+        if let Some(bump_signal) = reply_count_bump
+            && let Some((parent_id, generation)) = bump_signal()
+            && generation > last_bump_gen()
+        {
+            last_bump_gen.set(generation);
+            messages.with_mut(|msgs| {
+                if let Some(msg) = msgs.iter_mut().find(|m| m.id == parent_id) {
+                    msg.reply_count += 1;
+                }
+            });
+        }
+    });
 
     // WebSocket coroutine for real-time messaging
     let topic_for_ws = topic.clone();
+    let ws_group_id = group_id.clone();
+    let ws_channel_name = channel_name.clone();
     use_coroutine(move |_: UnboundedReceiver<()>| {
         let topic = topic_for_ws.clone();
+        let group_id = ws_group_id.clone();
+        let channel_name = ws_channel_name.clone();
         async move {
             let ws = match X0xWebSocket::connect().await {
                 Ok(ws) => {
@@ -66,13 +108,20 @@ pub fn ChannelChatView(
                                 Ok(bytes) => {
                                     match serde_json::from_slice::<ChatMessage>(&bytes) {
                                         Ok(msg) => {
+                                            let history_msg = msg.clone();
                                             messages.with_mut(|msgs| {
                                                 // Avoid duplicates by ID
-                                                if !msgs.iter().any(|m| m.id == msg.id) {
+                                                if !msgs.iter().any(|m| m.id == history_msg.id) {
                                                     msgs.push(msg);
                                                     msgs.sort_by_key(|m| m.timestamp);
                                                 }
                                             });
+                                            x0x_contract::append_channel_history(
+                                                &group_id,
+                                                &channel_name,
+                                                &history_msg,
+                                            )
+                                            .await;
                                         }
                                         Err(e) => {
                                             warn!(target: "ui.channel_chat", "Failed to parse message: {e}");
@@ -98,16 +147,32 @@ pub fn ChannelChatView(
 
     // Get current agent ID for identifying own messages
     let mut own_agent_id = use_signal(|| Option::<String>::None);
+    let mut own_sender_name = use_signal(|| Option::<String>::None);
     use_future(move || async move {
         let client = X0xClient::new();
         if let Ok(agent) = client.agent().await {
+            let fallback_name = agent
+                .user_id
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| x0x_contract::fallback_sender_name(&agent.agent_id));
+            let display_name = client
+                .agent_card(None, Some(false))
+                .await
+                .ok()
+                .map(|card| card.card.display_name)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(fallback_name);
+
             own_agent_id.set(Some(agent.agent_id));
+            own_sender_name.set(Some(display_name));
         }
     });
 
     let send_message = {
         let topic = topic.clone();
-        let channel_name = channel_name.clone();
+        let send_group_id = group_id.clone();
+        let send_channel_name = channel_name.clone();
         move || {
             let text = composer_text();
             if text.trim().is_empty() {
@@ -115,27 +180,31 @@ pub fn ChannelChatView(
             }
 
             let topic = topic.clone();
-            let channel_name = channel_name.clone();
+            let group_id = send_group_id.clone();
+            let channel_name = send_channel_name.clone();
             let agent_id = own_agent_id().unwrap_or_default();
+            let sender_name =
+                own_sender_name().unwrap_or_else(|| x0x_contract::fallback_sender_name(&agent_id));
 
             sending.set(true);
             composer_text.set(String::new());
 
             spawn(async move {
+                let msg_channel_name = channel_name.clone();
                 let msg = ChatMessage {
                     id: uuid::Uuid::new_v4().to_string(),
                     text,
-                    sender_name: "Me".to_string(),
+                    sender_name,
                     sender_id: agent_id,
                     timestamp: SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .map(|d| d.as_millis() as u64)
                         .unwrap_or(0),
-                    channel: channel_name,
+                    channel: msg_channel_name,
                     thread_root: None,
                     broadcast: false,
                     reply_count: 0,
-                    reactions: std::collections::HashMap::new(),
+                    reactions: HashMap::new(),
                 };
 
                 match serde_json::to_vec(&msg) {
@@ -148,9 +217,12 @@ pub fn ChannelChatView(
                             // Add locally for immediate display
                             messages.with_mut(|msgs| {
                                 if !msgs.iter().any(|m| m.id == msg.id) {
-                                    msgs.push(msg);
+                                    msgs.push(msg.clone());
+                                    msgs.sort_by_key(|entry| entry.timestamp);
                                 }
                             });
+                            x0x_contract::append_channel_history(&group_id, &channel_name, &msg)
+                                .await;
                         }
                     }
                     Err(e) => {

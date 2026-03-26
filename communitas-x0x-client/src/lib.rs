@@ -1,8 +1,15 @@
-//! Typed Rust client for the x0xd daemon REST API and WebSocket.
+//! Thin typed mirror of the x0xd REST and WebSocket APIs.
 //!
-//! This crate provides [`X0xClient`] for HTTP-based access to the full
-//! x0xd REST API, [`X0xWebSocket`] for real-time bidirectional messaging,
-//! and [`DaemonManager`] for installing, starting, and monitoring the daemon.
+//! This crate provides [`X0xClient`] for HTTP access to daemon routes,
+//! [`X0xWebSocket`] for `/ws` and `/ws/direct` sessions, and
+//! [`DaemonManager`] for CLI-faithful install/start/stop helpers.
+//!
+//! Scope freeze: this crate intentionally covers **REST + WebSocket only**.
+//! Server-sent-event surfaces such as `/events` and `/direct/events` are part
+//! of x0x, but are intentionally out of scope for this crate.
+//!
+//! It intentionally stays transport-focused and does not define Communitas
+//! app-level semantics such as channel schemas, topic conventions, or UI state.
 //!
 //! # Quick start
 //!

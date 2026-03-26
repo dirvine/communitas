@@ -1,7 +1,8 @@
-//! HTTP client for the x0xd daemon REST API.
+//! Exact typed client for the x0xd REST API.
 //!
-//! All methods correspond to x0xd endpoints on `127.0.0.1:12700`.
-//! Payloads are automatically base64-encoded/decoded where needed.
+//! Methods in this file mirror daemon routes and payloads on `127.0.0.1:12700`.
+//! This module intentionally stays transport-focused and does not define
+//! Communitas-specific app semantics such as channel schemas or topic rules.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -11,7 +12,9 @@ use crate::types::*;
 
 /// HTTP client for the x0xd daemon.
 ///
-/// Wraps the full REST API exposed by x0xd on localhost.
+/// Wraps the REST surface intentionally covered by this crate on localhost.
+/// This crate is explicitly frozen to REST + WebSocket only; SSE endpoints such
+/// as `/events` and `/direct/events` are intentionally out of scope.
 /// All methods are async and return typed responses.
 #[derive(Debug, Clone)]
 pub struct X0xClient {
@@ -39,18 +42,16 @@ impl X0xClient {
         format!("{}{}", self.base_url, path)
     }
 
-    /// Parse a JSON response, extracting the data or returning a daemon error.
+    /// Parse a daemon response, handling x0x's flattened `{"ok":true,...}` payloads.
     async fn parse<T: serde::de::DeserializeOwned>(&self, resp: reqwest::Response) -> Result<T> {
         let status = resp.status();
         let body = resp.text().await?;
 
-        // Try to parse as API envelope first.
         if let Ok(envelope) = serde_json::from_str::<ApiResponse<T>>(&body) {
             if envelope.ok {
                 if let Some(data) = envelope.data {
                     return Ok(data);
                 }
-                // ok=true but no data fields — try parsing T directly from the envelope.
                 return serde_json::from_str::<T>(&body).map_err(X0xError::Json);
             }
             return Err(X0xError::Daemon(
@@ -58,48 +59,42 @@ impl X0xClient {
             ));
         }
 
-        // Fallback: try parsing T directly.
-        serde_json::from_str::<T>(&body).map_err(X0xError::Json)
+        match serde_json::from_str::<T>(&body) {
+            Ok(parsed) => Ok(parsed),
+            Err(err) if status.is_success() => Err(X0xError::Json(err)),
+            Err(_) => Err(X0xError::Daemon(format!("HTTP {status}: {body}"))),
+        }
+    }
+
+    /// Fire-and-forget request that only validates the x0x `ok` contract.
+    async fn request_ok(&self, builder: reqwest::RequestBuilder) -> Result<()> {
+        let resp = builder.send().await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
+            if envelope.ok {
+                return Ok(());
+            }
+            return Err(X0xError::Daemon(
+                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
+            ));
+        }
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
+        }
     }
 
     /// Fire-and-forget POST that only checks `ok`.
     async fn post_ok(&self, path: &str, body: &impl serde::Serialize) -> Result<()> {
-        let resp = self.client.post(self.url(path)).json(body).send().await?;
-        let status = resp.status();
-        let text = resp.text().await?;
-        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
-            if envelope.ok {
-                return Ok(());
-            }
-            return Err(X0xError::Daemon(
-                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
-            ));
-        }
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
-        }
+        self.request_ok(self.client.post(self.url(path)).json(body))
+            .await
     }
 
     /// DELETE that only checks `ok`.
     async fn delete_ok(&self, path: &str) -> Result<()> {
-        let resp = self.client.delete(self.url(path)).send().await?;
-        let status = resp.status();
-        let text = resp.text().await?;
-        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
-            if envelope.ok {
-                return Ok(());
-            }
-            return Err(X0xError::Daemon(
-                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
-            ));
-        }
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
-        }
+        self.request_ok(self.client.delete(self.url(path))).await
     }
 
     // ── System & Identity ───────────────────────────────────────────────
@@ -121,22 +116,89 @@ impl X0xClient {
         self.parse(resp).await
     }
 
+    /// Gracefully stop the local daemon.
+    pub async fn shutdown(&self) -> Result<()> {
+        self.post_ok("/shutdown", &serde_json::json!({})).await
+    }
+
     /// Local agent identity (agent_id, machine_id, optional user_id).
     pub async fn agent(&self) -> Result<AgentIdentity> {
         let resp = self.client.get(self.url("/agent")).send().await?;
         self.parse(resp).await
     }
 
-    /// Connected gossip peer IDs.
-    pub async fn peers(&self) -> Result<Vec<String>> {
+    /// Current user identity binding, if configured.
+    pub async fn agent_user_id(&self) -> Result<Option<String>> {
+        let resp = self.client.get(self.url("/agent/user-id")).send().await?;
+        let status: UserIdStatus = self.parse(resp).await?;
+        Ok(status.user_id)
+    }
+
+    /// Generate a shareable agent card and x0x://agent link.
+    pub async fn agent_card(
+        &self,
+        display_name: Option<&str>,
+        include_groups: Option<bool>,
+    ) -> Result<AgentCardResponse> {
+        let mut query: Vec<(String, String)> = Vec::new();
+        if let Some(name) = display_name {
+            query.push(("display_name".to_owned(), name.to_owned()));
+        }
+        if let Some(include) = include_groups {
+            query.push(("include_groups".to_owned(), include.to_string()));
+        }
+
+        let resp = self
+            .client
+            .get(self.url("/agent/card"))
+            .query(&query)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Import an x0x://agent card into local contacts.
+    pub async fn import_agent_card(
+        &self,
+        card: &str,
+        trust_level: Option<TrustLevel>,
+    ) -> Result<ImportCardResponse> {
+        let req = ImportCardRequest {
+            card: card.to_owned(),
+            trust_level,
+        };
+        let resp = self
+            .client
+            .post(self.url("/agent/card/import"))
+            .json(&req)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Connected gossip peers from `GET /peers`.
+    pub async fn peers(&self) -> Result<Vec<PeerInfo>> {
         let resp = self.client.get(self.url("/peers")).send().await?;
         let list: PeerList = self.parse(resp).await?;
         Ok(list.peers)
     }
 
-    /// Force re-announce identity to the network.
+    /// Force re-announce identity to the network with explicit consent flags.
+    pub async fn announce_with_options(
+        &self,
+        include_user_identity: bool,
+        human_consent: bool,
+    ) -> Result<()> {
+        let req = AnnounceRequest {
+            include_user_identity,
+            human_consent,
+        };
+        self.post_ok("/announce", &req).await
+    }
+
+    /// Force re-announce identity to the network using default x0x-safe flags.
     pub async fn announce(&self) -> Result<()> {
-        self.post_ok("/announce", &serde_json::json!({})).await
+        self.announce_with_options(false, false).await
     }
 
     // ── Discovery ───────────────────────────────────────────────────────
@@ -162,11 +224,27 @@ impl X0xClient {
         self.parse(resp).await
     }
 
-    /// Agent presence beacons.
-    pub async fn presence(&self) -> Result<Vec<PresenceBeacon>> {
+    /// Online agent ids from `GET /presence`.
+    pub async fn presence(&self) -> Result<Vec<String>> {
         let resp = self.client.get(self.url("/presence")).send().await?;
         let list: PresenceList = self.parse(resp).await?;
         Ok(list.agents)
+    }
+
+    /// NAT traversal, relay, and connection diagnostics.
+    pub async fn network_status(&self) -> Result<NetworkStatus> {
+        let resp = self.client.get(self.url("/network/status")).send().await?;
+        self.parse(resp).await
+    }
+
+    /// Bootstrap cache and currently connected peers.
+    pub async fn bootstrap_cache(&self) -> Result<BootstrapCacheStatus> {
+        let resp = self
+            .client
+            .get(self.url("/network/bootstrap-cache"))
+            .send()
+            .await?;
+        self.parse(resp).await
     }
 
     // ── Gossip pub/sub ──────────────────────────────────────────────────
@@ -192,7 +270,7 @@ impl X0xClient {
             .send()
             .await?;
         let sub: SubscribeResponse = self.parse(resp).await?;
-        Ok(sub.id)
+        Ok(sub.subscription_id)
     }
 
     /// Unsubscribe from a topic by subscription ID.
@@ -275,32 +353,37 @@ impl X0xClient {
             trust_level,
             label: label.map(str::to_owned),
         };
-        let resp = self
-            .client
-            .patch(self.url(&format!("/contacts/{agent_id}")))
-            .json(&req)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await?;
-        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
-            if envelope.ok {
-                return Ok(());
-            }
-            return Err(X0xError::Daemon(
-                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
-            ));
-        }
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
-        }
+        self.request_ok(
+            self.client
+                .patch(self.url(&format!("/contacts/{agent_id}")))
+                .json(&req),
+        )
+        .await
     }
 
     /// Remove a contact.
     pub async fn remove_contact(&self, agent_id: &str) -> Result<()> {
         self.delete_ok(&format!("/contacts/{agent_id}")).await
+    }
+
+    /// Revoke a contact relationship with an optional reason.
+    pub async fn revoke_contact(&self, agent_id: &str, reason: Option<&str>) -> Result<()> {
+        self.post_ok(
+            &format!("/contacts/{agent_id}/revoke"),
+            &serde_json::json!({ "reason": reason }),
+        )
+        .await
+    }
+
+    /// List recorded revocations for a contact.
+    pub async fn revocations(&self, agent_id: &str) -> Result<Vec<serde_json::Value>> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/contacts/{agent_id}/revocations")))
+            .send()
+            .await?;
+        let list: RevocationList = self.parse(resp).await?;
+        Ok(list.revocations)
     }
 
     /// List machine records for a contact.
@@ -335,6 +418,40 @@ impl X0xClient {
     pub async fn remove_machine(&self, agent_id: &str, machine_id: &str) -> Result<()> {
         self.delete_ok(&format!("/contacts/{agent_id}/machines/{machine_id}"))
             .await
+    }
+
+    /// Pin a contact to a specific machine.
+    pub async fn pin_machine(&self, agent_id: &str, machine_id: &str) -> Result<()> {
+        self.post_ok(
+            &format!("/contacts/{agent_id}/machines/{machine_id}/pin"),
+            &serde_json::json!({}),
+        )
+        .await
+    }
+
+    /// Remove a machine pin from a contact.
+    pub async fn unpin_machine(&self, agent_id: &str, machine_id: &str) -> Result<()> {
+        self.delete_ok(&format!("/contacts/{agent_id}/machines/{machine_id}/pin"))
+            .await
+    }
+
+    /// Evaluate the trust decision x0x would make for an agent/machine pair.
+    pub async fn evaluate_trust(
+        &self,
+        agent_id: &str,
+        machine_id: &str,
+    ) -> Result<TrustEvaluation> {
+        let req = EvaluateTrustRequest {
+            agent_id: agent_id.to_owned(),
+            machine_id: machine_id.to_owned(),
+        };
+        let resp = self
+            .client
+            .post(self.url("/trust/evaluate"))
+            .json(&req)
+            .send()
+            .await?;
+        self.parse(resp).await
     }
 
     // ── MLS groups ──────────────────────────────────────────────────────
@@ -424,6 +541,24 @@ impl X0xClient {
         Ok(BASE64.decode(&dec.payload)?)
     }
 
+    /// Create a welcome message for a prospective MLS group member.
+    pub async fn create_mls_welcome(
+        &self,
+        group_id: &str,
+        agent_id: &str,
+    ) -> Result<WelcomeResponse> {
+        let req = CreateWelcomeRequest {
+            agent_id: agent_id.to_owned(),
+        };
+        let resp = self
+            .client
+            .post(self.url(&format!("/mls/groups/{group_id}/welcome")))
+            .json(&req)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
     // ── Named groups (high-level) ───────────────────────────────────────
 
     /// Create a named group.
@@ -500,27 +635,12 @@ impl X0xClient {
         let req = SetDisplayNameRequest {
             name: name.to_owned(),
         };
-        let resp = self
-            .client
-            .put(self.url(&format!("/groups/{group_id}/display-name")))
-            .json(&req)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await?;
-        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
-            if envelope.ok {
-                return Ok(());
-            }
-            return Err(X0xError::Daemon(
-                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
-            ));
-        }
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
-        }
+        self.request_ok(
+            self.client
+                .put(self.url(&format!("/groups/{group_id}/display-name")))
+                .json(&req),
+        )
+        .await
     }
 
     /// Leave a group.
@@ -583,27 +703,12 @@ impl X0xClient {
         let req = UpdateTaskRequest {
             action: "claim".to_owned(),
         };
-        let resp = self
-            .client
-            .patch(self.url(&format!("/task-lists/{list_id}/tasks/{task_id}")))
-            .json(&req)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await?;
-        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
-            if envelope.ok {
-                return Ok(());
-            }
-            return Err(X0xError::Daemon(
-                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
-            ));
-        }
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
-        }
+        self.request_ok(
+            self.client
+                .patch(self.url(&format!("/task-lists/{list_id}/tasks/{task_id}")))
+                .json(&req),
+        )
+        .await
     }
 
     /// Complete a task.
@@ -611,27 +716,12 @@ impl X0xClient {
         let req = UpdateTaskRequest {
             action: "complete".to_owned(),
         };
-        let resp = self
-            .client
-            .patch(self.url(&format!("/task-lists/{list_id}/tasks/{task_id}")))
-            .json(&req)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await?;
-        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
-            if envelope.ok {
-                return Ok(());
-            }
-            return Err(X0xError::Daemon(
-                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
-            ));
-        }
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
-        }
+        self.request_ok(
+            self.client
+                .patch(self.url(&format!("/task-lists/{list_id}/tasks/{task_id}")))
+                .json(&req),
+        )
+        .await
     }
 
     // ── Key-value stores ────────────────────────────────────────────────
@@ -687,30 +777,15 @@ impl X0xClient {
             value: BASE64.encode(value),
             content_type: content_type.map(str::to_owned),
         };
-        let resp = self
-            .client
-            .put(self.url(&format!("/stores/{store_id}/{key}")))
-            .json(&req)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await?;
-        if let Ok(envelope) = serde_json::from_str::<ApiResponse<serde_json::Value>>(&text) {
-            if envelope.ok {
-                return Ok(());
-            }
-            return Err(X0xError::Daemon(
-                envelope.error.unwrap_or_else(|| format!("HTTP {status}")),
-            ));
-        }
-        if status.is_success() {
-            Ok(())
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {text}")))
-        }
+        self.request_ok(
+            self.client
+                .put(self.url(&format!("/stores/{store_id}/{key}")))
+                .json(&req),
+        )
+        .await
     }
 
-    /// Get a value from a store. Returns the raw bytes.
+    /// Get a raw store entry, including its base64 value and metadata.
     pub async fn get(&self, store_id: &str, key: &str) -> Result<StoreValue> {
         let resp = self
             .client
@@ -791,6 +866,12 @@ impl X0xClient {
     /// Check for x0xd updates.
     pub async fn check_upgrade(&self) -> Result<serde_json::Value> {
         let resp = self.client.get(self.url("/upgrade")).send().await?;
+        self.parse(resp).await
+    }
+
+    /// Inspect active WebSocket sessions and their shared subscriptions.
+    pub async fn ws_sessions(&self) -> Result<WsSessionList> {
+        let resp = self.client.get(self.url("/ws/sessions")).send().await?;
         self.parse(resp).await
     }
 }

@@ -22,8 +22,6 @@
 //! }
 //! ```
 
-#![allow(dead_code)]
-
 use communitas_ui_api::SyncState as ApiSyncState;
 use dioxus::prelude::*;
 

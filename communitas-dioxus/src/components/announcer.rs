@@ -63,7 +63,7 @@ pub struct AnnouncerContext {
 
 impl AnnouncerContext {
     /// Create a new announcer context.
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             polite: Signal::new(None),
             assertive: Signal::new(None),
@@ -156,8 +156,8 @@ impl AnnouncerContext {
 /// ```
 #[component]
 pub fn Announcer() -> Element {
-    // Create or get the announcer context
-    let ctx = use_context_provider(AnnouncerContext::new);
+    // Consume the app-wide announcer context provided at the root.
+    let ctx = use_context::<AnnouncerContext>();
 
     // Process queue when it changes
     let queue_len = ctx.queue.read().len();

@@ -1,7 +1,7 @@
-//! WebSocket client for real-time x0xd event streaming.
+//! Exact WebSocket client for real-time x0xd sessions.
 //!
-//! Connects to `ws://127.0.0.1:12700/ws` and provides a typed send/receive
-//! interface for gossip messages, direct messages, and topic subscriptions.
+//! Supports the daemon's `/ws` and `/ws/direct` endpoints. Note that `/events`
+//! and `/direct/events` are server-sent event streams, not WebSocket endpoints.
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
@@ -22,9 +22,14 @@ pub struct X0xWebSocket {
 }
 
 impl X0xWebSocket {
-    /// Connect to the x0xd WebSocket at the default address.
+    /// Connect to the daemon's general-purpose WebSocket endpoint.
     pub async fn connect() -> Result<Self> {
         Self::connect_to("ws://127.0.0.1:12700/ws").await
+    }
+
+    /// Connect to the daemon's direct-message WebSocket endpoint.
+    pub async fn connect_direct() -> Result<Self> {
+        Self::connect_to("ws://127.0.0.1:12700/ws/direct").await
     }
 
     /// Connect to a custom WebSocket URL.

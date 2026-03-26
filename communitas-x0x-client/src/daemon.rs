@@ -1,7 +1,8 @@
-//! Daemon lifecycle management for x0xd.
+//! CLI-faithful lifecycle helpers for the local x0x daemon.
 //!
-//! Provides utilities for checking, installing, starting, and auto-starting
-//! the x0xd daemon. The install script is `curl -sfL https://x0x.md | sh`.
+//! This module wraps documented `x0x` CLI behavior for checking, installing,
+//! starting, stopping, and optionally auto-starting the daemon. It does not
+//! assume undocumented direct `x0xd` process management semantics.
 
 use std::process::Command;
 
@@ -146,11 +147,28 @@ impl DaemonManager {
         }
     }
 
-    /// Ensure the daemon is installed, configured for autostart, and running.
+    async fn wait_until_healthy(&self, timeout_secs: u64) -> Result<()> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+        loop {
+            match self.client.health().await {
+                Ok(_) => return Ok(()),
+                Err(e) if std::time::Instant::now() >= deadline => {
+                    return Err(X0xError::Daemon(format!(
+                        "daemon did not become healthy before timeout: {e}"
+                    )));
+                }
+                Err(_) => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+                }
+            }
+        }
+    }
+
+    /// Ensure the daemon is installed and running.
     ///
-    /// This is the recommended entry point for applications. It handles the
-    /// full lifecycle: install if missing, configure autostart, start if not
-    /// running.
+    /// This helper mirrors documented x0x CLI behavior but does not implicitly
+    /// enable autostart; callers that want autostart should opt into
+    /// [`Self::autostart`] separately.
     pub async fn ensure_running(&self) -> Result<()> {
         match self.state().await {
             DaemonState::Running => {
@@ -163,28 +181,12 @@ impl DaemonManager {
             }
             DaemonState::NotRunning => {
                 Self::start().await?;
-                // Wait briefly for the daemon to become ready.
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                // Verify it started.
-                match self.client.health().await {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(X0xError::Daemon(format!(
-                        "daemon started but health check failed: {e}"
-                    ))),
-                }
+                self.wait_until_healthy(10).await
             }
             DaemonState::NotInstalled => {
                 Self::install().await?;
-                Self::autostart().await?;
                 Self::start().await?;
-                // Wait for startup.
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                match self.client.health().await {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(X0xError::Daemon(format!(
-                        "installed and started but health check failed: {e}"
-                    ))),
-                }
+                self.wait_until_healthy(15).await
             }
         }
     }

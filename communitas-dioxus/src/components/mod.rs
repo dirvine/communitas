@@ -1,31 +1,64 @@
 //! Dioxus UI components for Communitas.
 
 pub mod announcer;
+#[allow(dead_code)]
 pub mod app_shell;
+pub mod app_sidebar;
+#[allow(dead_code)]
 pub mod auth_v2;
+#[allow(dead_code)]
 pub mod canvas;
 pub mod channel_chat;
 pub mod channel_sidebar;
+#[allow(dead_code)]
 mod composer;
+#[allow(dead_code)]
 pub mod confirm_dialog;
+pub mod create_channel_modal;
+#[allow(dead_code)]
 pub mod daemon_status;
+pub mod dashboard;
+pub mod dm_view;
+#[allow(dead_code)]
 pub mod drive;
+#[allow(dead_code)]
 pub mod entity_view;
+#[allow(dead_code)]
 pub mod error_boundary;
+pub mod files_view;
+#[allow(dead_code)]
 pub mod filter_chips;
+#[allow(dead_code, unused_imports)]
 pub mod kanban;
+#[allow(dead_code)]
 pub mod layout;
+#[allow(dead_code)]
 mod message_list;
+#[allow(dead_code)]
 pub mod messaging_v2;
+pub mod network_view;
+#[allow(dead_code)]
 pub mod offline;
+#[allow(dead_code)]
 pub mod pagination;
+pub mod people_view;
+#[allow(dead_code)]
 mod presence_badge;
+#[allow(dead_code)]
 mod search_bar;
+#[allow(dead_code)]
 pub mod settings;
+pub mod settings_view;
+#[allow(dead_code)]
 pub mod sidebar;
+#[allow(dead_code)]
 pub mod skeleton;
+pub mod space_view;
+pub mod status_bar;
+#[allow(dead_code)]
 mod thread_list;
 pub mod thread_panel;
+#[allow(dead_code)]
 pub mod virtual_list;
 
 // Re-export canvas components (will be used when canvas UI is integrated into routes)
@@ -34,10 +67,12 @@ pub use canvas::{
     CanvasToolbar, CanvasView, CollaboratorList, HistoryIndicator, HistoryScrubber, LayerPanel,
     OfflineIndicator, RemoteCursors, SyncStatusBadge,
 };
+#[allow(unused_imports)]
 pub use composer::MessageComposer;
+#[allow(unused_imports)]
 pub use drive::DriveBrowser;
 // Re-export main kanban components for external use
-// Note: BoardListPage and BoardView are used in main.rs routes
+#[allow(unused_imports)]
 pub use message_list::MessageList;
 // Re-export presence components (InCall variants will be used when presence UI is enhanced)
 #[allow(unused_imports)]
@@ -48,6 +83,7 @@ pub use presence_badge::{
 // Re-export search components (will be integrated into messaging UI)
 #[allow(unused_imports)]
 pub use search_bar::{SearchBar, SearchResultSelection};
+#[allow(unused_imports)]
 pub use thread_list::ThreadListSidebar;
 // Re-export TypingIndicator for external use (can be used in other message views)
 #[allow(unused_imports)]
@@ -143,9 +179,23 @@ pub use filter_chips::{FilterChips, FilterOption};
 pub use confirm_dialog::ConfirmDialog;
 
 // Re-export daemon status bar for x0xd connectivity
+#[allow(unused_imports)]
 pub use daemon_status::DaemonStatusBar;
 
 // Re-export channel and thread components for space-based messaging
 pub use channel_chat::ChannelChatView;
 pub use channel_sidebar::ChannelSidebar;
+pub use create_channel_modal::CreateChannelModal;
 pub use thread_panel::ThreadPanel;
+
+// Re-export new Deep Space components
+pub use app_sidebar::{AppSidebar, ContactEntry, GroupEntry};
+pub use dashboard::Dashboard;
+#[allow(unused_imports)]
+pub use files_view::FilesView;
+pub use network_view::NetworkView;
+pub use people_view::PeopleView;
+pub use settings_view::SettingsView;
+pub use space_view::SpaceView;
+pub use dm_view::DmView;
+pub use status_bar::StatusBar;

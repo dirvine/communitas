@@ -2,4 +2,4 @@
 
 pub mod channel;
 
-pub use channel::{ChannelIndex, ChannelMeta, ChatMessage};
+pub use channel::{ChannelMeta, ChatMessage};

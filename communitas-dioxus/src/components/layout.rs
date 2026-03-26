@@ -30,8 +30,6 @@
 //! }
 //! ```
 
-#![allow(dead_code)]
-
 use dioxus::prelude::*;
 
 use crate::tokens::{breakpoints, colors, spacing};

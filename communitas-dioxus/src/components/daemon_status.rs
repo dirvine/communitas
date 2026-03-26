@@ -25,6 +25,34 @@ use crate::tokens::{colors, radius, spacing, typography};
 /// How often (in seconds) to poll the daemon health endpoint.
 const POLL_INTERVAL_SECS: u64 = 5;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DaemonAction {
+    Install,
+    Start,
+    Stop,
+    Autostart,
+}
+
+impl DaemonAction {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Install => "Install",
+            Self::Start => "Start",
+            Self::Stop => "Stop",
+            Self::Autostart => "Enable Autostart",
+        }
+    }
+
+    fn working_label(self) -> &'static str {
+        match self {
+            Self::Install => "Installing...",
+            Self::Start => "Starting...",
+            Self::Stop => "Stopping...",
+            Self::Autostart => "Enabling Autostart...",
+        }
+    }
+}
+
 /// Format an uptime duration in seconds into a human-readable string.
 fn format_uptime(secs: u64) -> String {
     if secs < 60 {
@@ -54,7 +82,8 @@ fn truncate_agent_id(id: &str) -> String {
 /// - Status label
 /// - Peer count and uptime when connected
 /// - Truncated agent ID when available
-/// - "Install & Start" or "Start" button when daemon is not available
+/// - Explicit lifecycle buttons that mirror `x0x install`, `x0x start`,
+///   `x0x stop`, and `x0x autostart`
 #[component]
 pub fn DaemonStatusBar() -> Element {
     let mut state = use_signal(|| DaemonState::NotRunning);
@@ -62,7 +91,7 @@ pub fn DaemonStatusBar() -> Element {
     let mut peers = use_signal(|| 0u32);
     let mut uptime = use_signal(|| 0u64);
     let mut version = use_signal(|| None::<String>);
-    let mut action_in_progress = use_signal(|| false);
+    let mut active_action = use_signal(|| None::<DaemonAction>);
     let mut action_error = use_signal(|| None::<String>);
 
     // Poll daemon health every POLL_INTERVAL_SECS seconds.
@@ -110,7 +139,8 @@ pub fn DaemonStatusBar() -> Element {
     let current_uptime = *uptime.read();
     let current_agent_id = agent_id.read().clone();
     let current_version = version.read().clone();
-    let is_busy = *action_in_progress.read();
+    let current_action = *active_action.read();
+    let is_busy = current_action.is_some();
     let current_error = action_error.read().clone();
 
     // Status dot color and label
@@ -119,18 +149,6 @@ pub fn DaemonStatusBar() -> Element {
         DaemonState::Degraded => (colors::WARNING, "x0xd Degraded"),
         DaemonState::NotRunning => (colors::DANGER, "x0xd Stopped"),
         DaemonState::NotInstalled => (colors::TEXT_MUTED, "x0xd Not Installed"),
-    };
-
-    // Whether to show the action button
-    let show_action = matches!(
-        current_state,
-        DaemonState::NotRunning | DaemonState::NotInstalled
-    );
-
-    let action_label = match current_state {
-        DaemonState::NotInstalled => "Install & Start",
-        DaemonState::NotRunning => "Start",
-        _ => "",
     };
 
     // Bar container style
@@ -176,14 +194,40 @@ pub fn DaemonStatusBar() -> Element {
         colors::BORDER_DEFAULT,
     );
 
-    // Action button style
-    let button_style = format!(
+    let primary_button_style = format!(
         "background-color: {}; color: {}; border: none; \
          padding: 0.125rem {}; font-size: {}; font-family: {}; \
          border-radius: {}; cursor: pointer; white-space: nowrap; \
          font-weight: 500; transition: background-color 150ms ease;",
         colors::PRIMARY,
         colors::TEXT_INVERSE,
+        spacing::SM,
+        typography::TEXT_XS,
+        typography::FONT_SANS,
+        radius::SM,
+    );
+
+    let secondary_button_style = format!(
+        "background-color: {}; color: {}; border: 1px solid {}; \
+         padding: 0.125rem {}; font-size: {}; font-family: {}; \
+         border-radius: {}; cursor: pointer; white-space: nowrap; \
+         font-weight: 500; transition: background-color 150ms ease;",
+        colors::SURFACE_ELEVATED,
+        colors::TEXT_PRIMARY,
+        colors::BORDER_DEFAULT,
+        spacing::SM,
+        typography::TEXT_XS,
+        typography::FONT_SANS,
+        radius::SM,
+    );
+
+    let destructive_button_style = format!(
+        "background-color: transparent; color: {}; border: 1px solid {}; \
+         padding: 0.125rem {}; font-size: {}; font-family: {}; \
+         border-radius: {}; cursor: pointer; white-space: nowrap; \
+         font-weight: 500; transition: background-color 150ms ease;",
+        colors::DANGER,
+        colors::DANGER,
         spacing::SM,
         typography::TEXT_XS,
         typography::FONT_SANS,
@@ -197,6 +241,20 @@ pub fn DaemonStatusBar() -> Element {
          font-weight: 500; opacity: 0.6;",
         colors::SURFACE_ELEVATED,
         colors::TEXT_MUTED,
+        spacing::SM,
+        typography::TEXT_XS,
+        typography::FONT_SANS,
+        radius::SM,
+    );
+
+    let disabled_secondary_button_style = format!(
+        "background-color: {}; color: {}; border: 1px solid {}; \
+         padding: 0.125rem {}; font-size: {}; font-family: {}; \
+         border-radius: {}; cursor: not-allowed; white-space: nowrap; \
+         font-weight: 500; opacity: 0.6;",
+        colors::SURFACE_ELEVATED,
+        colors::TEXT_MUTED,
+        colors::BORDER_DEFAULT,
         spacing::SM,
         typography::TEXT_XS,
         typography::FONT_SANS,
@@ -299,48 +357,145 @@ pub fn DaemonStatusBar() -> Element {
                 }
             }
 
-            // Action button when not running
-            if show_action {
+            if matches!(current_state, DaemonState::NotInstalled) {
                 button {
                     r#type: "button",
                     class: "daemon-action-button",
-                    style: if is_busy { "{disabled_button_style}" } else { "{button_style}" },
+                    style: if is_busy { "{disabled_button_style}" } else { "{primary_button_style}" },
                     disabled: is_busy,
-                    "aria-label": if is_busy { "Operation in progress" } else { "{action_label}" },
+                    "aria-label": if current_action == Some(DaemonAction::Install) {
+                        DaemonAction::Install.working_label()
+                    } else {
+                        DaemonAction::Install.label()
+                    },
                     onclick: move |_| {
                         if is_busy {
                             return;
                         }
-                        let target_state = current_state;
-                        action_in_progress.set(true);
+                        active_action.set(Some(DaemonAction::Install));
                         action_error.set(None);
                         spawn(async move {
-                            let result = match target_state {
-                                DaemonState::NotInstalled => {
-                                    tracing::info!(target: "ui.daemon", "installing and starting x0xd");
-                                    let dm = DaemonManager::new();
-                                    dm.ensure_running().await
-                                }
-                                DaemonState::NotRunning => {
-                                    tracing::info!(target: "ui.daemon", "starting x0xd");
-                                    DaemonManager::start().await
-                                }
-                                _ => Ok(()),
-                            };
+                            let result = DaemonManager::install().await;
                             match result {
-                                Ok(()) => {
-                                    tracing::info!(target: "ui.daemon", "daemon action completed successfully");
-                                    action_error.set(None);
-                                }
-                                Err(e) => {
-                                    tracing::error!(target: "ui.daemon", "daemon action failed: {e}");
-                                    action_error.set(Some(format!("{e}")));
-                                }
+                                Ok(()) => action_error.set(None),
+                                Err(e) => action_error.set(Some(format!("{e}"))),
                             }
-                            action_in_progress.set(false);
+                            active_action.set(None);
                         });
                     },
-                    if is_busy { "Working..." } else { "{action_label}" }
+                    {
+                        if current_action == Some(DaemonAction::Install) {
+                            DaemonAction::Install.working_label()
+                        } else {
+                            DaemonAction::Install.label()
+                        }
+                    }
+                }
+            }
+
+            if matches!(current_state, DaemonState::NotRunning) {
+                button {
+                    r#type: "button",
+                    class: "daemon-action-button",
+                    style: if is_busy { "{disabled_button_style}" } else { "{primary_button_style}" },
+                    disabled: is_busy,
+                    "aria-label": if current_action == Some(DaemonAction::Start) {
+                        DaemonAction::Start.working_label()
+                    } else {
+                        DaemonAction::Start.label()
+                    },
+                    onclick: move |_| {
+                        if is_busy {
+                            return;
+                        }
+                        active_action.set(Some(DaemonAction::Start));
+                        action_error.set(None);
+                        spawn(async move {
+                            let result = DaemonManager::start().await;
+                            match result {
+                                Ok(()) => action_error.set(None),
+                                Err(e) => action_error.set(Some(format!("{e}"))),
+                            }
+                            active_action.set(None);
+                        });
+                    },
+                    {
+                        if current_action == Some(DaemonAction::Start) {
+                            DaemonAction::Start.working_label()
+                        } else {
+                            DaemonAction::Start.label()
+                        }
+                    }
+                }
+            }
+
+            if matches!(current_state, DaemonState::Running | DaemonState::Degraded) {
+                button {
+                    r#type: "button",
+                    class: "daemon-action-button",
+                    style: if is_busy { "{disabled_secondary_button_style}" } else { "{secondary_button_style}" },
+                    disabled: is_busy,
+                    "aria-label": if current_action == Some(DaemonAction::Autostart) {
+                        DaemonAction::Autostart.working_label()
+                    } else {
+                        DaemonAction::Autostart.label()
+                    },
+                    onclick: move |_| {
+                        if is_busy {
+                            return;
+                        }
+                        active_action.set(Some(DaemonAction::Autostart));
+                        action_error.set(None);
+                        spawn(async move {
+                            let result = DaemonManager::autostart().await;
+                            match result {
+                                Ok(()) => action_error.set(None),
+                                Err(e) => action_error.set(Some(format!("{e}"))),
+                            }
+                            active_action.set(None);
+                        });
+                    },
+                    {
+                        if current_action == Some(DaemonAction::Autostart) {
+                            DaemonAction::Autostart.working_label()
+                        } else {
+                            DaemonAction::Autostart.label()
+                        }
+                    }
+                }
+
+                button {
+                    r#type: "button",
+                    class: "daemon-action-button",
+                    style: if is_busy { "{disabled_secondary_button_style}" } else { "{destructive_button_style}" },
+                    disabled: is_busy,
+                    "aria-label": if current_action == Some(DaemonAction::Stop) {
+                        DaemonAction::Stop.working_label()
+                    } else {
+                        DaemonAction::Stop.label()
+                    },
+                    onclick: move |_| {
+                        if is_busy {
+                            return;
+                        }
+                        active_action.set(Some(DaemonAction::Stop));
+                        action_error.set(None);
+                        spawn(async move {
+                            let result = DaemonManager::stop().await;
+                            match result {
+                                Ok(()) => action_error.set(None),
+                                Err(e) => action_error.set(Some(format!("{e}"))),
+                            }
+                            active_action.set(None);
+                        });
+                    },
+                    {
+                        if current_action == Some(DaemonAction::Stop) {
+                            DaemonAction::Stop.working_label()
+                        } else {
+                            DaemonAction::Stop.label()
+                        }
+                    }
                 }
             }
         }

@@ -1,14 +1,14 @@
 //! Channel sidebar component for space-based messaging.
 //!
-//! Displays spaces (x0x groups) with their channels organized by category.
-//! Channels are loaded from x0x KvStore and subscribed via WebSocket.
+//! Displays spaces (x0x groups) with their GUI-compatible channel metadata.
 
 use crate::design_tokens::{motion, radius, semantic, spacing, typography};
-use crate::models::channel::{ChannelIndex, ChannelMeta};
-use communitas_x0x_client::X0xClient;
+use crate::models::channel::ChannelMeta;
+use crate::x0x_contract;
+use communitas_x0x_client::{GroupInfo, GroupSummary, X0xClient};
 use dioxus::prelude::*;
 use std::collections::HashMap;
-use tracing::error;
+use tracing::{error, warn};
 
 /// A space (x0x named group) with its channels.
 #[derive(Debug, Clone, PartialEq)]
@@ -17,10 +17,8 @@ pub struct SpaceEntry {
     pub group_id: String,
     /// Human-readable space name.
     pub name: String,
-    /// Channel index for this space.
-    pub channels: ChannelIndex,
-    /// Channel metadata keyed by channel name.
-    pub channel_meta: HashMap<String, ChannelMeta>,
+    /// Canonical channel records for this space.
+    pub channels: Vec<ChannelMeta>,
     /// Unread message counts per channel name.
     pub unread_counts: HashMap<String, u32>,
 }
@@ -44,10 +42,16 @@ pub fn ChannelSidebar(
     /// The currently selected channel, if any.
     #[props(default)]
     selected: Option<SelectedChannel>,
+    /// Forces the sidebar to reload spaces and channel metadata.
+    #[props(default)]
+    refresh_key: u64,
     /// Called when a channel is selected.
     on_select: EventHandler<SelectedChannel>,
     /// Called when the user wants to create a new channel.
     on_create_channel: EventHandler<String>,
+    /// Opens the local identity/details screen.
+    #[props(default)]
+    on_open_identity: Option<EventHandler<()>>,
 ) -> Element {
     let mut spaces = use_signal(Vec::<SpaceEntry>::new);
     let mut loading = use_signal(|| true);
@@ -55,94 +59,41 @@ pub fn ChannelSidebar(
     let mut collapsed_spaces: Signal<std::collections::HashSet<String>> =
         use_signal(std::collections::HashSet::new);
 
-    // Load spaces and channels from x0x daemon
-    use_coroutine(move |_: UnboundedReceiver<()>| async move {
-        let client = X0xClient::new();
+    let selected_for_load = selected.clone();
+    let on_select_for_load = on_select;
+    use_future(move || {
+        let refresh_key = refresh_key;
+        let selected = selected_for_load.clone();
+        let on_select = on_select_for_load;
+        async move {
+            let _ = refresh_key;
+            loading.set(true);
+            error_msg.set(None);
 
-        // Load groups
-        let groups = match client.list_groups().await {
-            Ok(g) => g,
-            Err(e) => {
-                error!(target: "ui.channel_sidebar", "Failed to list groups: {e}");
-                error_msg.set(Some(format!("Failed to load spaces: {e}")));
-                loading.set(false);
-                return;
-            }
-        };
-
-        let mut loaded_spaces = Vec::new();
-
-        for group in &groups {
-            let group_id = &group.group_id;
-            let group_id_prefix = if group_id.len() >= 16 {
-                &group_id[..16]
-            } else {
-                group_id
-            };
-
-            // Try to load channel index from KvStore
-            // First, find or create the store for this group
-            let stores = client.list_stores().await.unwrap_or_default();
-            let store_id = stores
-                .iter()
-                .find(|s| {
-                    s.topic
-                        .as_deref()
-                        .is_some_and(|t| t.contains(group_id_prefix))
-                })
-                .map(|s| s.id.clone());
-
-            let mut channel_index = ChannelIndex::default();
-            let mut channel_meta_map = HashMap::new();
-
-            if let Some(ref sid) = store_id {
-                // Try loading channels_index
-                if let Ok(val) = client.get(sid, "channels_index").await
-                    && let Ok(decoded) = base64::Engine::decode(
-                        &base64::engine::general_purpose::STANDARD,
-                        &val.value,
-                    )
-                    && let Ok(idx) = serde_json::from_slice::<ChannelIndex>(&decoded)
-                {
-                    channel_index = idx;
-                }
-
-                // Load metadata for each known channel
-                for ch_name in &channel_index.channels {
-                    let key = format!("channel:{ch_name}");
-                    if let Ok(val) = client.get(sid, &key).await
-                        && let Ok(decoded) = base64::Engine::decode(
-                            &base64::engine::general_purpose::STANDARD,
-                            &val.value,
-                        )
-                        && let Ok(meta) = serde_json::from_slice::<ChannelMeta>(&decoded)
+            let client = X0xClient::new();
+            match load_spaces(&client).await {
+                Ok(loaded_spaces) => {
+                    if selected.is_none()
+                        && let Some(first_space) = loaded_spaces.first()
+                        && let Some(first_channel) = first_space.channels.first()
                     {
-                        channel_meta_map.insert(ch_name.clone(), meta);
+                        on_select.call(SelectedChannel {
+                            group_id: first_space.group_id.clone(),
+                            channel_name: first_channel.name.clone(),
+                            topic: first_channel.topic.clone(),
+                            meta: Some(first_channel.clone()),
+                        });
                     }
+                    spaces.set(loaded_spaces)
+                }
+                Err(err) => {
+                    error!(target: "ui.channel_sidebar", "Failed to load spaces: {err}");
+                    error_msg.set(Some(err));
                 }
             }
 
-            // If no channels exist yet, create a default "general" channel entry
-            if channel_index.channels.is_empty() {
-                channel_index.channels.push("general".to_string());
-                channel_index
-                    .categories
-                    .entry("General".to_string())
-                    .or_default()
-                    .push("general".to_string());
-            }
-
-            loaded_spaces.push(SpaceEntry {
-                group_id: group_id.clone(),
-                name: group.name.clone(),
-                channels: channel_index,
-                channel_meta: channel_meta_map,
-                unread_counts: HashMap::new(),
-            });
+            loading.set(false);
         }
-
-        spaces.set(loaded_spaces);
-        loading.set(false);
     });
 
     rsx! {
@@ -187,6 +138,28 @@ pub fn ChannelSidebar(
                         typography::TRACKING_WIDER
                     ),
                     "CHANNELS"
+                }
+
+                if let Some(on_open_identity) = on_open_identity {
+                    button {
+                        style: format!(
+                            "padding: {} {}; \
+                             border: 1px solid {}; \
+                             border-radius: {}; \
+                             background: transparent; \
+                             color: {}; \
+                             font-size: {}; \
+                             cursor: pointer;",
+                            spacing::XXS,
+                            spacing::SM,
+                            semantic::BORDER_SUBTLE,
+                            radius::MD,
+                            semantic::TEXT_SECONDARY,
+                            typography::SIZE_XS
+                        ),
+                        onclick: move |_| on_open_identity.call(()),
+                        "Identity"
+                    }
                 }
             }
 
@@ -273,6 +246,52 @@ pub fn ChannelSidebar(
     }
 }
 
+fn fallback_group_info(summary: &GroupSummary) -> GroupInfo {
+    GroupInfo {
+        group_id: summary.group_id.clone(),
+        name: summary.name.clone(),
+        description: summary.description.clone(),
+        creator: summary.creator.clone(),
+        created_at: summary.created_at,
+        member_count: summary.member_count,
+        chat_topic: Some(x0x_contract::channel_topic(&summary.group_id, "general")),
+        metadata_topic: None,
+        members: Vec::new(),
+    }
+}
+
+async fn load_spaces(client: &X0xClient) -> Result<Vec<SpaceEntry>, String> {
+    let groups = client
+        .list_groups()
+        .await
+        .map_err(|err| format!("Failed to load spaces: {err}"))?;
+
+    let mut loaded_spaces = Vec::new();
+
+    for group in groups {
+        let group_info = match client.get_group(&group.group_id).await {
+            Ok(group_info) => group_info,
+            Err(err) => {
+                warn!(
+                    target: "ui.channel_sidebar",
+                    "failed to load full group details for {}: {err}",
+                    group.group_id
+                );
+                fallback_group_info(&group)
+            }
+        };
+
+        loaded_spaces.push(SpaceEntry {
+            group_id: group_info.group_id.clone(),
+            name: group_info.name.clone(),
+            channels: x0x_contract::load_group_channels(client, &group_info).await,
+            unread_counts: HashMap::new(),
+        });
+    }
+
+    Ok(loaded_spaces)
+}
+
 /// A single space section with its channels.
 #[component]
 fn SpaceSection(
@@ -283,12 +302,6 @@ fn SpaceSection(
     on_select: EventHandler<SelectedChannel>,
     on_create_channel: EventHandler<()>,
 ) -> Element {
-    let group_id_prefix = if space.group_id.len() >= 16 {
-        space.group_id[..16].to_string()
-    } else {
-        space.group_id.clone()
-    };
-
     rsx! {
         div {
             style: format!("margin-bottom: {};", spacing::XS),
@@ -367,92 +380,28 @@ fn SpaceSection(
                 div {
                     style: format!("padding-left: {};", spacing::SM),
 
-                    // Render by category if available, otherwise flat list
-                    if space.channels.categories.is_empty() {
-                        for ch_name in &space.channels.channels {
-                            ChannelItem {
-                                key: "{ch_name}",
-                                name: ch_name.clone(),
-                                meta: space.channel_meta.get(ch_name).cloned(),
-                                unread: space.unread_counts.get(ch_name).copied().unwrap_or(0),
-                                is_selected: selected.as_ref().is_some_and(|s| {
-                                    s.group_id == space.group_id && s.channel_name == *ch_name
-                                }),
-                                on_click: {
-                                    let gid = space.group_id.clone();
-                                    let gid_prefix = group_id_prefix.clone();
-                                    let name = ch_name.clone();
-                                    let meta = space.channel_meta.get(ch_name).cloned();
-                                    move |_| {
-                                        let topic = meta.as_ref().map_or_else(
-                                            || format!("x0x.group.{}.chat/{}", gid_prefix, name),
-                                            |m| m.topic.clone(),
-                                        );
-                                        on_select.call(SelectedChannel {
-                                            group_id: gid.clone(),
-                                            channel_name: name.clone(),
-                                            topic,
-                                            meta: meta.clone(),
-                                        });
-                                    }
-                                },
-                            }
-                        }
-                    } else {
-                        for (cat_name, ch_names) in &space.channels.categories {
-                            div {
-                                key: "{cat_name}",
-                                // Category label
-                                div {
-                                    style: format!(
-                                        "padding: {} {} {} {}; \
-                                         font-size: {}; \
-                                         font-weight: {}; \
-                                         color: {}; \
-                                         text-transform: uppercase; \
-                                         letter-spacing: {};",
-                                        spacing::SM,
-                                        spacing::SM,
-                                        spacing::XXS,
-                                        spacing::BASE,
-                                        typography::SIZE_XXS,
-                                        typography::WEIGHT_MEDIUM,
-                                        semantic::TEXT_MUTED,
-                                        typography::TRACKING_WIDER
-                                    ),
-                                    "{cat_name}"
+                    for channel in &space.channels {
+                        ChannelItem {
+                            key: "{channel.name}",
+                            name: channel.name.clone(),
+                            meta: Some(channel.clone()),
+                            unread: space.unread_counts.get(&channel.name).copied().unwrap_or(0),
+                            is_selected: selected.as_ref().is_some_and(|selected_channel| {
+                                selected_channel.group_id == space.group_id
+                                    && selected_channel.channel_name == channel.name
+                            }),
+                            on_click: {
+                                let group_id = space.group_id.clone();
+                                let meta = channel.clone();
+                                move |_| {
+                                    on_select.call(SelectedChannel {
+                                        group_id: group_id.clone(),
+                                        channel_name: meta.name.clone(),
+                                        topic: meta.topic.clone(),
+                                        meta: Some(meta.clone()),
+                                    });
                                 }
-
-                                for ch_name in ch_names {
-                                    ChannelItem {
-                                        key: "{ch_name}",
-                                        name: ch_name.clone(),
-                                        meta: space.channel_meta.get(ch_name).cloned(),
-                                        unread: space.unread_counts.get(ch_name).copied().unwrap_or(0),
-                                        is_selected: selected.as_ref().is_some_and(|s| {
-                                            s.group_id == space.group_id && s.channel_name == *ch_name
-                                        }),
-                                        on_click: {
-                                            let gid = space.group_id.clone();
-                                            let gid_prefix = group_id_prefix.clone();
-                                            let name = ch_name.clone();
-                                            let meta = space.channel_meta.get(ch_name).cloned();
-                                            move |_| {
-                                                let topic = meta.as_ref().map_or_else(
-                                                    || format!("x0x.group.{}.chat/{}", gid_prefix, name),
-                                                    |m| m.topic.clone(),
-                                                );
-                                                on_select.call(SelectedChannel {
-                                                    group_id: gid.clone(),
-                                                    channel_name: name.clone(),
-                                                    topic,
-                                                    meta: meta.clone(),
-                                                });
-                                            }
-                                        },
-                                    }
-                                }
-                            }
+                            },
                         }
                     }
                 }
@@ -471,6 +420,16 @@ fn ChannelItem(
     on_click: EventHandler<()>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
+    let tooltip = meta.as_ref().map_or_else(
+        || format!("#{name}"),
+        |channel| {
+            if channel.description.is_empty() {
+                format!("#{}", channel.name)
+            } else {
+                format!("#{} - {}", channel.name, channel.description)
+            }
+        },
+    );
 
     let bg = if is_selected {
         format!("background: {};", semantic::BG_ELEVATED)
@@ -519,6 +478,7 @@ fn ChannelItem(
                 motion::transition("background, color")
             ),
             aria_current: if is_selected { "page" } else { "false" },
+            title: "{tooltip}",
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
             onclick: move |_| on_click.call(()),

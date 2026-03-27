@@ -111,11 +111,13 @@ pub struct ToastManager {
 }
 
 impl ToastManager {
-    /// Create a new toast manager. Called by `use_context_provider`.
-    pub fn new() -> Self {
-        Self {
-            toasts: use_signal(Vec::new),
-        }
+    /// Create a new toast manager with a pre-created signal.
+    ///
+    /// The signal must be created with `use_signal` *before* passing it to
+    /// `use_context_provider`, because calling `use_signal` inside
+    /// `use_context_provider` violates the Dioxus hook-in-hook rule.
+    pub fn with_signal(toasts: Signal<Vec<Toast>>) -> Self {
+        Self { toasts }
     }
 
     /// Show a toast notification.
@@ -161,7 +163,11 @@ impl ToastManager {
 
 impl Default for ToastManager {
     fn default() -> Self {
-        Self::new()
+        // NOTE: This default is only safe outside of use_context_provider.
+        // For context providers, use `ToastManager::with_signal(use_signal(Vec::new))`.
+        Self {
+            toasts: Signal::new(Vec::new()),
+        }
     }
 }
 

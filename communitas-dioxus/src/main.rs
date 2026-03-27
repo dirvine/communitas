@@ -232,9 +232,10 @@ fn App() -> Element {
         }
     };
     use_context_provider(|| services);
+    // Create the toast signal BEFORE the context provider to avoid hook-in-hook.
+    let toast_signal = use_signal(Vec::new);
+    use_context_provider(|| components::toast_system::ToastManager::with_signal(toast_signal));
     use_context_provider(components::AnnouncerContext::new);
-    // Provide the toast manager so any component can call use_toast().
-    use_context_provider(components::toast_system::ToastManager::new);
 
     rsx! {
         style { {GLOBAL_STYLES} }

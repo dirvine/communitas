@@ -116,10 +116,17 @@ final class AppState: ObservableObject {
             groups = []
         }
 
-        // Auto-select first group if none selected
+        // Auto-select first group and its first channel if none selected
         if selectedGroup == nil, let first = groups.first {
             selectedGroup = first
-            selectedChannel = "general"
+            // Load actual channels; fall back to "general"
+            let manager = channelManager(for: first)
+            await manager.loadChannels()
+            if let firstChannel = manager.channels.first {
+                selectedChannel = firstChannel.name
+            } else {
+                selectedChannel = "general"
+            }
         }
 
         errorMessage = nil

@@ -188,7 +188,7 @@ struct CreateChannelSheet: View {
 
     @State private var name = ""
     @State private var description = ""
-    @State private var category = "General"
+    // Category removed - not part of canonical channel schema
     @State private var isCreating = false
     @State private var error: String?
 
@@ -204,7 +204,7 @@ struct CreateChannelSheet: View {
                 TextField("Channel Name", text: $name)
                     .help("Lowercase, hyphens for spaces")
                 TextField("Description", text: $description)
-                TextField("Category", text: $category)
+                // Category field removed - not part of canonical schema
             }
             .formStyle(.grouped)
 
@@ -238,8 +238,7 @@ struct CreateChannelSheet: View {
                 let manager = appState.channelManager(for: group)
                 try await manager.createChannel(
                     name: name.trimmingCharacters(in: .whitespaces),
-                    description: description.trimmingCharacters(in: .whitespaces),
-                    category: category.trimmingCharacters(in: .whitespaces)
+                    description: description.trimmingCharacters(in: .whitespaces)
                 )
                 dismiss()
             } catch {

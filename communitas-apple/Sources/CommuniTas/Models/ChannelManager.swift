@@ -122,7 +122,7 @@ final class ChannelManager: ObservableObject {
     }
 
     /// Create a new channel in this group.
-    func createChannel(name: String, description: String, category: String? = nil) async throws {
+    func createChannel(name: String, description: String) async throws {
         let sanitized = name.lowercased().replacingOccurrences(of: " ", with: "-")
 
         let meta = ChannelMeta(

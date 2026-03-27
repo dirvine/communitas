@@ -109,7 +109,7 @@ jobs:
           EOF
 
           echo "app_path=$APP_DIR" >> $GITHUB_OUTPUT
-          echo "dmg_name=CommuniTas-${VERSION}-universal.dmg" >> $GITHUB_OUTPUT
+          echo "dmg_name=CommuniTas-Swift-${VERSION}-universal.dmg" >> $GITHUB_OUTPUT
           echo "Created .app bundle: $APP_DIR"
 
       # ─────────────────────────────────────────────────────────────────────────

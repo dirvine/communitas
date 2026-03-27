@@ -35,10 +35,6 @@ pub const MAX_FOUR_WORDS_LENGTH: usize = 100;
 /// Input validation service providing secure input processing
 #[derive(Debug, Clone)]
 pub struct InputValidator {
-    /// Regex for validating four-word addresses
-    /// Regex for validating four-word addresses (reserved for future validation)
-    #[allow(dead_code)]
-    four_words_pattern: Option<Regex>,
     /// Regex for validating usernames
     username_pattern: Option<Regex>,
     /// Regex for detecting potential SQL injection
@@ -65,7 +61,6 @@ impl Default for InputValidator {
                     "InputValidator regex compilation failed - using fallback validator"
                 );
                 Self {
-                    four_words_pattern: None,
                     username_pattern: None,
                     sql_injection_pattern: None,
                     script_injection_pattern: None,
@@ -83,11 +78,6 @@ impl InputValidator {
     /// This should never happen with the hardcoded patterns, but is handled for safety.
     pub fn new() -> Result<Self, ValidationError> {
         Ok(Self {
-            four_words_pattern: Some(
-                Regex::new(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+$").map_err(|e| {
-                    ValidationError::Configuration(format!("four_words_pattern: {e}"))
-                })?,
-            ),
             username_pattern: Some(
                 Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").map_err(|e| {
                     ValidationError::Configuration(format!("username_pattern: {e}"))

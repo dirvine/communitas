@@ -1,14 +1,14 @@
 # Communitas — The Unstoppable Collaboration Platform
 
-[![Release](https://img.shields.io/github/v/release/maidsafe/communitas)](https://github.com/maidsafe/communitas/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/maidsafe/communitas/ci.yml)](https://github.com/maidsafe/communitas/actions)
+[![Release](https://img.shields.io/github/v/release/saorsalabs/communitas)](https://github.com/saorsalabs/communitas/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/saorsalabs/communitas/ci.yml)](https://github.com/saorsalabs/communitas/actions)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 > **A partition-tolerant, post-quantum secure, peer-to-peer collaboration network that works when the internet doesn't.**
 
 ## Download
 
-**[Download Communitas v0.8.0 for macOS →](https://github.com/maidsafe/communitas/releases/latest)**
+**[Download Communitas v0.9.5 for macOS →](https://github.com/saorsalabs/communitas/releases/latest)**
 
 - **macOS (Universal)**: Supports Intel (x86_64) and Apple Silicon (M1/M2/M3/M4)
 - Signed and notarized by Apple
@@ -62,7 +62,7 @@ Technical implementation verified through comprehensive integration testing (wat
 
 ### Development Setup
 ```bash
-git clone https://github.com/dirvine/communitas.git
+git clone https://github.com/saorsalabs/communitas.git
 cd communitas
 
 scripts/install_dx.sh       # installs dx 0.7.3
@@ -133,7 +133,13 @@ To simulate authentication failures during QA, set `COMMUNITAS_UI_FORCE_AUTH_ERR
 - **Projects**: Version-controlled workspaces with conflict-free document merging
 - **Channels**: Topic-scoped pubsub with message anti-entropy
 - **Entity Tabs**: Board, Chat, Call, Canvas, Drive, Documents, and Details views per entity type
-- **Messaging**: Message editing, deletion with confirmation, and pinning support
+- **Messaging**: Message editing, deletion with confirmation, pinning, threading, inline quotes/replies, and message search
+- **Reactions**: Emoji reactions with quick-reaction bar and full emoji picker (categorized with search)
+- **Markdown Rendering**: Full in-message markdown with syntax highlighting
+- **@Mentions**: Autocomplete mention picker with inline user tagging
+- **Typing Indicators**: Real-time per-user typing status in channels
+- **Presence**: Online/away/offline status badges per peer
+- **Onboarding Gate**: First-run flow that auto-installs and starts x0xd if not present
 - **Member Management**: Add/remove members with role display and permission controls
 
 ### UI Components (Dioxus)
@@ -162,12 +168,10 @@ To simulate authentication failures during QA, set `COMMUNITAS_UI_FORCE_AUTH_ERR
 - **[ADR Index](docs/adr/README.md)**: Architecture decisions
 
 ### API Reference
-- **[API Overview](docs/api/README.md)**: FFI, core, MCP surfaces
+- **[API Overview](docs/api/README.md)**: Core API surfaces
 - **[Core API](docs/api/core-api.md)**: Rust core library API
-- **[MCP API](communitas-mcp/README.md)**: AI agent interface (stdio/HTTP)
 
 ### Deployment & Ops
-- **[Headless Service](communitas-headless/README.md)**: systemd/launchd service with config-driven startup
 - **[Testnet Deployment](finalise/DEPLOY_TESTNET.md)**: Complete network deployment
 - **[Infrastructure](docs/infrastructure/INFRASTRUCTURE.md)**: Infra layout and environments
 
@@ -182,14 +186,16 @@ To simulate authentication failures during QA, set `COMMUNITAS_UI_FORCE_AUTH_ERR
 
 ### Applications
 - **[communitas-dioxus/](communitas-dioxus/)**: Cross-platform Dioxus + Tauri application (desktop-first, experimental mobile runners)
-- **[communitas-headless/](communitas-headless/)**: Headless daemon for system services ([README](communitas-headless/README.md))
-- **[communitas-mcp/](communitas-mcp/)**: MCP server for AI agent control (stdio + HTTPS with ML-DSA-65)
+- **[communitas-apple/](communitas-apple/)**: Native macOS Swift application (SwiftUI, requires x0xd)
 
-Dioxus is the supported GUI; MCP is the integration surface for other local apps and automations. Legacy thin-client assets remain in the archive solely for historical reference.
+Legacy thin-client assets remain in the archive solely for historical reference.
 
 ### Core Libraries
 - **[communitas-core/](communitas-core/)**: Shared Rust business logic and P2P networking
 - **[communitas-kanban/](communitas-kanban/)**: CRDT-based collaborative Kanban system
+- **[communitas-ui-api/](communitas-ui-api/)**: Strongly-typed UI service trait definitions
+- **[communitas-ui-service/](communitas-ui-service/)**: Shared Rust UI service implementations (ADR-019)
+- **[communitas-x0x-client/](communitas-x0x-client/)**: x0xd daemon discovery, HTTP client, and WebSocket transport
 
 ### Documentation
 - **[docs/](docs/)**: Comprehensive project documentation
@@ -202,20 +208,20 @@ Dioxus is the supported GUI; MCP is the integration surface for other local apps
 
 ### Key Commands
 ```bash
-# UI Development
+# Dioxus: development with hot reload
 cd communitas-dioxus
 dx serve --platform desktop --hotpatch
 
-# Production Bundle
+# Dioxus: production bundle
 dx bundle --platform desktop
 # Experimental mobile bundles (Android/iOS)
 dx bundle --platform android
 
+# Swift (macOS): open in Xcode
+open communitas-apple/Package.swift
+
 # Quality Checks
 dx check --platform desktop && cargo clippy --all-features
-
-# Run as system service (see communitas-headless/README.md)
-communitas-headless --config /etc/communitas/headless.toml
 ```
 
 ---
@@ -224,7 +230,7 @@ communitas-headless --config /etc/communitas/headless.toml
 
 Communitas supports multiple deployment scenarios for different use cases:
 
-### Dioxus Application (End Users)
+### Dioxus Application (End Users — Cross-Platform)
 Full-featured cross-platform application (desktop GA, experimental Android/iOS runners).
 ```bash
 cd communitas-dioxus
@@ -235,46 +241,16 @@ dx bundle --platform ios
 ```
 See [communitas-dioxus/](communitas-dioxus/) for details.
 
-### Headless Daemon (Servers & Bots)
-Run as a system service for automated operations, bots, or server infrastructure.
+### Swift Application (Native macOS)
+Native macOS SwiftUI app targeting macOS 14+. Connects to x0xd for all networking.
 ```bash
-# Install and run as systemd service
-sudo systemctl enable communitas
-sudo systemctl start communitas
+# Open in Xcode
+open communitas-apple/Package.swift
+
+# Build from command line
+swift build --package-path communitas-apple
 ```
-Complete guide: [communitas-headless/README.md](communitas-headless/README.md)
-
-### MCP Server (AI Agent Interface)
-Model Context Protocol server for AI agent control with HTTPS (ML-DSA-65 raw public keys).
-```bash
-# HTTPS transport with demo mode
-cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
-```
-Complete guide: [communitas-mcp/README.md](communitas-mcp/README.md)
-
-### MCP Apps (Interactive UIs in AI Conversations)
-Communitas implements the [MCP Apps extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) (SEP-1865), enabling rich interactive UIs directly within AI conversations in Claude Desktop, ChatGPT, VS Code, and other MCP hosts.
-
-| Widget | Description | Features |
-|--------|-------------|----------|
-| **Contacts** | Interactive contact list | Search, favorites, presence indicators |
-| **Messages** | Thread navigation | Composition, reactions, read status |
-| **Kanban** | Project boards | Drag-drop cards, tags, due dates |
-| **Drive** | File browser | Upload, preview, quota meter |
-| **Canvas** | Whiteboard viewer | Layer toggles, history, remote cursors |
-| **Settings** | User preferences | Theme, notifications, privacy |
-| **Search** | Global search | Cross-entity search, filters |
-| **Notifications** | Activity feed | Alerts, mentions, updates |
-
-**MCP Apps implementation notes (strict MCP Apps host compatibility):**
-- `initialize` advertises the UI extension in top-level `extensions` (not nested in `capabilities`).
-- UI widgets must call `ui/initialize` and use the returned `sessionToken` for `ui/context` and `ui/message`.
-- `resources/list` returns `ui://` entries with `_meta.ui` (CSP + permissions). Pre-auth UI is allowed, but must avoid model-visible secrets.
-- CRDT parity is mandatory for tool handlers; see the **CRDT-aware tool checklist**.
-
-**The MCP server IS the app.** Dioxus native and MCP Apps are both presentation layers over the same shared `communitas-ui-service` (ADR-019), ensuring identical behavior across AI agents and human users.
-
-See [ADR-022: MCP Apps Integration](docs/adr/ADR-022-mcp-apps-integration.md) for architecture details and [MCP CRDT-aware tool checklist](docs/architecture/mcp-crdt-tool-checklist.md) for implementation rules.
+Both apps discover the running x0xd daemon from `~/Library/Application Support/x0x/api.port` and `api-token`.
 
 ---
 
@@ -283,21 +259,28 @@ See [ADR-022: MCP Apps Integration](docs/adr/ADR-022-mcp-apps-integration.md) fo
 Identity is the public key (pubkey_hex). Four-word networking is used only to encode
 connection endpoints (IP:port) for sharing between peers.
 
+### x0x Daemon Integration
+Both the Dioxus and Swift apps talk to a local x0xd daemon for all networking. The daemon writes two files at startup:
+
+- `~/Library/Application Support/x0x/api.port` — the `host:port` the API listens on (e.g. `127.0.0.1:12700`)
+- `~/Library/Application Support/x0x/api-token` — a 64-character hex Bearer token required for authenticated endpoints
+
+Both apps discover these at runtime via `communitas-x0x-client` (Rust) or `X0xClient` (Swift). If x0xd is not installed or not running, the onboarding gate will prompt the user to install/start it.
+
 ### Connection Words Example
-```dart
+```rust
 // Share a connection address with a friend (IP:port encoded as words)
-final connectionWords = await getMyConnectionWords();
+let connection_words = get_my_connection_words().await?;
 // → "ocean-blue-eagle-star"
 
 // Friend uses the connection words to dial directly
-await connectToPeer(connectionWords);
+connect_to_peer(&connection_words).await?;
 ```
 
 ### Network Participation
 - **Desktop Nodes**: Full participants with the Dioxus/Tauri UI (macOS/Linux/Windows)
+- **macOS Nodes**: Native SwiftUI app backed by x0xd
 - **Mobile Nodes**: Experimental Dioxus builds on Android/iOS (stability pending upstream Tauri updates)
-- **Headless Nodes**: Bootstrap/seed nodes for network infrastructure
-- **Web Clients**: Demo-only SSR builds (no native MCP exposure in browser)
 
 ---
 

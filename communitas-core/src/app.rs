@@ -63,7 +63,7 @@ use crate::command::{
     QueryResult, Subscription,
 };
 use crate::core_context::CoreContext;
-use crate::crdt::{EntityType, MemberUpdateAction};
+use crate::crdt::EntityType;
 use crate::disk_service::DiskType;
 use crate::legacy_crdt::{Attachment, AttachmentType};
 use crate::peer_presence::PresenceCache;
@@ -72,7 +72,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use yrs::{Map, ReadTxn, Transact};
 
 fn attachments_from_strings(raw: Option<Vec<String>>) -> Option<Vec<Attachment>> {
@@ -162,17 +162,6 @@ impl CommunitasApp {
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
             presence_cache: Arc::new(RwLock::new(PresenceCache::new())),
         })
-    }
-
-    /// Persist contacts (stub - contact storage is being migrated to x0x)
-    #[allow(dead_code)]
-    async fn persist_contacts(
-        &self,
-        _command_type: &str,
-        _storage_dir: &Path,
-    ) -> Result<(), CommandError> {
-        // TODO: persist contacts via x0x contact storage
-        Ok(())
     }
 
     /// Search messages by text content.
@@ -3384,40 +3373,6 @@ impl CommunitasApp {
         } else {
             info!("Broadcast event: {:?}", std::mem::discriminant(&event));
         }
-    }
-
-    /// Publish member update to the network (stub - migrating to x0x)
-    #[allow(dead_code)]
-    async fn publish_member_update(
-        _entity_type: EntityType,
-        entity_id: &str,
-        member_id: &str,
-        role: Option<&str>,
-        updated_by: &str,
-        action: MemberUpdateAction,
-    ) {
-        // TODO: publish member update via x0x daemon
-        debug!(
-            entity_id,
-            member_id,
-            role = ?role,
-            action = ?action,
-            updated_by = %updated_by,
-            "Member update stub (x0x migration pending)"
-        );
-    }
-
-    /// Publish member snapshot to the network (stub - migrating to x0x)
-    #[allow(dead_code)]
-    async fn publish_member_snapshot(
-        _entity_service: Arc<crate::EntityService>,
-        _entity_type: EntityType,
-        entity_id: &str,
-        _responder_id: &str,
-        _target_member: Option<&str>,
-    ) {
-        // TODO: publish member snapshot via x0x daemon
-        debug!(entity_id, "Member snapshot stub (x0x migration pending)");
     }
 }
 

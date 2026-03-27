@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::sync::watch;
 use tracing::instrument;
 
-use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use crate::auth::AuthController;
 use crate::directory::DirectoryService;
 
 /// Errors returned by the presence service.
@@ -39,7 +39,6 @@ pub struct PresenceSnapshot {
 
 /// Service for tracking contact presence status.
 pub struct PresenceService {
-    auth: Arc<AuthController>,
     directory: Arc<DirectoryService>,
     tx: watch::Sender<PresenceSnapshot>,
     rx: watch::Receiver<PresenceSnapshot>,
@@ -47,14 +46,9 @@ pub struct PresenceService {
 
 impl PresenceService {
     /// Create a new presence service linked to auth and directory services.
-    pub fn new(auth: Arc<AuthController>, directory: Arc<DirectoryService>) -> Self {
+    pub fn new(_auth: Arc<AuthController>, directory: Arc<DirectoryService>) -> Self {
         let (tx, rx) = watch::channel(PresenceSnapshot::default());
-        Self {
-            auth,
-            directory,
-            tx,
-            rx,
-        }
+        Self { directory, tx, rx }
     }
 
     /// Subscribe to presence state updates.
@@ -155,15 +149,6 @@ impl PresenceService {
     #[instrument(skip(self), name = "ui.presence.clear")]
     pub fn clear(&self) {
         let _ = self.tx.send(PresenceSnapshot::default());
-    }
-
-    /// Check if currently authenticated.
-    #[allow(dead_code)]
-    fn is_authenticated(&self) -> bool {
-        matches!(
-            &*self.auth.subscribe().borrow(),
-            AuthStateSnapshot::Authenticated { .. }
-        )
     }
 
     /// Update call status for a contact.

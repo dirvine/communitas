@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Communitas is a local-first, PQC-ready collaboration platform that merges WhatsApp, Dropbox, Zoom, and Slack into one decentralized application. It uses connection words (four-word networking) to share peer connection details, provides per-entity virtual disks (org, group, channel, project, individual), and enables DNS-free website publishing via identity-bound website roots.
 
-**Platform Focus**: Cross-platform Dioxus + Tauri application (macOS, Windows, Linux; experimental Android/iOS runners).
+**Platform Focus**: Two applications — a cross-platform Dioxus + Tauri app (macOS, Windows, Linux; experimental Android/iOS) and a native macOS Swift app (`communitas-apple/`). Both connect to a local x0xd daemon for all networking.
 
 ## Core Architecture
 
@@ -15,6 +15,13 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Framework**: Dioxus + Tauri 2 (all-Rust)
 - **State Management**: Signals/hooks backed by `communitas-ui-service`
 - **Platforms**: macOS, Windows, Linux (GA) with experimental Android/iOS builds via Tauri runners
+- **Daemon**: Requires x0xd; onboarding gate auto-installs it on first run
+
+### Swift Application (macOS)
+- **Location**: `communitas-apple/`
+- **Framework**: SwiftUI, Swift Package Manager, macOS 14+
+- **Targets**: `CommuniTas` (executable) + `X0xClient` (library)
+- **Daemon**: Discovers x0xd config from `~/Library/Application Support/x0x/api.port` and `api-token`
 
 ### Rust Core Library
 - **Location**: `communitas-core/`
@@ -27,7 +34,14 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Connection Words**: Human-readable encoding for sharing IP:port (e.g., "ocean-forest-moon-star")
 - **Virtual Disks**: Private/Public/Shared per entity with different encryption policies
 - **Website Publishing**: DNS-free web via identity.website_root binding
-- **Messaging**: End-to-end encrypted group messaging with editing, deletion, and pinning support
+- **Messaging**: End-to-end encrypted group messaging with editing, deletion, pinning, threading, and inline quotes/replies
+- **Emoji Reactions**: Per-message reactions with quick-reaction bar and full categorized emoji picker (with search)
+- **Markdown Rendering**: In-message markdown with syntax highlighting
+- **@Mentions**: Autocomplete picker with inline user tagging
+- **Typing Indicators**: Real-time per-user typing status in channels
+- **Presence**: Online/away/offline status badges per peer
+- **Message Search**: In-channel search with debounced input and result highlighting
+- **Onboarding Gate**: First-run flow that auto-installs and starts x0xd if not present
 - **Groups**: Threshold-ready group identities with ML-DSA signatures and member management (add/remove/roles)
 - **Kanban System**: CRDT-based collaborative project management (`communitas-kanban/`)
 - **Entity Tabs**: Board, Chat, Call, Canvas, Drive, Documents, and Details views per entity type
@@ -36,7 +50,6 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Signed Presence Beacons**: ML-DSA signed presence broadcasts with per-peer rate limiting
 - **SWIM Failure Detection**: Complete K-peer probing, indirect probes, suspect-to-dead transitions
 - **Anti-Entropy Reconciliation**: Set-difference based partition recovery
-- **Prometheus Metrics**: `/metrics` endpoint on headless nodes with peer, membership, CRDT, and uptime gauges
 - **UI Components**: VirtualList, SearchBar, FilterChips, Pagination, ConfirmDialog, ErrorBanner, loading skeletons, empty states
 
 ## Development Commands
@@ -73,23 +86,14 @@ cargo nextest run -p communitas-core
 cargo nextest run -p communitas-kanban
 ```
 
-### MCP Server (AI Agent Interface)
+### Swift App (Native macOS)
 ```bash
-# Start MCP server with stdio transport (default)
-cargo run -p communitas-mcp -- --demo
+# Build from command line
+swift build --package-path communitas-apple
 
-# Start MCP server with HTTPS transport (ML-DSA-65 raw public keys)
-cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
-
-# MCP provides Model Context Protocol endpoints for AI agents
-# See docs/api/mcp-api.md for details
+# Open in Xcode
+open communitas-apple/Package.swift
 ```
-
-MCP Apps notes:
-- `initialize` advertises UI support in top-level `extensions`.
-- UI widgets must call `ui/initialize` and use `sessionToken` for `ui/context` and `ui/message`.
-- `resources/list` returns `_meta.ui` (CSP + permissions); pre-auth UI is allowed but must avoid model-visible secrets.
-- Follow the CRDT-aware tool checklist: `docs/architecture/mcp-crdt-tool-checklist.md`.
 
 ## Workspace Crates
 
@@ -97,9 +101,10 @@ MCP Apps notes:
 |-------|---------|
 | `communitas-core` | Core business logic, P2P, cryptography |
 | `communitas-kanban` | CRDT-based Kanban system |
-| `communitas-mcp` | MCP server for AI agents (stdio + HTTPS) |
-| `communitas-headless` | Bootstrap/seed nodes |
-| `communitas-p2p-test` | P2P testing utilities |
+| `communitas-ui-api` | Strongly-typed UI service trait definitions |
+| `communitas-ui-service` | Shared Rust UI service implementations (ADR-019) |
+| `communitas-x0x-client` | x0xd daemon discovery, HTTP client, WebSocket transport |
+| `communitas-bench` | Benchmarks |
 
 ## Architecture Insights
 
@@ -118,10 +123,9 @@ The application uses a centralized `CoreContext` (communitas-core/src/core_conte
 
 ### Shared Rust UI Services
 Commands flow through the shared `UiServices` layer (ADR-019):
-1. Dioxus components or MCP tools call strongly-typed service traits (auth, directory, messaging, etc.).
-2. Services invoke `communitas-core` commands/queries.
+1. Dioxus components call strongly-typed service traits (auth, directory, messaging, etc.) defined in `communitas-ui-api`.
+2. Services invoke `communitas-core` commands/queries via `communitas-ui-service`.
 3. Watch channels broadcast state changes back to the UI.
-4. MCP uses the same services to ensure automation parity.
 
 ### Virtual Disk System
 Per-entity storage with different access policies:
@@ -178,12 +182,8 @@ Cross-platform distribution:
 - Linux: AppImage/deb/rpm bundles
 - Android/iOS: Experimental Tauri runners (manual provisioning)
 
-### Headless Node
-Bootstrap and seed nodes for network support:
-- Binary: `communitas-headless`
-- Config: TOML with listen addresses, storage paths
-- Metrics: Prometheus-compatible `/metrics` endpoint with peer, membership, CRDT, and uptime gauges
-- Health: `/health` endpoint for monitoring
+### Swift Application
+macOS-only distribution via Xcode or `swift build`. Requires x0xd to be installed and running. macOS 14+ minimum deployment target.
 
 ## Troubleshooting
 
@@ -231,9 +231,6 @@ See [docs/development/windows-build.md](docs/development/windows-build.md) for d
 
 ### Debug Modes
 ```bash
-# Rust debugging
-RUST_LOG=debug cargo run -p communitas-headless
-
 # Test debugging
 RUST_LOG=debug cargo nextest run --no-capture
 
@@ -245,7 +242,6 @@ RUST_LOG=debug dx serve --platform desktop --hotpatch
 
 For detailed API documentation, see:
 - `docs/api/core-api.md` - Rust library API (communitas-core)
-- `docs/api/mcp-api.md` - MCP server API for AI agents
 - `docs/architecture/README.md` - System architecture overview
 - `docs/architecture/crdt-system.md` - CRDT synchronization (Yrs)
 - `docs/architecture/gossip-protocol.md` - Saorsa Gossip networking
@@ -271,6 +267,7 @@ For detailed API documentation, see:
 - **Four-words are ONLY for connection bootstrap** - they're a network address (WHERE), not identity (WHO)
 - **Identity is the pubkey_hex** - ML-DSA-65 public key that uniquely identifies a user
 - **Display name is shown to others** - user-chosen human-friendly label
-- Test network and MCP integration available for development
+- Both apps (Dioxus and Swift) read x0xd config from `~/Library/Application Support/x0x/api.port` (address) and `api-token` (Bearer token)
+- `communitas-x0x-client` (Rust) and `X0xClient` (Swift) are the two daemon client libraries
 
 This architecture supports rapid development while maintaining production-quality standards for a secure, decentralized collaboration platform.

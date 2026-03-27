@@ -112,27 +112,3 @@ public struct JoinGroupResponse: Codable, Sendable {
     }
 }
 
-/// An MLS group the agent is part of.
-public struct MlsGroup: Codable, Sendable, Identifiable {
-    public var id: String { groupId }
-    public let groupId: String
-    public let name: String?
-
-    enum CodingKeys: String, CodingKey {
-        case groupId = "group_id"
-        case name
-    }
-}
-
-/// A named group with additional metadata.
-public struct NamedGroup: Codable, Sendable, Identifiable {
-    public var id: String { groupId }
-    public let groupId: String
-    public let name: String
-    public let description: String?
-
-    enum CodingKeys: String, CodingKey {
-        case groupId = "group_id"
-        case name, description
-    }
-}

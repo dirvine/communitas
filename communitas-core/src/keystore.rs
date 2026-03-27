@@ -70,22 +70,6 @@ impl Keystore {
             .map_err(|e| e.to_string())
     }
 
-    #[allow(dead_code)]
-    pub fn load_words(&self, id_hex: &str) -> Result<[String; 4], String> {
-        let joined = load_password_with_legacy(&format!("words:{}", id_hex))
-            .map_err(|e| format!("load words failed: {}", e))?;
-        let parts: Vec<String> = joined.split('-').map(|s| s.to_string()).collect();
-        if parts.len() != 4 {
-            return Err("stored words invalid".into());
-        }
-        Ok([
-            parts[0].clone(),
-            parts[1].clone(),
-            parts[2].clone(),
-            parts[3].clone(),
-        ])
-    }
-
     pub fn save_mldsa_keys(&self, id_hex: &str, pk: &[u8], sk: &[u8]) -> Result<(), String> {
         let pk_b64 = base64::engine::general_purpose::STANDARD.encode(pk);
         let sk_b64 = base64::engine::general_purpose::STANDARD.encode(sk);

@@ -217,8 +217,6 @@ final class ChannelManager: ObservableObject {
         }
     }
 
-    // MARK: - Channel Subscription
-
     // MARK: - Pinned Messages
 
     private func pinnedMessagesKey(channel: String) -> String {
@@ -635,13 +633,11 @@ final class ChannelManager: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let cutoff = Date().addingTimeInterval(-3.0)
-                let before = self.typingUsers.count
                 self.typingUsers = self.typingUsers.filter { $0.value.lastSeen > cutoff }
                 if self.typingUsers.isEmpty {
                     self.typingCleanupTimer?.invalidate()
                     self.typingCleanupTimer = nil
                 }
-                _ = before // suppress warning
             }
         }
     }

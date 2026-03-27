@@ -170,18 +170,6 @@ public struct ChannelMeta: Codable, Identifiable, Sendable, Equatable {
 /// This typealias makes intent clear at call sites.
 public typealias ChannelIndex = [ChannelMeta]
 
-/// Legacy pre-freeze schema kept for one-time compatibility migration.
-/// The old format stored `{"channels": ["general"], "categories": {"General": ["general"]}}`.
-public struct LegacyChannelIndex: Codable, Sendable {
-    public var channels: [String]
-    public var categories: [String: [String]]
-
-    public init(channels: [String] = [], categories: [String: [String]] = [:]) {
-        self.channels = channels
-        self.categories = categories
-    }
-}
-
 /// An ephemeral typing event published on the channel topic to show who is typing.
 /// Payload format matches the typing indicator spec.
 public struct TypingEvent: Codable, Sendable {

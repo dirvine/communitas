@@ -213,6 +213,9 @@ pub use confirm_dialog::ConfirmDialog;
 #[allow(unused_imports)]
 pub use daemon_status::DaemonStatusBar;
 
+pub mod onboarding_gate;
+pub use onboarding_gate::OnboardingGate;
+
 // Re-export channel and thread components for space-based messaging
 pub use channel_chat::ChannelChatView;
 pub use channel_sidebar::ChannelSidebar;

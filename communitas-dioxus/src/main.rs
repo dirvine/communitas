@@ -240,7 +240,9 @@ fn App() -> Element {
         style { {GLOBAL_STYLES} }
         components::Announcer {}
         components::toast_system::ToastContainer {}
-        Router::<Route> {}
+        components::OnboardingGate {
+            Router::<Route> {}
+        }
     }
 }
 

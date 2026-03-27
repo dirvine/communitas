@@ -6,17 +6,20 @@ struct CommuniTasApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(appState)
-                .task {
-                    NotificationService.shared.requestPermission()
-                    await appState.refresh()
-                    appState.startPresencePolling()
-                }
-                .onAppear {
-                    // Request notification permission on launch
-                    NotificationService.shared.requestPermission()
-                }
+            OnboardingView {
+                ContentView()
+                    .environmentObject(appState)
+                    .task {
+                        NotificationService.shared.requestPermission()
+                        await appState.refresh()
+                        appState.startPresencePolling()
+                    }
+                    .onAppear {
+                        // Request notification permission on launch
+                        NotificationService.shared.requestPermission()
+                    }
+            }
+            .environmentObject(appState)
         }
         .windowStyle(.titleBar)
         .defaultSize(width: 1100, height: 750)

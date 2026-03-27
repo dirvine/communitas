@@ -32,9 +32,18 @@ final class NotificationService {
         }
     }
 
+    // MARK: - Bundle Check
+
+    /// UNUserNotificationCenter requires a proper app bundle.
+    /// When running as a bare SPM executable, skip notification APIs.
+    private var hasBundleIdentifier: Bool {
+        Bundle.main.bundleIdentifier != nil
+    }
+
     // MARK: - Notification Permissions
 
     func requestPermission() {
+        guard hasBundleIdentifier else { return }
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .badge, .sound]
         ) { _, _ in }
@@ -43,6 +52,7 @@ final class NotificationService {
     // MARK: - Send Notifications
 
     func sendNotification(title: String, body: String, categoryIdentifier: String? = nil) {
+        guard hasBundleIdentifier else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

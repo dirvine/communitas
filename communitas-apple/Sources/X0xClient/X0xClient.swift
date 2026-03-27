@@ -107,6 +107,34 @@ public final class X0xClient: Sendable {
         let _: Empty = try await post("/groups/\(groupId)/leave", body: Empty())
     }
 
+    // MARK: - Network
+
+    /// Get network status information.
+    public func networkStatus() async throws -> NetworkStatus {
+        try await get("/network/status")
+    }
+
+    /// List connected peers.
+    public func peers() async throws -> [PeerInfo] {
+        try await get("/network/peers")
+    }
+
+    /// List discovered agents on the network.
+    public func discoveredAgents() async throws -> [DiscoveredAgent] {
+        try await get("/agents/discovered")
+    }
+
+    /// List machines associated with an agent.
+    public func listMachines(agentId: String) async throws -> [MachineRecord] {
+        try await get("/agents/\(agentId)/machines")
+    }
+
+    /// Set the display name for the current agent in a group.
+    public func setGroupDisplayName(groupId: String, displayName: String) async throws {
+        let body = SetGroupDisplayNameRequest(displayName: displayName)
+        let _: Empty = try await post("/groups/\(groupId)/display-name", body: body)
+    }
+
     // MARK: - File Transfer
 
     /// Initiate a file send.
@@ -119,6 +147,58 @@ public final class X0xClient: Sendable {
     /// List active file transfers.
     public func listTransfers() async throws -> [FileTransfer] {
         try await get("/files/transfers")
+    }
+
+    // MARK: - Task Lists
+
+    /// Create a new task list.
+    public func createTaskList(name: String, topic: String) async throws -> String {
+        let body = CreateTaskListRequest(name: name, topic: topic)
+        let resp: CreateTaskListResponse = try await post("/tasks/lists", body: body)
+        return resp.listId
+    }
+
+    /// List tasks in a task list.
+    public func listTasks(listId: String) async throws -> [TaskItem] {
+        let resp: TaskList = try await get("/tasks/lists/\(listId)/tasks")
+        return resp.tasks
+    }
+
+    /// Add a task to a task list.
+    public func addTask(listId: String, title: String) async throws -> String {
+        let body = AddTaskRequest(title: title)
+        let resp: AddTaskResponse = try await post("/tasks/lists/\(listId)/tasks", body: body)
+        return resp.taskId
+    }
+
+    /// Claim a task.
+    public func claimTask(listId: String, taskId: String) async throws {
+        let _: Empty = try await post("/tasks/lists/\(listId)/tasks/\(taskId)/claim", body: Empty())
+    }
+
+    /// Complete a task.
+    public func completeTask(listId: String, taskId: String) async throws {
+        let _: Empty = try await post("/tasks/lists/\(listId)/tasks/\(taskId)/complete", body: Empty())
+    }
+
+    // MARK: - File Transfer Actions
+
+    /// Accept an incoming file transfer.
+    public func acceptFile(transferId: String) async throws {
+        let _: Empty = try await post("/files/transfers/\(transferId)/accept", body: Empty())
+    }
+
+    /// Reject an incoming file transfer.
+    public func rejectFile(transferId: String) async throws {
+        let _: Empty = try await post("/files/transfers/\(transferId)/reject", body: Empty())
+    }
+
+    // MARK: - Agent Connection
+
+    /// Connect to another agent by ID.
+    public func connectAgent(agentId: String) async throws {
+        let body = ["agent_id": agentId]
+        let _: Empty = try await post("/agents/connect", body: body)
     }
 
     // MARK: - KV Store

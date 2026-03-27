@@ -1,6 +1,45 @@
 import Foundation
 import X0xClient
 
+/// Represents the item shown in the inspector/detail panel.
+enum InspectorItem: Equatable {
+    case agent(Contact)
+    case space(GroupSummary)
+
+    static func == (lhs: InspectorItem, rhs: InspectorItem) -> Bool {
+        switch (lhs, rhs) {
+        case (.agent(let a), .agent(let b)): return a.agentId == b.agentId
+        case (.space(let a), .space(let b)): return a.groupId == b.groupId
+        default: return false
+        }
+    }
+}
+
+/// The active tab within a Space view.
+enum SpaceTab: String, CaseIterable, Identifiable, Hashable {
+    case chat = "Chat"
+    case board = "Board"
+    case files = "Files"
+    case swarm = "Swarm"
+    case feed = "Feed"
+    case wiki = "Wiki"
+    case web = "Web"
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .chat: return "message"
+        case .board: return "rectangle.3.group"
+        case .files: return "doc.on.doc"
+        case .swarm: return "ant"
+        case .feed: return "text.bubble"
+        case .wiki: return "book"
+        case .web: return "globe"
+        }
+    }
+}
+
 /// Central application state shared across all views via `@EnvironmentObject`.
 @MainActor
 final class AppState: ObservableObject {
@@ -25,6 +64,24 @@ final class AppState: ObservableObject {
 
     /// The display name used for sending messages.
     @Published var displayName: String = "Me"
+
+    /// The active space tab.
+    @Published var selectedSpaceTab: SpaceTab = .chat
+
+    /// The currently selected contact for direct messaging.
+    @Published var selectedDMContact: Contact?
+
+    /// The item currently shown in the inspector panel.
+    @Published var selectedInspectorItem: InspectorItem?
+
+    /// Whether to show the Create Space sheet.
+    @Published var showCreateSpace = false
+
+    /// Whether the inspector panel is visible.
+    @Published var showInspector = false
+
+    /// Unread message counts per group ID.
+    @Published var unreadCounts: [String: Int] = [:]
 
     /// Refresh all state from the daemon.
     func refresh() async {
@@ -95,5 +152,10 @@ final class AppState: ObservableObject {
             manager.disconnect()
         }
         channelManagers.removeAll()
+    }
+
+    /// Helper to get the group prefix (first 16 chars of group ID).
+    func groupPrefix(for groupId: String) -> String {
+        String(groupId.prefix(16))
     }
 }

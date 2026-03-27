@@ -133,6 +133,42 @@ public struct TaskItem: Codable, Sendable, Identifiable {
     }
 }
 
+// MARK: - Task List Requests
+
+public struct CreateTaskListRequest: Codable, Sendable {
+    public let name: String
+    public let topic: String
+
+    public init(name: String, topic: String) {
+        self.name = name
+        self.topic = topic
+    }
+}
+
+public struct CreateTaskListResponse: Codable, Sendable {
+    public let listId: String
+
+    enum CodingKeys: String, CodingKey {
+        case listId = "list_id"
+    }
+}
+
+public struct AddTaskRequest: Codable, Sendable {
+    public let title: String
+
+    public init(title: String) {
+        self.title = title
+    }
+}
+
+public struct AddTaskResponse: Codable, Sendable {
+    public let taskId: String
+
+    enum CodingKeys: String, CodingKey {
+        case taskId = "task_id"
+    }
+}
+
 // MARK: - KV Store
 
 public struct KvStore: Codable, Sendable {
@@ -142,6 +178,57 @@ public struct KvStore: Codable, Sendable {
 
 public struct StoreValue: Codable, Sendable {
     public let value: String
+}
+
+// MARK: - Network
+
+public struct NetworkStatus: Codable, Sendable {
+    public let connected: Bool
+    public let peerCount: UInt64?
+    public let listenAddresses: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case connected
+        case peerCount = "peer_count"
+        case listenAddresses = "listen_addresses"
+    }
+}
+
+public struct PeerInfo: Codable, Sendable, Identifiable {
+    public var id: String { peerId }
+    public let peerId: String
+    public let address: String?
+    public let latency: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case peerId = "peer_id"
+        case address, latency
+    }
+}
+
+public struct DiscoveredAgent: Codable, Sendable, Identifiable {
+    public var id: String { agentId }
+    public let agentId: String
+    public let displayName: String?
+    public let lastSeen: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case displayName = "display_name"
+        case lastSeen = "last_seen"
+    }
+}
+
+public struct SetGroupDisplayNameRequest: Codable, Sendable {
+    public let displayName: String
+
+    enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
+    }
+
+    public init(displayName: String) {
+        self.displayName = displayName
+    }
 }
 
 // MARK: - Daemon State

@@ -75,8 +75,8 @@ public final class DaemonManager: Sendable {
         }
     }
 
-    /// Ensure the daemon is running. If not running, throws an error
-    /// indicating the daemon needs to be started manually.
+    /// Ensure the daemon is running. If not running, starts it once.
+    /// Does not configure autostart -- the user must enable that from Settings.
     public func ensureRunning() async throws {
         let currentState = await state()
         switch currentState {

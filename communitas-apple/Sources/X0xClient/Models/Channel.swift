@@ -48,45 +48,43 @@ public struct ChannelChatMessage: Codable, Identifiable, Sendable, Equatable {
     }
 }
 
-/// Metadata about a channel stored in the KV store.
+/// Canonical channel metadata stored in `channels_index`.
+/// Matches the Dioxus `ChannelMeta` schema exactly.
 public struct ChannelMeta: Codable, Identifiable, Sendable, Equatable {
     public var id: String { name }
     public var name: String
     public var description: String
     public var creator: String
-    public var createdAt: Int64
+    public var createdAt: UInt64
     public var topic: String
-    public var isPrivate: Bool
-    public var isArchived: Bool
 
     enum CodingKeys: String, CodingKey {
         case name, description, creator, topic
         case createdAt = "created_at"
-        case isPrivate = "is_private"
-        case isArchived = "is_archived"
     }
 
     public init(
         name: String,
         description: String,
         creator: String,
-        createdAt: Int64,
-        topic: String,
-        isPrivate: Bool = false,
-        isArchived: Bool = false
+        createdAt: UInt64,
+        topic: String
     ) {
         self.name = name
         self.description = description
         self.creator = creator
         self.createdAt = createdAt
         self.topic = topic
-        self.isPrivate = isPrivate
-        self.isArchived = isArchived
     }
 }
 
-/// Index of channels within a group, stored in KV store.
-public struct ChannelIndex: Codable, Sendable {
+/// The `channels_index` key stores a JSON array of `ChannelMeta` (matching Dioxus).
+/// This typealias makes intent clear at call sites.
+public typealias ChannelIndex = [ChannelMeta]
+
+/// Legacy pre-freeze schema kept for one-time compatibility migration.
+/// The old format stored `{"channels": ["general"], "categories": {"General": ["general"]}}`.
+public struct LegacyChannelIndex: Codable, Sendable {
     public var channels: [String]
     public var categories: [String: [String]]
 

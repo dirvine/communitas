@@ -23,6 +23,11 @@ struct SettingsView: View {
             Section("Profile") {
                 TextField("Display Name", text: $displayName)
                     .help("Your name as shown to other peers.")
+                    .onChange(of: displayName) {
+                        appState.displayName = displayName.isEmpty
+                            ? String((appState.agentIdentity?.agentId ?? "unknown").prefix(8))
+                            : displayName
+                    }
             }
 
             Section("Identity") {

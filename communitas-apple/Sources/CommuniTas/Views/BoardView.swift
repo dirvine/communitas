@@ -200,14 +200,31 @@ struct BoardView: View {
 
     // MARK: - Actions
 
+    private var boardStoreName: String {
+        let prefix = appState.groupPrefix(for: groupId)
+        return "x0x-board-\(prefix)"
+    }
+
+    private func ensureBoardStore() async {
+        do {
+            let stores = try await appState.client.listStores()
+            if !stores.contains(where: { $0.storeId == boardStoreName || $0.name == boardStoreName }) {
+                let prefix = appState.groupPrefix(for: groupId)
+                _ = try await appState.client.createStore(name: boardStoreName, topic: "x0x.group.\(prefix).board")
+            }
+        } catch { /* store may already exist */ }
+    }
+
     private func loadOrCreateBoard() async {
         isLoading = true
         errorMessage = nil
         let prefix = appState.groupPrefix(for: groupId)
         let kvKey = "board.\(prefix).listId"
 
+        await ensureBoardStore()
+
         do {
-            let storedId = try await appState.client.kvGet(key: kvKey)
+            let storedId = try await appState.client.storeGet(storeId: boardStoreName, key: kvKey)
             listId = storedId
             await refreshTasks()
         } catch {
@@ -215,7 +232,7 @@ struct BoardView: View {
             do {
                 let topic = "x0x.group.\(prefix).board/tasks"
                 let newId = try await appState.client.createTaskList(name: "Board", topic: topic)
-                try await appState.client.kvSet(key: kvKey, value: newId)
+                try await appState.client.storePut(storeId: boardStoreName, key: kvKey, value: newId)
                 listId = newId
                 tasks = []
             } catch {

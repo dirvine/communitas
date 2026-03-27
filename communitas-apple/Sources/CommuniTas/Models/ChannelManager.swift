@@ -21,7 +21,7 @@ final class ChannelManager: ObservableObject {
     private var webSocket: X0xWebSocket?
     private var listeningTask: Task<Void, Never>?
 
-    init(client: X0xClient, groupId: String, groupName: String, agentId: String, displayName: String = "Me") {
+    init(client: X0xClient, groupId: String, groupName: String, agentId: String, displayName: String) {
         self.client = client
         self.groupId = groupId
         self.groupName = groupName
@@ -59,27 +59,37 @@ final class ChannelManager: ObservableObject {
         "channels_index"
     }
 
-    /// Per-channel metadata key inside the channel store.
-    private func channelMetaKey(name: String) -> String {
-        "channel:\(name)"
+    // MARK: - Store Management
+
+    /// Ensure the channel store exists, creating it if necessary.
+    private func ensureStore() async {
+        do {
+            let stores = try await client.listStores()
+            if !stores.contains(where: { $0.storeId == channelStoreId || $0.name == channelStoreId }) {
+                _ = try await client.createStore(name: channelStoreId, topic: "x0x.group.\(groupPrefix).meta")
+            }
+        } catch { /* store may already exist */ }
     }
 
     // MARK: - Channel Management
 
-    /// Load the channel index and metadata from KV store.
+    /// Load the channel index from the channel store.
+    /// The index is a JSON array of `ChannelMeta` (matching the Dioxus schema).
     func loadChannels() async {
         isLoading = true
         defer { isLoading = false }
 
+        await ensureStore()
+
         do {
-            let indexJson = try await client.kvGet(key: channelIndexKey)
+            let indexJson = try await client.storeGet(storeId: channelStoreId, key: channelIndexKey)
             if let data = indexJson.data(using: .utf8) {
-                let index = try JSONDecoder().decode(ChannelIndex.self, from: data)
-                var loaded: [ChannelMeta] = []
-                for channelName in index.channels {
-                    if let meta = await loadChannelMeta(name: channelName) {
-                        loaded.append(meta)
-                    }
+                var loaded = try JSONDecoder().decode(ChannelIndex.self, from: data)
+                // Ensure "general" exists
+                if !loaded.contains(where: { $0.name == "general" }) {
+                    let general = makeGeneralChannel()
+                    loaded.insert(general, at: 0)
+                    try? await saveChannelIndex(loaded)
                 }
                 channels = loaded
             }
@@ -89,60 +99,44 @@ final class ChannelManager: ObservableObject {
         }
     }
 
-    private func loadChannelMeta(name: String) async -> ChannelMeta? {
-        do {
-            let json = try await client.kvGet(key: channelMetaKey(name: name))
-            guard let data = json.data(using: .utf8) else { return nil }
-            return try JSONDecoder().decode(ChannelMeta.self, from: data)
-        } catch {
-            return nil
-        }
+    private func makeGeneralChannel() -> ChannelMeta {
+        ChannelMeta(
+            name: "general",
+            description: "General discussion",
+            creator: agentId,
+            createdAt: UInt64(Date().timeIntervalSince1970 * 1000),
+            topic: channelTopic(name: "general")
+        )
     }
 
     /// Ensure the "general" channel exists for the group.
     private func ensureDefaultChannel() async {
-        let general = ChannelMeta(
-            name: "general",
-            description: "General discussion",
-            creator: agentId,
-            createdAt: Int64(Date().timeIntervalSince1970 * 1000),
-            topic: channelTopic(name: "general")
-        )
+        let general = makeGeneralChannel()
         do {
-            try await saveChannelMeta(general)
-            let index = ChannelIndex(channels: ["general"], categories: ["General": ["general"]])
+            let index: ChannelIndex = [general]
             try await saveChannelIndex(index)
-            channels = [general]
+            channels = index
         } catch {
             errorMessage = "Failed to create default channel: \(error.localizedDescription)"
         }
     }
 
     /// Create a new channel in this group.
-    func createChannel(name: String, description: String, category: String? = nil, isPrivate: Bool = false) async throws {
+    func createChannel(name: String, description: String, category: String? = nil) async throws {
         let sanitized = name.lowercased().replacingOccurrences(of: " ", with: "-")
 
         let meta = ChannelMeta(
             name: sanitized,
             description: description,
             creator: agentId,
-            createdAt: Int64(Date().timeIntervalSince1970 * 1000),
-            topic: channelTopic(name: sanitized),
-            isPrivate: isPrivate
+            createdAt: UInt64(Date().timeIntervalSince1970 * 1000),
+            topic: channelTopic(name: sanitized)
         )
 
-        try await saveChannelMeta(meta)
-
-        // Update index
+        // Update the channel index (array of ChannelMeta)
         var index = await loadChannelIndex()
-        if !index.channels.contains(sanitized) {
-            index.channels.append(sanitized)
-        }
-        let cat = category ?? "General"
-        var catList = index.categories[cat] ?? []
-        if !catList.contains(sanitized) {
-            catList.append(sanitized)
-            index.categories[cat] = catList
+        if !index.contains(where: { $0.name == sanitized }) {
+            index.append(meta)
         }
         try await saveChannelIndex(index)
 
@@ -152,26 +146,56 @@ final class ChannelManager: ObservableObject {
         _ = try await client.subscribe(topic: channelTopic(name: sanitized))
     }
 
-    private func saveChannelMeta(_ meta: ChannelMeta) async throws {
-        let data = try JSONEncoder().encode(meta)
-        guard let json = String(data: data, encoding: .utf8) else { return }
-        try await client.kvSet(key: channelMetaKey(name: meta.name), value: json)
-    }
-
     private func loadChannelIndex() async -> ChannelIndex {
         do {
-            let json = try await client.kvGet(key: channelIndexKey)
-            guard let data = json.data(using: .utf8) else { return ChannelIndex() }
+            let json = try await client.storeGet(storeId: channelStoreId, key: channelIndexKey)
+            guard let data = json.data(using: .utf8) else { return [] }
             return try JSONDecoder().decode(ChannelIndex.self, from: data)
         } catch {
-            return ChannelIndex()
+            return []
         }
     }
 
     private func saveChannelIndex(_ index: ChannelIndex) async throws {
         let data = try JSONEncoder().encode(index)
         guard let json = String(data: data, encoding: .utf8) else { return }
-        try await client.kvSet(key: channelIndexKey, value: json)
+        try await client.storePut(storeId: channelStoreId, key: channelIndexKey, value: json)
+    }
+
+    // MARK: - History Persistence
+
+    private func historyKey(channel: String) -> String {
+        "channel_history_\(groupPrefix)_\(channel)"
+    }
+
+    private func threadHistoryKey(threadRoot: String) -> String {
+        "thread_history_\(groupPrefix)_\(threadRoot)"
+    }
+
+    func loadHistory(channel: String) -> [ChannelChatMessage] {
+        guard let data = UserDefaults.standard.data(forKey: historyKey(channel: channel)),
+              let messages = try? JSONDecoder().decode([ChannelChatMessage].self, from: data) else { return [] }
+        return messages
+    }
+
+    func saveHistory(channel: String, messages: [ChannelChatMessage]) {
+        let trimmed = Array(messages.suffix(200))
+        if let data = try? JSONEncoder().encode(trimmed) {
+            UserDefaults.standard.set(data, forKey: historyKey(channel: channel))
+        }
+    }
+
+    private func loadThreadHistory(threadRoot: String) -> [ChannelChatMessage] {
+        guard let data = UserDefaults.standard.data(forKey: threadHistoryKey(threadRoot: threadRoot)),
+              let msgs = try? JSONDecoder().decode([ChannelChatMessage].self, from: data) else { return [] }
+        return msgs
+    }
+
+    private func saveThreadHistory(threadRoot: String, messages: [ChannelChatMessage]) {
+        let trimmed = Array(messages.suffix(200))
+        if let data = try? JSONEncoder().encode(trimmed) {
+            UserDefaults.standard.set(data, forKey: threadHistoryKey(threadRoot: threadRoot))
+        }
     }
 
     // MARK: - Channel Subscription
@@ -179,7 +203,7 @@ final class ChannelManager: ObservableObject {
     /// Subscribe to the current channel and start listening for messages.
     func subscribeToChannel(name: String) async {
         currentChannel = name
-        messages = []
+        messages = loadHistory(channel: name)
 
         // Cancel previous listener
         listeningTask?.cancel()
@@ -241,6 +265,7 @@ final class ChannelManager: ObservableObject {
             if !messages.contains(where: { $0.id == chatMsg.id }) {
                 messages.append(chatMsg)
                 messages.sort { $0.timestamp < $1.timestamp }
+                saveHistory(channel: currentChannel, messages: messages)
             }
         }
 
@@ -251,6 +276,7 @@ final class ChannelManager: ObservableObject {
                 thread.append(chatMsg)
                 thread.sort { $0.timestamp < $1.timestamp }
                 threadMessages[threadRoot] = thread
+                saveThreadHistory(threadRoot: threadRoot, messages: thread)
             }
 
             // Increment reply count on parent if present
@@ -288,6 +314,7 @@ final class ChannelManager: ObservableObject {
 
         // Optimistically add to local list
         messages.append(msg)
+        saveHistory(channel: currentChannel, messages: messages)
     }
 
     /// Start a thread on a parent message (subscribe to thread topic).
@@ -326,6 +353,7 @@ final class ChannelManager: ObservableObject {
         var thread = threadMessages[threadRoot] ?? []
         thread.append(msg)
         threadMessages[threadRoot] = thread
+        saveThreadHistory(threadRoot: threadRoot, messages: thread)
 
         // Update reply count on parent
         if let idx = messages.firstIndex(where: { $0.id == threadRoot }) {
@@ -335,6 +363,13 @@ final class ChannelManager: ObservableObject {
 
     /// Load thread messages for a parent message.
     func loadThread(parentMessageId: String) async -> [ChannelChatMessage] {
+        // Load persisted thread history if not already in memory
+        if threadMessages[parentMessageId] == nil || threadMessages[parentMessageId]?.isEmpty == true {
+            let persisted = loadThreadHistory(threadRoot: parentMessageId)
+            if !persisted.isEmpty {
+                threadMessages[parentMessageId] = persisted
+            }
+        }
         await startThread(parentMessageId: parentMessageId)
         return threadMessages[parentMessageId] ?? []
     }

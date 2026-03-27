@@ -212,9 +212,19 @@ struct WikiView: View {
 
     // MARK: - Actions
 
-    private func loadIndex() async {
+    private func ensureStore() async {
         do {
-            let json = try await appState.client.kvGet(key: indexKey())
+            let stores = try await appState.client.listStores()
+            if !stores.contains(where: { $0.storeId == storeName || $0.name == storeName }) {
+                _ = try await appState.client.createStore(name: storeName, topic: "x0x.wiki.\(prefix)")
+            }
+        } catch { /* store may already exist */ }
+    }
+
+    private func loadIndex() async {
+        await ensureStore()
+        do {
+            let json = try await appState.client.storeGet(storeId: storeName, key: indexKey())
             if let data = json.data(using: .utf8),
                let slugs = try? JSONDecoder().decode([String].self, from: data) {
                 pageSlugs = slugs
@@ -226,7 +236,7 @@ struct WikiView: View {
 
     private func loadPage(slug: String) async {
         do {
-            pageContent = try await appState.client.kvGet(key: pageKey(slug))
+            pageContent = try await appState.client.storeGet(storeId: storeName, key: pageKey(slug))
         } catch {
             pageContent = ""
         }
@@ -234,7 +244,7 @@ struct WikiView: View {
 
     private func savePage(slug: String) async {
         do {
-            try await appState.client.kvSet(key: pageKey(slug), value: editBuffer)
+            try await appState.client.storePut(storeId: storeName, key: pageKey(slug), value: editBuffer)
             pageContent = editBuffer
             isEditing = false
         } catch {
@@ -251,7 +261,7 @@ struct WikiView: View {
 
         do {
             // Save empty page
-            try await appState.client.kvSet(key: pageKey(slug), value: "")
+            try await appState.client.storePut(storeId: storeName, key: pageKey(slug), value: "")
 
             // Update index
             var slugs = pageSlugs
@@ -260,7 +270,7 @@ struct WikiView: View {
             }
             let indexData = try JSONEncoder().encode(slugs)
             if let indexJson = String(data: indexData, encoding: .utf8) {
-                try await appState.client.kvSet(key: indexKey(), value: indexJson)
+                try await appState.client.storePut(storeId: storeName, key: indexKey(), value: indexJson)
             }
 
             pageSlugs = slugs

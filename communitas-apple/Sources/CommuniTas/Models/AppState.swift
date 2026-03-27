@@ -51,7 +51,7 @@ final class AppState: ObservableObject {
     @Published var contacts: [Contact] = []
     @Published var groups: [GroupSummary] = []
     @Published var errorMessage: String?
-    @Published var selectedNavigation: NavigationItem? = .dashboard
+    @Published var selectedNavigation: NavigationItem? = .messaging
 
     /// Active channel managers keyed by group ID.
     @Published var channelManagers: [String: ChannelManager] = [:]
@@ -63,7 +63,8 @@ final class AppState: ObservableObject {
     @Published var selectedChannel: String?
 
     /// The display name used for sending messages.
-    @Published var displayName: String = "Me"
+    /// Defaults to the first 8 chars of the agent ID (never "Me").
+    @Published var displayName: String = ""
 
     /// The active space tab.
     @Published var selectedSpaceTab: SpaceTab = .chat
@@ -93,6 +94,14 @@ final class AppState: ObservableObject {
             agentIdentity = try await client.agent()
         } catch {
             agentIdentity = nil
+        }
+
+        // Load display name from UserDefaults; fall back to first 8 chars of agent ID
+        let stored = UserDefaults.standard.string(forKey: "displayName") ?? ""
+        if !stored.isEmpty {
+            displayName = stored
+        } else if let agentId = agentIdentity?.agentId {
+            displayName = String(agentId.prefix(8))
         }
 
         do {

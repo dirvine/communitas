@@ -115,7 +115,7 @@ struct ChannelSidebarView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: channel.isPrivate ? "lock" : "number")
+                Image(systemName: "number")
                     .font(.caption)
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .frame(width: 16)
@@ -189,7 +189,6 @@ struct CreateChannelSheet: View {
     @State private var name = ""
     @State private var description = ""
     @State private var category = "General"
-    @State private var isPrivate = false
     @State private var isCreating = false
     @State private var error: String?
 
@@ -206,7 +205,6 @@ struct CreateChannelSheet: View {
                     .help("Lowercase, hyphens for spaces")
                 TextField("Description", text: $description)
                 TextField("Category", text: $category)
-                Toggle("Private Channel", isOn: $isPrivate)
             }
             .formStyle(.grouped)
 
@@ -241,8 +239,7 @@ struct CreateChannelSheet: View {
                 try await manager.createChannel(
                     name: name.trimmingCharacters(in: .whitespaces),
                     description: description.trimmingCharacters(in: .whitespaces),
-                    category: category.trimmingCharacters(in: .whitespaces),
-                    isPrivate: isPrivate
+                    category: category.trimmingCharacters(in: .whitespaces)
                 )
                 dismiss()
             } catch {

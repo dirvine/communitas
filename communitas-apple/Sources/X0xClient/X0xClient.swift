@@ -239,55 +239,33 @@ public final class X0xClient: Sendable {
     }
 
     /// Get a value from a store. `GET /stores/:id/:key`
+    /// The x0x store API returns base64-encoded values; this method decodes them.
     public func storeGet(storeId: String, key: String) async throws -> String {
         let resp: StoreGetResponse = try await get("/stores/\(storeId)/\(key)")
-        return resp.value
+        guard let data = Data(base64Encoded: resp.value) else {
+            throw X0xError.decodingError(underlying: DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: [], debugDescription: "Invalid base64 in store value")
+            ))
+        }
+        guard let decoded = String(data: data, encoding: .utf8) else {
+            throw X0xError.decodingError(underlying: DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: [], debugDescription: "Store value is not valid UTF-8")
+            ))
+        }
+        return decoded
     }
 
     /// Put a value in a store. `PUT /stores/:id/:key`
+    /// The x0x store API expects base64-encoded values; this method encodes them.
     public func storePut(storeId: String, key: String, value: String, contentType: String? = nil) async throws {
-        let body = StorePutRequest(value: value, contentType: contentType)
+        let base64Value = Data(value.utf8).base64EncodedString()
+        let body = StorePutRequest(value: base64Value, contentType: contentType ?? "application/json")
         let _: Empty = try await put("/stores/\(storeId)/\(key)", body: body)
     }
 
     /// Delete a key from a store. `DELETE /stores/:id/:key`
     public func storeDelete(storeId: String, key: String) async throws {
         let _: Empty = try await delete("/stores/\(storeId)/\(key)")
-    }
-
-    // MARK: - Legacy KV Convenience (backed by stores)
-
-    /// Convenience: get a value from the default store.
-    /// Callers should migrate to `storeGet(storeId:key:)`.
-    public func kvGet(key: String) async throws -> String {
-        let storeId = try await defaultStoreId()
-        return try await storeGet(storeId: storeId, key: key)
-    }
-
-    /// Convenience: set a value in the default store.
-    /// Callers should migrate to `storePut(storeId:key:value:)`.
-    public func kvSet(key: String, value: String) async throws {
-        let storeId = try await defaultStoreId()
-        try await storePut(storeId: storeId, key: key, value: value)
-    }
-
-    /// The default store ID, lazily created.
-    private var _defaultStoreId: String?
-
-    private func defaultStoreId() async throws -> String {
-        if let existing = _defaultStoreId {
-            return existing
-        }
-        // Try to find an existing "default" store
-        let stores = try await listStores()
-        if let defaultStore = stores.first(where: { $0.name == "default" }) {
-            // Safe to cache via nonisolated(unsafe) since this is an internal detail
-            let id = defaultStore.storeId
-            return id
-        }
-        // Create one
-        let id = try await createStore(name: "default", topic: "x0x.store.default")
-        return id
     }
 
     // MARK: - Private Helpers

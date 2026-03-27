@@ -68,6 +68,8 @@ use crate::components::{
 };
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
 use std::collections::HashSet;
+use crate::components::mention::MentionCandidate;
+use crate::components::toast_system::use_toast;
 
 /// Unified entity page that handles all tabs (Chat, Board, Drive, Docs, Details).
 ///
@@ -214,6 +216,30 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
     let mut message_limit = use_signal(|| 50_usize);
     let mut show_delete_confirm: Signal<Option<String>> = use_signal(|| None);
 
+    // Toast system for mention notifications.
+    let toast = use_toast();
+
+    // Current user display name for mention detection.
+    let current_user_display_name = dir_snapshot
+        .identity
+        .as_ref()
+        .map(|i| i.display_name.clone())
+        .unwrap_or_default();
+
+    // Build mention candidates from the contact list.
+    let mention_candidates: Vec<MentionCandidate> = dir_snapshot
+        .contacts
+        .iter()
+        .map(|c| MentionCandidate {
+            id: c.id.clone(),
+            display_name: c.display_name.clone(),
+        })
+        .collect();
+
+    // Track the timestamp of the last message we've already notified about
+    // to avoid duplicate toasts on re-render.
+    let mut last_notified_ts = use_signal(|| 0u64);
+
     let thread_id = entity.id.clone();
     let thread_id_for_load = thread_id.clone();
     let thread_id_for_send = thread_id.clone();
@@ -241,6 +267,36 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
             loading.set(false);
         });
     });
+
+    // Detect @mentions of the current user in newly arrived messages and show a toast.
+    {
+        let user_dn = current_user_display_name.clone();
+        let current_user_id_for_mention = current_user_id.clone();
+        use_effect(move || {
+            let msgs = messages();
+            if msgs.is_empty() || user_dn.is_empty() {
+                return;
+            }
+            let mention_token = format!("@{}", user_dn);
+            // Find messages newer than last_notified_ts that mention us and are from others.
+            let mut newest_ts = last_notified_ts();
+            let mut mention_sender: Option<String> = None;
+            for msg in &msgs {
+                if msg.timestamp > last_notified_ts()
+                    && msg.sender_id != current_user_id_for_mention
+                    && msg.text.contains(&mention_token)
+                    && msg.timestamp > newest_ts
+                {
+                    newest_ts = msg.timestamp;
+                    mention_sender = Some(msg.sender_name.clone());
+                }
+            }
+            if let Some(sender) = mention_sender {
+                last_notified_ts.set(newest_ts);
+                toast.info(format!("{sender} mentioned you"));
+            }
+        });
+    }
 
     let typing_users = services.messaging().get_typing_users(&thread_id);
 
@@ -686,6 +742,16 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                         }
                     }),
                     on_cancel_reply: Some(EventHandler::new(move |_| reply_to.set(None))),
+                    mention_candidates: mention_candidates.clone(),
+                    on_mention_select: Some(EventHandler::new(move |candidate: MentionCandidate| {
+                        // Replace the trailing @query in the input with @display_name + space.
+                        let current = message_input();
+                        let replaced = crate::components::messaging_v2::apply_mention_selection(
+                            &current,
+                            &candidate.display_name,
+                        );
+                        message_input.set(replaced);
+                    })),
                 }
             }
         }
@@ -2623,6 +2689,16 @@ pub fn EntityChatPageV2(entity: UnifiedEntity) -> Element {
     let mut loading = use_signal(|| true);
     let mut error: Signal<Option<String>> = use_signal(|| None);
 
+    // Build mention candidates from the contact list.
+    let mention_candidates_v2: Vec<MentionCandidate> = dir_snapshot
+        .contacts
+        .iter()
+        .map(|c| MentionCandidate {
+            id: c.id.clone(),
+            display_name: c.display_name.clone(),
+        })
+        .collect();
+
     // Thread ID is the entity ID for entity chats
     let thread_id = entity.id.clone();
     let thread_id_for_load = thread_id.clone();
@@ -2768,6 +2844,15 @@ pub fn EntityChatPageV2(entity: UnifiedEntity) -> Element {
                         let mut current = message_input();
                         current.push_str(&emoji);
                         message_input.set(current);
+                    })),
+                    mention_candidates: mention_candidates_v2.clone(),
+                    on_mention_select: Some(EventHandler::new(move |candidate: MentionCandidate| {
+                        let current = message_input();
+                        let replaced = crate::components::messaging_v2::apply_mention_selection(
+                            &current,
+                            &candidate.display_name,
+                        );
+                        message_input.set(replaced);
                     })),
                 }
             }

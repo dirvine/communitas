@@ -6,6 +6,7 @@
 //! - **Bold** (`**text**` or `__text__`)
 //! - *Italic* (`*text*` or `_text_`)
 //! - `Inline code` (single-backtick)
+//! - @mention badges (`@display_name` tokens)
 //! - Plain text (everything else)
 //!
 //! The composer always stores raw text; rendering happens display-only.
@@ -35,6 +36,8 @@ enum Inline {
     Bold(String),
     Italic(String),
     Code(String),
+    /// An @mention badge — contains the display name (without the leading `@`).
+    Mention(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +115,14 @@ fn parse_blocks(text: &str) -> Vec<Block> {
     blocks
 }
 
+/// Returns true if `c` can be part of a mention name token.
+///
+/// Mention names allow letters, digits, hyphens, underscores, and dots
+/// (matching common display_name patterns like "alice", "alice-smith", "alice.smith").
+fn is_mention_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '-' || c == '_' || c == '.'
+}
+
 /// Parse a string into a sequence of [`Inline`] spans.
 fn parse_inlines(text: &str) -> Vec<Inline> {
     let mut spans: Vec<Inline> = Vec::new();
@@ -128,6 +139,28 @@ fn parse_inlines(text: &str) -> Vec<Inline> {
 
     while i < chars.len() {
         let c = chars[i];
+
+        // @mention: `@` at start or preceded by whitespace, followed by mention chars.
+        if c == '@' {
+            let at_start_or_after_space = i == 0
+                || chars[i - 1].is_whitespace()
+                || chars[i - 1] == '\n';
+            if at_start_or_after_space {
+                // Collect name chars after `@`
+                let name_start = i + 1;
+                let mut j = name_start;
+                while j < chars.len() && is_mention_char(chars[j]) {
+                    j += 1;
+                }
+                let name: String = chars[name_start..j].iter().collect();
+                if !name.is_empty() {
+                    flush(&mut plain_buf, &mut spans);
+                    spans.push(Inline::Mention(name));
+                    i = j;
+                    continue;
+                }
+            }
+        }
 
         // Inline code: backtick
         if c == '`' {
@@ -204,8 +237,9 @@ fn parse_inlines(text: &str) -> Vec<Inline> {
 
 /// Renders message content with lightweight markdown formatting.
 ///
-/// Supports: fenced code blocks, block quotes, **bold**, *italic*, `inline code`.
-/// Plain text is preserved exactly. This is display-only — the composer stores raw text.
+/// Supports: fenced code blocks, block quotes, **bold**, *italic*, `inline code`,
+/// and `@mention` badges. Plain text is preserved exactly.
+/// This is display-only — the composer stores raw text.
 #[component]
 pub fn MarkdownContent(
     /// Raw message text to render.
@@ -390,6 +424,36 @@ fn render_inline(inline: &Inline, is_own: bool) -> Element {
                 }
             }
         }
+        Inline::Mention(name) => {
+            let display = format!("@{name}");
+            rsx! {
+                span {
+                    style: format!(
+                        "display: inline-flex; \
+                         align-items: center; \
+                         padding: 1px 6px; \
+                         border-radius: {}; \
+                         background: {}; \
+                         color: {}; \
+                         font-weight: {}; \
+                         font-size: 0.875em; \
+                         white-space: nowrap; \
+                         cursor: default;",
+                        radius::SM,
+                        if is_own {
+                            "rgba(255,255,255,0.2)"
+                        } else {
+                            "rgba(16,185,129,0.15)"
+                        },
+                        if is_own { "rgba(255,255,255,0.95)" } else { palette::JADE_400 },
+                        typography::WEIGHT_SEMIBOLD,
+                    ),
+                    role: "text",
+                    aria_label: "Mention: {display}",
+                    "{display}"
+                }
+            }
+        }
     }
 }
 
@@ -485,5 +549,73 @@ mod tests {
     fn bold_double_underscore() {
         let inlines = parse_inlines("__bold__");
         assert_eq!(inlines, vec![Inline::Bold("bold".into())]);
+    }
+
+    // ---- @mention tests ----
+
+    #[test]
+    fn parse_mention_at_start() {
+        let inlines = parse_inlines("@alice hello");
+        assert_eq!(
+            inlines,
+            vec![
+                Inline::Mention("alice".into()),
+                Inline::Plain(" hello".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_mention_after_space() {
+        let inlines = parse_inlines("Hey @bob can you help?");
+        assert_eq!(
+            inlines,
+            vec![
+                Inline::Plain("Hey ".into()),
+                Inline::Mention("bob".into()),
+                Inline::Plain(" can you help?".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_multiple_mentions() {
+        let inlines = parse_inlines("@alice and @bob");
+        assert_eq!(
+            inlines,
+            vec![
+                Inline::Mention("alice".into()),
+                Inline::Plain(" and ".into()),
+                Inline::Mention("bob".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_mention_hyphenated_name() {
+        let inlines = parse_inlines("@alice-smith");
+        assert_eq!(inlines, vec![Inline::Mention("alice-smith".into())]);
+    }
+
+    #[test]
+    fn at_sign_mid_word_not_mention() {
+        // `foo@bar` — `@` is not preceded by whitespace or start.
+        let inlines = parse_inlines("foo@bar");
+        // Should be plain text — no Mention variant
+        assert!(!inlines.iter().any(|s| matches!(s, Inline::Mention(_))));
+    }
+
+    #[test]
+    fn lone_at_sign_not_mention() {
+        // `@` with no name chars following
+        let inlines = parse_inlines("@ hello");
+        assert!(!inlines.iter().any(|s| matches!(s, Inline::Mention(_))));
+    }
+
+    #[test]
+    fn mention_chars_allowed() {
+        // Dots and underscores are valid mention chars
+        let inlines = parse_inlines("@alice.smith_99");
+        assert_eq!(inlines, vec![Inline::Mention("alice.smith_99".into())]);
     }
 }

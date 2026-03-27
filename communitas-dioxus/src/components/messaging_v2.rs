@@ -979,7 +979,7 @@ pub fn DateSeparator(date: String) -> Element {
     }
 }
 
-/// Rich message composer.
+/// Rich message composer with @mention autocomplete support.
 #[component]
 pub fn MessageComposerV2(
     value: String,
@@ -997,9 +997,18 @@ pub fn MessageComposerV2(
     /// Called when the user cancels the reply by clicking the X.
     #[props(default)]
     on_cancel_reply: Option<EventHandler<()>>,
+    /// Contacts available for @mention autocomplete.
+    #[props(default)]
+    mention_candidates: Vec<crate::components::mention::MentionCandidate>,
+    /// Called when the user selects a mention candidate from the dropdown.
+    /// The parent should insert `@display_name ` at the current `@query` position.
+    #[props(default)]
+    on_mention_select: Option<EventHandler<crate::components::mention::MentionCandidate>>,
 ) -> Element {
     let mut focused = use_signal(|| false);
     let mut show_emoji_picker = use_signal(|| false);
+    // Active @-mention query (text after `@`, None = picker closed).
+    let mut mention_query: Signal<Option<String>> = use_signal(|| None);
 
     rsx! {
         div {
@@ -1103,79 +1112,129 @@ pub fn MessageComposerV2(
                 }
             }
 
-            // Main composer container
+            // Composer area — positioned so the mention dropdown can appear above it.
             div {
-                style: format!(
-                    "display: flex; \
-                     align-items: flex-end; \
-                     gap: {}; \
-                     padding: {}; \
-                     background: {}; \
-                     border: 1px solid {}; \
-                     border-radius: {}; \
-                     transition: {};",
-                    spacing::SM,
-                    spacing::SM,
-                    semantic::BG_TERTIARY,
-                    if focused() { semantic::PRIMARY } else { semantic::BORDER_SUBTLE },
-                    radius::XL,
-                    motion::transition("border-color")
-                ),
+                style: "position: relative;",
 
-                // Attachment button
-                ComposerButton {
-                    icon: "📎".to_string(),
-                    tooltip: "Attach file".to_string(),
-                    onclick: move |_| {},
+                // @mention autocomplete dropdown (shown above the textarea)
+                if let Some(ref query) = mention_query() {
+                    crate::components::mention::MentionAutocomplete {
+                        candidates: mention_candidates.clone(),
+                        query: query.clone(),
+                        on_select: {
+                            let handler = on_mention_select;
+                            move |candidate: crate::components::mention::MentionCandidate| {
+                                if let Some(ref h) = handler {
+                                    h.call(candidate);
+                                }
+                                mention_query.set(None);
+                            }
+                        },
+                        on_dismiss: move |_| mention_query.set(None),
+                    }
                 }
 
-                // Text input
-                textarea {
-                    placeholder: "{placeholder}",
-                    value: "{value}",
-                    disabled: disabled,
-                    rows: "1",
-                    aria_label: "Message input. Press Enter to send, Shift+Enter for new line.",
+                // Main composer row
+                div {
                     style: format!(
-                        "flex: 1; \
-                         background: transparent; \
-                         border: none; \
-                         outline: none; \
-                         resize: none; \
-                         color: {}; \
-                         font-family: {}; \
-                         font-size: {}; \
-                         line-height: {}; \
-                         min-height: 24px; \
-                         max-height: 120px; \
-                         overflow-y: auto;",
-                        semantic::TEXT_PRIMARY,
-                        typography::FONT_BODY,
-                        typography::SIZE_BASE,
-                        typography::LEADING_NORMAL
+                        "display: flex; \
+                         align-items: flex-end; \
+                         gap: {}; \
+                         padding: {}; \
+                         background: {}; \
+                         border: 1px solid {}; \
+                         border-radius: {}; \
+                         transition: {};",
+                        spacing::SM,
+                        spacing::SM,
+                        semantic::BG_TERTIARY,
+                        if focused() { semantic::PRIMARY } else { semantic::BORDER_SUBTLE },
+                        radius::XL,
+                        motion::transition("border-color")
                     ),
-                    onfocus: move |_| focused.set(true),
-                    onblur: move |_| focused.set(false),
-                    oninput: move |evt| oninput.call(evt),
-                    onkeydown: move |evt| {
-                        if evt.key() == Key::Enter && !evt.modifiers().shift() {
-                            evt.prevent_default();
-                            onsubmit.call(());
-                        }
-                    },
-                }
 
-                // Emoji button — opens the emoji picker above the composer
-                ComposerButton {
-                    icon: "😊".to_string(),
-                    tooltip: "Emoji".to_string(),
-                    onclick: move |_| show_emoji_picker.set(!show_emoji_picker()),
-                }
+                    // Attachment button
+                    ComposerButton {
+                        icon: "📎".to_string(),
+                        tooltip: "Attach file".to_string(),
+                        onclick: move |_| {},
+                    }
 
-                // Send button
-                SendButton {
-                    disabled: disabled || value.trim().is_empty(),
-                    onclick: move |_| onsubmit.call(()),
+                    // Text input
+                    textarea {
+                        placeholder: "{placeholder}",
+                        value: "{value}",
+                        disabled: disabled,
+                        rows: "1",
+                        aria_label: "Message input. Press Enter to send, Shift+Enter for new line. Type @ to mention someone.",
+                        style: format!(
+                            "flex: 1; \
+                             background: transparent; \
+                             border: none; \
+                             outline: none; \
+                             resize: none; \
+                             color: {}; \
+                             font-family: {}; \
+                             font-size: {}; \
+                             line-height: {}; \
+                             min-height: 24px; \
+                             max-height: 120px; \
+                             overflow-y: auto;",
+                            semantic::TEXT_PRIMARY,
+                            typography::FONT_BODY,
+                            typography::SIZE_BASE,
+                            typography::LEADING_NORMAL
+                        ),
+                        onfocus: move |_| focused.set(true),
+                        onblur: move |_| focused.set(false),
+                        oninput: move |evt: FormEvent| {
+                            // Detect @-mention query from current text.
+                            // Find the last `@` that is either at the start or preceded by whitespace.
+                            let text = evt.value();
+                            let query = detect_mention_query(&text);
+                            mention_query.set(query);
+                            oninput.call(evt);
+                        },
+                        onkeydown: move |evt: KeyboardEvent| {
+                            // When mention picker is open, let it handle nav keys.
+                            // The picker's own onkeydown handles ArrowUp/Down/Enter/Escape.
+                            // We still need to close the picker on Escape here as a fallback,
+                            // and suppress Enter submission while picker is open.
+                            if mention_query().is_some() {
+                                match evt.key() {
+                                    Key::Escape => {
+                                        evt.prevent_default();
+                                        mention_query.set(None);
+                                        return;
+                                    }
+                                    Key::Enter if !evt.modifiers().shift() => {
+                                        // Don't submit message while mention picker is open;
+                                        // the picker's Enter handler selects the candidate.
+                                        evt.prevent_default();
+                                        return;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if evt.key() == Key::Enter && !evt.modifiers().shift() {
+                                evt.prevent_default();
+                                onsubmit.call(());
+                            }
+                        },
+                    }
+
+                    // Emoji button — opens the emoji picker above the composer
+                    ComposerButton {
+                        icon: "😊".to_string(),
+                        tooltip: "Emoji".to_string(),
+                        onclick: move |_| show_emoji_picker.set(!show_emoji_picker()),
+                    }
+
+                    // Send button
+                    SendButton {
+                        disabled: disabled || value.trim().is_empty(),
+                        onclick: move |_| onsubmit.call(()),
+                    }
                 }
             }
 
@@ -1215,11 +1274,44 @@ pub fn MessageComposerV2(
                         typography::SIZE_XS,
                         semantic::TEXT_MUTED
                     ),
-                    "Press Enter to send, Shift+Enter for new line"
+                    "Press Enter to send, Shift+Enter for new line, @ to mention"
                 }
             }
         }
     }
+}
+
+/// Detect an active @mention query from the composer text.
+///
+/// Returns `Some(query)` when the caret is within a `@word` token that starts
+/// at position 0 or immediately after whitespace.  Returns `None` otherwise.
+///
+/// The query is the text after `@` up to the end of the string (we operate on
+/// the full text; a real caret-position-aware version would require JS interop,
+/// so we use the last `@`-prefixed word as a practical heuristic).
+pub fn detect_mention_query(text: &str) -> Option<String> {
+    // Find the last `@` in the text.
+    let at_pos = text.rfind('@')?;
+
+    // Verify the `@` is either at the start or preceded by whitespace.
+    if at_pos > 0 {
+        let prev = text[..at_pos].chars().next_back()?;
+        if !prev.is_whitespace() {
+            return None;
+        }
+    }
+
+    // Extract the word after `@`.
+    let after = &text[at_pos + 1..];
+
+    // If there is a space after `@word`, the mention has been committed.
+    if let Some(space_pos) = after.find(|c: char| c.is_whitespace()) {
+        let _ = space_pos;
+        return None;
+    }
+
+    // Return the partial word (may be empty string when user just typed `@`).
+    Some(after.to_string())
 }
 
 /// Composer toolbar button.
@@ -1434,5 +1526,101 @@ pub fn NewMessageIndicator(count: u32) -> Element {
             }}
             "#
         }
+    }
+}
+
+/// Apply a mention selection to the composer text.
+///
+/// Finds the last `@query` fragment (as detected by [`detect_mention_query`]) and
+/// replaces it with `@display_name ` (with a trailing space so the user can keep typing).
+///
+/// If no active mention fragment is found, appends `@display_name ` to the end.
+pub fn apply_mention_selection(text: &str, display_name: &str) -> String {
+    if let Some(at_pos) = text.rfind('@') {
+        // Verify the `@` is at start or after whitespace.
+        let valid = at_pos == 0 || text[..at_pos].chars().next_back().is_some_and(|c| c.is_whitespace());
+        if valid {
+            let after = &text[at_pos + 1..];
+            // Only replace if there's no space after `@` (i.e. query is still in-flight).
+            if !after.contains(|c: char| c.is_whitespace()) {
+                let prefix = &text[..at_pos];
+                return format!("{prefix}@{display_name} ");
+            }
+        }
+    }
+    // Fallback: append mention at end.
+    if text.ends_with(' ') || text.is_empty() {
+        format!("{text}@{display_name} ")
+    } else {
+        format!("{text} @{display_name} ")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_mention_at_start() {
+        assert_eq!(detect_mention_query("@ali"), Some("ali".to_string()));
+    }
+
+    #[test]
+    fn detect_mention_after_space() {
+        assert_eq!(detect_mention_query("Hello @ali"), Some("ali".to_string()));
+    }
+
+    #[test]
+    fn detect_mention_no_at() {
+        assert_eq!(detect_mention_query("Hello world"), None);
+    }
+
+    #[test]
+    fn detect_mention_completed_space_after() {
+        // `@alice ` — the trailing space means the mention was committed.
+        assert_eq!(detect_mention_query("@alice "), None);
+    }
+
+    #[test]
+    fn detect_mention_mid_word_invalid() {
+        // `foo@bar` — `@` not at start or after whitespace.
+        assert_eq!(detect_mention_query("foo@bar"), None);
+    }
+
+    #[test]
+    fn detect_mention_empty_query() {
+        // Just `@` with nothing after.
+        assert_eq!(detect_mention_query("@"), Some("".to_string()));
+    }
+
+    #[test]
+    fn apply_mention_selection_basic() {
+        let result = apply_mention_selection("Hello @ali", "alice");
+        assert_eq!(result, "Hello @alice ");
+    }
+
+    #[test]
+    fn apply_mention_selection_at_start() {
+        let result = apply_mention_selection("@ali", "alice");
+        assert_eq!(result, "@alice ");
+    }
+
+    #[test]
+    fn apply_mention_selection_empty_query() {
+        let result = apply_mention_selection("@", "alice");
+        assert_eq!(result, "@alice ");
+    }
+
+    #[test]
+    fn apply_mention_selection_fallback_append() {
+        // No active @query — appends at end.
+        let result = apply_mention_selection("Hello", "alice");
+        assert_eq!(result, "Hello @alice ");
+    }
+
+    #[test]
+    fn apply_mention_selection_already_ends_with_space() {
+        let result = apply_mention_selection("Hello ", "alice");
+        assert_eq!(result, "Hello @alice ");
     }
 }

@@ -233,10 +233,13 @@ fn App() -> Element {
     };
     use_context_provider(|| services);
     use_context_provider(components::AnnouncerContext::new);
+    // Provide the toast manager so any component can call use_toast().
+    use_context_provider(components::toast_system::ToastManager::new);
 
     rsx! {
         style { {GLOBAL_STYLES} }
         components::Announcer {}
+        components::toast_system::ToastContainer {}
         Router::<Route> {}
     }
 }

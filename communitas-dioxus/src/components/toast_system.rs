@@ -1,42 +1,22 @@
-//! Toast notification system with entrance and exit animations.
+//! Toast notification system with CSS entrance and exit animations.
 //!
-//! Provides a comprehensive toast system with multiple variants,
-//! auto-dismiss, and smooth animations.
+//! Provides a toast system with multiple variants and auto-dismiss.
+//! Uses CSS keyframe animations instead of a motion library.
 //!
 //! # Example
 //!
 //! ```rust
-//! use communitas_dioxus::components::toast_system::{ToastContainer, Toast, ToastKind};
+//! // In App:
+//! use_context_provider(communitas_dioxus::components::toast_system::ToastManager::new);
+//! rsx! { communitas_dioxus::components::toast_system::ToastContainer {} }
 //!
-//! // In your app
-//! rsx! {
-//!     ToastContainer {}
-//! }
-//!
-//! // Show a toast
-//! let toast = Toast::new(ToastKind::Success, "Operation completed!".to_string());
+//! // In any child component:
+//! let toast = use_toast();
+//! toast.success("Operation completed!");
 //! ```
 
-use dioxus::prelude::*;
-use dioxus_motion::prelude::*;
-use std::time::Duration;
-
-use crate::animations::springs;
-use crate::animations::transitions;
 use crate::design_tokens::{palette, radius, semantic, shadow, spacing, typography};
-
-async fn async_delay(duration: Duration) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        use gloo_timers::future::TimeoutFuture;
-        let millis = duration.as_millis().min(u128::from(u32::MAX)) as u32;
-        TimeoutFuture::new(millis).await;
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        tokio::time::sleep(duration).await;
-    }
-}
+use dioxus::prelude::*;
 
 /// Toast notification kind.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -63,19 +43,14 @@ impl ToastKind {
         }
     }
 
-    /// Get the background color for this toast kind.
-    pub fn bg_color(&self) -> &'static str {
+    /// Get the accent color for this toast kind.
+    pub fn accent_color(&self) -> &'static str {
         match self {
             ToastKind::Success => palette::JADE_500,
             ToastKind::Error => palette::ROSE_500,
             ToastKind::Warning => palette::AMBER_500,
             ToastKind::Info => palette::SKY_500,
         }
-    }
-
-    /// Get the text color for this toast kind.
-    pub fn text_color(&self) -> &'static str {
-        "#ffffff"
     }
 }
 
@@ -90,21 +65,21 @@ pub struct Toast {
     pub message: String,
     /// Optional description.
     pub description: Option<String>,
-    /// Duration in milliseconds (None for persistent).
+    /// Duration in milliseconds (None = persistent).
     pub duration_ms: Option<u64>,
 }
 
 impl Toast {
     /// Create a new toast notification.
     pub fn new(kind: ToastKind, message: String) -> Self {
+        // Generate a simple unique ID from the message and kind.
+        let id = format!(
+            "toast-{:?}-{}",
+            kind,
+            message.len()
+        );
         Self {
-            id: format!(
-                "toast-{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis()
-            ),
+            id,
             kind,
             message,
             description: None,
@@ -118,7 +93,7 @@ impl Toast {
         self
     }
 
-    /// Set custom duration.
+    /// Set custom duration in milliseconds.
     pub fn with_duration(mut self, duration_ms: u64) -> Self {
         self.duration_ms = Some(duration_ms);
         self
@@ -132,13 +107,15 @@ impl Toast {
 }
 
 /// Toast manager for controlling notifications.
+///
+/// Stored in context so any component can call [`use_toast`] to access it.
 #[derive(Clone, Copy)]
 pub struct ToastManager {
     toasts: Signal<Vec<Toast>>,
 }
 
 impl ToastManager {
-    /// Create a new toast manager.
+    /// Create a new toast manager. Called by `use_context_provider`.
     pub fn new() -> Self {
         Self {
             toasts: use_signal(Vec::new),
@@ -180,7 +157,7 @@ impl ToastManager {
         self.toasts.write().clear();
     }
 
-    /// Get current toasts.
+    /// Get the current list of toasts.
     pub fn toasts(self) -> Vec<Toast> {
         self.toasts.read().clone()
     }
@@ -192,31 +169,36 @@ impl Default for ToastManager {
     }
 }
 
-/// Provider component for toast functionality.
-#[component]
-pub fn ToastProvider(children: Element) -> Element {
-    let manager = ToastManager::new();
-
-    use_context_provider(|| manager);
-
-    rsx! {
-        {children}
-        ToastContainer {}
-    }
-}
-
-/// Hook to access the toast manager.
+/// Hook to access the [`ToastManager`] from context.
+///
+/// Requires [`ToastManager`] to have been provided via
+/// `use_context_provider(ToastManager::new)` in a parent component.
 pub fn use_toast() -> ToastManager {
     use_context::<ToastManager>()
 }
 
-/// Toast container that displays all active notifications.
+/// Toast container — renders all active toasts fixed at the top-right of the screen.
+///
+/// Place this once near the root of your app. Requires [`ToastManager`] in context.
 #[component]
 pub fn ToastContainer() -> Element {
     let manager = use_toast();
     let toasts = manager.toasts();
 
     rsx! {
+        style {
+            r#"
+            @keyframes toastSlideIn {{
+                from {{ opacity: 0; transform: translateX(20px); }}
+                to   {{ opacity: 1; transform: translateX(0); }}
+            }}
+            @keyframes toastSlideOut {{
+                from {{ opacity: 1; transform: translateX(0); }}
+                to   {{ opacity: 0; transform: translateX(20px); }}
+            }}
+            "#
+        }
+
         div {
             style: format!(
                 "position: fixed; \
@@ -229,14 +211,13 @@ pub fn ToastContainer() -> Element {
                  pointer-events: none;",
                 spacing::BASE,
                 spacing::BASE,
-                spacing::SM
+                spacing::SM,
             ),
 
-            for (index, toast) in toasts.iter().enumerate() {
+            for toast in toasts.iter() {
                 ToastItem {
                     key: "{toast.id}",
                     toast: toast.clone(),
-                    index,
                     on_dismiss: move |id: String| manager.dismiss(&id),
                 }
             }
@@ -244,133 +225,54 @@ pub fn ToastContainer() -> Element {
     }
 }
 
-/// Properties for individual toast items.
+/// Props for individual toast items.
 #[derive(Props, Clone, PartialEq)]
 pub struct ToastItemProps {
     /// Toast data.
     pub toast: Toast,
-    /// Index for stagger animation.
-    pub index: usize,
-    /// Dismiss callback.
+    /// Dismiss callback (receives the toast ID).
     pub on_dismiss: Callback<String>,
 }
 
-/// Individual toast notification with animations.
+/// Individual toast notification.
 #[component]
-fn ToastItem(props: ToastItemProps) -> Element {
-    let mut translate_x = use_motion(100.0f32);
-    let mut opacity = use_motion(0.0f32);
-    let mut scale = use_motion(0.9f32);
-    let progress = use_motion(100.0f32);
-    let mut is_dismissing = use_signal(|| false);
-
+pub fn ToastItem(props: ToastItemProps) -> Element {
     let toast_id = props.toast.id.clone();
-    let dismiss_callback = props.on_dismiss;
+    let duration = props.toast.duration_ms;
+    let dismiss_cb = props.on_dismiss;
+    let mut dismissed = use_signal(|| false);
 
-    // Entrance animation
-    use_effect(move || {
-        use std::time::Duration;
-        let delay_ms = (props.index as f32 * 100.0) as u64;
-
-        translate_x.animate_to(
-            0.0,
-            AnimationConfig::new(AnimationMode::Spring(springs::toast_enter()))
-                .with_delay(Duration::from_millis(delay_ms)),
-        );
-        opacity.animate_to(
-            1.0,
-            AnimationConfig::new(AnimationMode::Spring(springs::toast_enter()))
-                .with_delay(Duration::from_millis(delay_ms)),
-        );
-        scale.animate_to(
-            1.0,
-            AnimationConfig::new(AnimationMode::Spring(springs::toast_enter()))
-                .with_delay(Duration::from_millis(delay_ms)),
-        );
-    });
-
-    // Auto-dismiss with progress bar
+    // Auto-dismiss after duration.
     {
-        let duration = props.toast.duration_ms;
-        let mut auto_translate_x = translate_x;
-        let mut auto_opacity = opacity;
-        let mut auto_scale = scale;
-        let mut auto_progress = progress;
-        let mut auto_is_dismissing = is_dismissing;
-        let auto_toast_id = toast_id.clone();
-        let auto_dismiss = dismiss_callback;
+        let id = toast_id.clone();
         use_effect(move || {
-            if let Some(duration) = duration {
-                auto_progress.animate_to(
-                    0.0,
-                    AnimationConfig::new(AnimationMode::Spring(Spring {
-                        stiffness: 50.0,
-                        damping: 50.0,
-                        mass: 1.0,
-                        velocity: 0.0,
-                    })),
-                );
-
-                let id = auto_toast_id.clone();
-                let dismiss_cb = auto_dismiss;
+            if let Some(ms) = duration {
+                let id_for_spawn = id.clone();
                 spawn(async move {
-                    async_delay(Duration::from_millis(duration)).await;
-
-                    if !auto_is_dismissing() {
-                        auto_is_dismissing.set(true);
-                        auto_translate_x.animate_to(
-                            100.0,
-                            AnimationConfig::new(AnimationMode::Spring(springs::toast_exit())),
-                        );
-                        auto_opacity.animate_to(
-                            0.0,
-                            AnimationConfig::new(AnimationMode::Spring(springs::toast_exit())),
-                        );
-                        auto_scale.animate_to(
-                            0.9,
-                            AnimationConfig::new(AnimationMode::Spring(springs::toast_exit())),
-                        );
-                        async_delay(Duration::from_millis(200)).await;
-                        dismiss_cb.call(id);
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        use gloo_timers::future::TimeoutFuture;
+                        let capped = ms.min(u64::from(u32::MAX)) as u32;
+                        TimeoutFuture::new(capped).await;
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                    }
+                    if !dismissed() {
+                        dismissed.set(true);
+                        dismiss_cb.call(id_for_spawn);
                     }
                 });
             }
         });
     }
 
-    let handle_dismiss = {
-        let toast_id_for_manual = toast_id.clone();
-        let manual_dismiss = dismiss_callback;
-        move |_| {
-            if !is_dismissing() {
-                is_dismissing.set(true);
-
-                // Exit animation
-                translate_x.animate_to(
-                    100.0,
-                    AnimationConfig::new(AnimationMode::Spring(springs::toast_exit())),
-                );
-                opacity.animate_to(
-                    0.0,
-                    AnimationConfig::new(AnimationMode::Spring(springs::toast_exit())),
-                );
-                scale.animate_to(
-                    0.9,
-                    AnimationConfig::new(AnimationMode::Spring(springs::toast_exit())),
-                );
-
-                // Remove after animation
-                let id = toast_id_for_manual.clone();
-                let on_dismiss = manual_dismiss;
-                spawn(async move {
-                    async_delay(Duration::from_millis(200)).await;
-                    on_dismiss.call(id);
-                });
-            }
-        }
+    let animation = if dismissed() {
+        "animation: toastSlideOut 200ms ease-in forwards;"
+    } else {
+        "animation: toastSlideIn 200ms ease-out;"
     };
-
-    let pointer_events = if is_dismissing() { "none" } else { "auto" };
 
     rsx! {
         div {
@@ -380,96 +282,64 @@ fn ToastItem(props: ToastItemProps) -> Element {
                  gap: {}; \
                  padding: {}; \
                  background: {}; \
+                 border: 1px solid {}; \
+                 border-left: 3px solid {}; \
                  border-radius: {}; \
                  box-shadow: {}; \
-                 min-width: 300px; \
-                 max-width: 400px; \
-                 opacity: {}; \
-                 transform: translateX({}px) scale({}); \
-                 pointer-events: {}; \
-                 position: relative; \
-                 overflow: hidden;",
+                 min-width: 280px; \
+                 max-width: 380px; \
+                 pointer-events: auto; \
+                 {}",
                 spacing::SM,
-                spacing::BASE,
-                semantic::BG_SECONDARY,
-                radius::LG,
+                spacing::SM,
+                semantic::BG_ELEVATED,
+                semantic::BORDER_DEFAULT,
+                props.toast.kind.accent_color(),
+                radius::MD,
                 shadow::LG,
-                opacity.get_value(),
-                translate_x.get_value(),
-                scale.get_value(),
-                pointer_events
+                animation,
             ),
             role: "alert",
-
-            // Progress bar (if auto-dismissing)
-            if props.toast.duration_ms.is_some() {
-                div {
-                    style: format!(
-                        "position: absolute; \
-                         bottom: 0; \
-                         left: 0; \
-                         height: 3px; \
-                         width: {}%; \
-                         background: {}; \
-                         transition: width 0.1s linear;",
-                        progress.get_value(),
-                        props.toast.kind.bg_color()
-                    ),
-                }
-            }
+            aria_live: "polite",
 
             // Icon
-            div {
+            span {
                 style: format!(
-                    "display: flex; \
-                     align-items: center; \
-                     justify-content: center; \
-                     width: 24px; \
-                     height: 24px; \
-                     border-radius: {}; \
-                     background: {}; \
+                    "font-size: {}; \
                      color: {}; \
-                     font-size: 14px; \
-                     font-weight: bold; \
-                     flex-shrink: 0;",
-                    radius::FULL,
-                    props.toast.kind.bg_color(),
-                    props.toast.kind.text_color()
+                     flex-shrink: 0; \
+                     line-height: 1;",
+                    typography::SIZE_BASE,
+                    props.toast.kind.accent_color(),
                 ),
                 "{props.toast.kind.icon()}"
             }
 
             // Content
             div {
-                style: "flex: 1; display: flex; flex-direction: column; gap: 0.25rem;",
+                style: "flex: 1; display: flex; flex-direction: column; gap: 2px;",
 
-                // Message
                 span {
                     style: format!(
-                        "font-family: {}; \
-                         font-size: {}; \
+                        "font-size: {}; \
                          font-weight: {}; \
                          color: {};",
-                        typography::FONT_BODY,
                         typography::SIZE_SM,
                         typography::WEIGHT_MEDIUM,
-                        semantic::TEXT_PRIMARY
+                        semantic::TEXT_PRIMARY,
                     ),
                     "{props.toast.message}"
                 }
 
-                // Description
-                if let Some(description) = props.toast.description.clone() {
+                if let Some(ref desc) = props.toast.description {
                     span {
                         style: format!(
-                            "font-family: {}; \
-                             font-size: {}; \
+                            "font-size: {}; \
                              color: {};",
-                            typography::FONT_BODY,
                             typography::SIZE_XS,
-                            semantic::TEXT_SECONDARY
+                            semantic::TEXT_SECONDARY,
                         ),
-                        "{description}"
+                        "{desc}"
                     }
                 }
             }
@@ -477,143 +347,27 @@ fn ToastItem(props: ToastItemProps) -> Element {
             // Dismiss button
             button {
                 style: format!(
-                    "display: flex; \
-                     align-items: center; \
-                     justify-content: center; \
-                     width: 20px; \
-                     height: 20px; \
+                    "background: transparent; \
                      border: none; \
-                     background: transparent; \
                      color: {}; \
                      cursor: pointer; \
-                     border-radius: {}; \
-                     font-size: 12px; \
-                     flex-shrink: 0;",
+                     font-size: {}; \
+                     padding: 0 2px; \
+                     flex-shrink: 0; \
+                     line-height: 1;",
                     semantic::TEXT_MUTED,
-                    radius::SM
+                    typography::SIZE_XS,
                 ),
-                onclick: handle_dismiss,
                 aria_label: "Dismiss notification",
-                "✕"
-            }
-        }
-    }
-}
-
-/// Simple toast notification without the full system.
-///
-/// Use this for single, immediate notifications.
-#[derive(Props, Clone, PartialEq)]
-pub struct SimpleToastProps {
-    /// Toast kind.
-    #[props(default = ToastKind::Info)]
-    pub kind: ToastKind,
-    /// Toast message.
-    pub message: String,
-    /// Optional description.
-    #[props(default = None)]
-    pub description: Option<String>,
-    /// Whether to show the toast.
-    #[props(default = true)]
-    pub visible: bool,
-    /// Additional CSS classes.
-    #[props(default = String::new())]
-    pub class: String,
-}
-
-/// Simple standalone toast notification.
-#[component]
-pub fn SimpleToast(props: SimpleToastProps) -> Element {
-    let mut opacity = use_motion(0.0f32);
-    let mut translate_y = use_motion(-20.0f32);
-
-    use_effect(move || {
-        if props.visible {
-            opacity.animate_to(1.0, transitions::overlay_fade_in());
-            translate_y.animate_to(
-                0.0,
-                AnimationConfig::new(AnimationMode::Spring(springs::toast_enter())),
-            );
-        } else {
-            opacity.animate_to(0.0, transitions::overlay_fade_out());
-            translate_y.animate_to(-20.0, transitions::overlay_fade_out());
-        }
-    });
-
-    rsx! {
-        div {
-            style: format!(
-                "display: flex; \
-                 align-items: center; \
-                 gap: {}; \
-                 padding: {}; \
-                 background: {}; \
-                 border-radius: {}; \
-                 box-shadow: {}; \
-                 opacity: {}; \
-                 transform: translateY({}px);",
-                spacing::SM,
-                spacing::BASE,
-                semantic::BG_SECONDARY,
-                radius::LG,
-                shadow::MD,
-                opacity.get_value(),
-                translate_y.get_value()
-            ),
-            class: "{props.class}",
-            role: "alert",
-
-            // Icon
-            div {
-                style: format!(
-                    "display: flex; \
-                     align-items: center; \
-                     justify-content: center; \
-                     width: 24px; \
-                     height: 24px; \
-                     border-radius: {}; \
-                     background: {}; \
-                     color: {}; \
-                     font-size: 14px; \
-                     font-weight: bold;",
-                    radius::FULL,
-                    props.kind.bg_color(),
-                    props.kind.text_color()
-                ),
-                "{props.kind.icon()}"
-            }
-
-            // Content
-            div {
-                style: "display: flex; flex-direction: column;",
-
-                span {
-                    style: format!(
-                        "font-family: {}; \
-                         font-size: {}; \
-                         font-weight: {}; \
-                         color: {};",
-                        typography::FONT_BODY,
-                        typography::SIZE_SM,
-                        typography::WEIGHT_MEDIUM,
-                        semantic::TEXT_PRIMARY
-                    ),
-                    "{props.message}"
-                }
-
-                if let Some(description) = props.description {
-                    span {
-                        style: format!(
-                            "font-family: {}; \
-                             font-size: {}; \
-                             color: {};",
-                            typography::FONT_BODY,
-                            typography::SIZE_XS,
-                            semantic::TEXT_SECONDARY
-                        ),
-                        "{description}"
+                onclick: {
+                    let id = props.toast.id.clone();
+                    let cb = props.on_dismiss;
+                    move |_| {
+                        dismissed.set(true);
+                        cb.call(id.clone());
                     }
-                }
+                },
+                "✕"
             }
         }
     }
@@ -648,8 +402,8 @@ mod tests {
 
     #[test]
     fn toast_with_description() {
-        let toast =
-            Toast::new(ToastKind::Info, "Test".to_string()).with_description("Details".to_string());
+        let toast = Toast::new(ToastKind::Info, "Test".to_string())
+            .with_description("Details".to_string());
         assert_eq!(toast.description, Some("Details".to_string()));
     }
 

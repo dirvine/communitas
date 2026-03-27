@@ -43,6 +43,8 @@ pub mod local_x0x_profile_view;
 #[allow(dead_code)]
 pub mod markdown;
 #[allow(dead_code)]
+pub mod mention;
+#[allow(dead_code)]
 mod message_list;
 #[allow(dead_code)]
 pub mod messaging_v2;
@@ -128,7 +130,9 @@ pub use layout::{
 #[allow(unused_imports)]
 pub use offline::{
     ConflictBanner, ConflictBannerVariant, ConnectionBadge, ConnectionState, OfflineBanner,
-    SyncState, SyncStatusIndicator, Toast, ToastContainer, ToastNotification, ToastVariant,
+    SyncState, SyncStatusIndicator,
+    Toast as OfflineToast, ToastContainer as OfflineToastContainer,
+    ToastNotification, ToastVariant,
     use_connection_state,
 };
 // Re-export settings components for application preferences
@@ -174,6 +178,16 @@ pub use messaging_v2::{
 // Re-export markdown renderer for message display
 #[allow(unused_imports)]
 pub use markdown::MarkdownContent;
+
+// Re-export @mention autocomplete components
+#[allow(unused_imports)]
+pub use mention::{MentionAutocomplete, MentionCandidate, filter_candidates as filter_mention_candidates};
+
+// Toast notification system
+#[allow(dead_code)]
+pub mod toast_system;
+#[allow(unused_imports)]
+pub use toast_system::{Toast, ToastContainer, ToastKind, ToastManager, use_toast};
 
 // Re-export sidebar components for main app layout
 #[allow(unused_imports)]

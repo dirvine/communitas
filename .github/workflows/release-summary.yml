@@ -43,10 +43,24 @@ jobs:
 
             const rel = await waitForRelease();
             const when = new Date().toISOString();
-            const summary = `\n\n## Build Summary (auto)\n- Desktop: communitas-dioxus (Dioxus + Tauri cross-platform app)\n\nGenerated: ${when}`;
+            const ver = tag.replace(/^v/, '');
+            const summary = [
+              '',
+              '',
+              '## Build Summary (auto)',
+              '',
+              '| Platform | Asset | Description |',
+              '|----------|-------|-------------|',
+              `| macOS | \`Communitas-macOS-${ver}.dmg\` | Native Swift app — recommended for Mac |`,
+              `| Windows | \`Communitas-Windows-${ver}.zip\` | Dioxus cross-platform app |`,
+              `| Linux | \`Communitas-Linux-${ver}.tar.gz\` | Dioxus cross-platform app |`,
+              `| macOS (alt) | \`Communitas-macOS-Dioxus-${ver}.dmg\` | Dioxus engine build (dev/testing) |`,
+              '',
+              `Generated: ${when}`,
+            ].join('\n');
 
             const body = (rel.body || '');
-            const newBody = body.includes('## Build Summary (auto)') ? body.replace(/## Build Summary \(auto\)[\s\S]*/m, summary) : (body + summary);
+            const newBody = body.includes('## Build Summary (auto)') ? body.replace(/\n\n## Build Summary \(auto\)[\s\S]*/m, summary) : (body + summary);
             await github.rest.repos.updateRelease({ owner, repo, release_id: rel.id, body: newBody });
 
             core.info(`Updated release ${rel.tag_name} with summary.`);

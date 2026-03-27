@@ -23,8 +23,23 @@ jobs:
   build-linux:
     name: Build Linux Binaries
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
     - uses: actions/checkout@v4
+
+    - name: Get version
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/v* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/v}
+        elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="dev"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@1.88.0
@@ -67,14 +82,15 @@ jobs:
 
     - name: Archive Dioxus
       run: |
+        VERSION="${{ steps.version.outputs.version }}"
         cd target/release
-        tar -czf communitas-dioxus-x86_64-unknown-linux-gnu.tar.gz communitas-dioxus
+        tar -czf "Communitas-Linux-${VERSION}.tar.gz" communitas-dioxus
 
     - name: Upload Linux Dioxus
       uses: actions/upload-artifact@v4
       with:
         name: communitas-dioxus-linux-x86_64
-        path: target/release/communitas-dioxus-x86_64-unknown-linux-gnu.tar.gz
+        path: target/release/Communitas-Linux-${{ steps.version.outputs.version }}.tar.gz
 
   build-macos:
     name: Build macOS Binaries
@@ -118,8 +134,24 @@ jobs:
   build-windows:
     name: Build Windows Binaries
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
     - uses: actions/checkout@v4
+
+    - name: Get version
+      id: version
+      shell: bash
+      run: |
+        if [[ $GITHUB_REF == refs/tags/v* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/v}
+        elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="dev"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@1.88.0
@@ -129,15 +161,17 @@ jobs:
         cargo build --release -p communitas-dioxus
 
     - name: Archive Dioxus
+      shell: pwsh
       run: |
+        $version = "${{ steps.version.outputs.version }}"
         cd target/release
-        Compress-Archive -Path communitas-dioxus.exe -DestinationPath communitas-dioxus-windows-x86_64.zip
+        Compress-Archive -Path communitas-dioxus.exe -DestinationPath "Communitas-Windows-${version}.zip"
 
     - name: Upload Windows Dioxus
       uses: actions/upload-artifact@v4
       with:
         name: communitas-dioxus-windows-x86_64
-        path: target/release/communitas-dioxus-windows-x86_64.zip
+        path: target/release/Communitas-Windows-${{ steps.version.outputs.version }}.zip
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Release Job — only runs on v* tag pushes
@@ -152,6 +186,13 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
 
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
@@ -192,10 +233,11 @@ jobs:
 
       - name: Upload binaries to GitHub Release
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
           gh release upload "${{ github.ref_name }}" \
-            ./release/communitas-dioxus-x86_64-unknown-linux-gnu.tar.gz \
-            ./release/communitas-dioxus-macos-universal.tar.gz \
-            ./release/communitas-dioxus-windows-x86_64.zip \
+            "./release/Communitas-Linux-${VERSION}.tar.gz" \
+            "./release/communitas-dioxus-macos-universal.tar.gz" \
+            "./release/Communitas-Windows-${VERSION}.zip" \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

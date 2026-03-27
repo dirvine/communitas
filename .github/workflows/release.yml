@@ -114,7 +114,7 @@ jobs:
 
           VERSION="${{ steps.version.outputs.version }}"
           echo "Bundled app: $APP_PATH"
-          echo "dmg_name=Communitas-${VERSION}-universal.dmg" >> $GITHUB_OUTPUT
+          echo "dmg_name=Communitas-macOS-Dioxus-${VERSION}.dmg" >> $GITHUB_OUTPUT
 
       # ─────────────────────────────────────────────────────────────────────────
       # Code Signing
@@ -187,7 +187,7 @@ jobs:
           ln -s /Applications "$DMG_STAGING/Applications"
 
           # Create DMG
-          hdiutil create -volname "Communitas" \
+          hdiutil create -volname "Communitas (Dioxus)" \
             -srcfolder "$DMG_STAGING" \
             -ov -format UDZO \
             "communitas-dioxus/dist/$DMG_NAME"
@@ -327,20 +327,27 @@ jobs:
           body: |
             ## Communitas ${{ needs.build-macos.outputs.version }}
 
-            ### Downloads
-            - **macOS (Universal)**: `${{ needs.build-macos.outputs.dmg_name }}`
-              - Supports both Intel (x86_64) and Apple Silicon (M1/M2/M3/M4)
-              - Signed and notarized by Apple
+            ## Downloads
+
+            | Platform | Download | Notes |
+            |----------|----------|-------|
+            | macOS | `Communitas-macOS-${{ needs.build-macos.outputs.version }}.dmg` | Native Swift app (recommended) |
+            | Windows | `Communitas-Windows-${{ needs.build-macos.outputs.version }}.zip` | Dioxus cross-platform |
+            | Linux | `Communitas-Linux-${{ needs.build-macos.outputs.version }}.tar.gz` | Dioxus cross-platform |
+            | macOS (alt) | `Communitas-macOS-Dioxus-${{ needs.build-macos.outputs.version }}.dmg` | Dioxus engine (dev/testing) |
+
+            All macOS downloads are signed and notarized by Apple.
+
+            ### Requirements
+            - macOS 13.0 (Ventura) or later for the Swift app
+            - x0x daemon: `curl -sfL https://x0x.md | sh && x0x autostart && x0x start`
 
             ### Installation
-            1. Download the DMG file
+            1. Download the DMG file for your platform
             2. Open the DMG
             3. Drag Communitas to your Applications folder
             4. Launch from Applications
             5. If prompted, allow the app in System Preferences > Security & Privacy
-
-            ### Requirements
-            - macOS 11.0 (Big Sur) or later
 
             ### What's New
             See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.

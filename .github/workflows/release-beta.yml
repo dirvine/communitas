@@ -102,13 +102,15 @@ jobs:
           cd communitas-dioxus
           dx bundle --platform desktop --release
 
-          # Find the generated .app
-          APP_PATH=$(find dist/bundle -name "*.app" -type d | head -1)
+          # Find the generated .app (use absolute path so subsequent steps work from repo root)
+          APP_PATH=$(find "$(pwd)/dist" -name "*.app" -type d | head -1)
           echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
 
           # Replace binary with universal one
           APP_NAME=$(basename "$APP_PATH" .app)
-          cp ../target/universal-apple-darwin/release/communitas-dioxus "$APP_PATH/Contents/MacOS/$APP_NAME"
+          MACOS_DIR="$APP_PATH/Contents/MacOS"
+          mkdir -p "$MACOS_DIR"
+          cp ../target/universal-apple-darwin/release/communitas-dioxus "$MACOS_DIR/$APP_NAME"
 
           VERSION="${{ steps.version.outputs.version }}"
           echo "Bundled app: $APP_PATH"

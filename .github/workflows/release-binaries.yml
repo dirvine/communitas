@@ -90,11 +90,13 @@ jobs:
     - name: Create universal binary directory
       run: mkdir -p target/universal-apple-darwin
 
-    - name: Build x86_64 Dioxus
-      run: cargo build --release -p communitas-dioxus --target x86_64-apple-darwin
-
-    - name: Build aarch64 Dioxus
+    - name: Build aarch64 Dioxus (native)
       run: cargo build --release -p communitas-dioxus --target aarch64-apple-darwin
+
+    - name: Build x86_64 Dioxus (cross)
+      env:
+        CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER: "cc"
+      run: cargo build --release -p communitas-dioxus --target x86_64-apple-darwin
 
     - name: Create universal Dioxus binary
       run: |

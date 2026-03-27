@@ -98,8 +98,8 @@ jobs:
           cd communitas-dioxus
           dx bundle --platform desktop --release
 
-          # Find the generated .app
-          APP_PATH=$(find dist -name "*.app" -type d | head -1)
+          # Find the generated .app (use absolute path so signing step works)
+          APP_PATH=$(find "$(pwd)/dist" -name "*.app" -type d | head -1)
           echo "Found app bundle: $APP_PATH"
           echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
 

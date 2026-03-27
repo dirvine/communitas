@@ -65,7 +65,7 @@ final class ChannelManager: ObservableObject {
     private func ensureStore() async {
         do {
             let stores = try await client.listStores()
-            if !stores.contains(where: { $0.storeId == channelStoreId || $0.name == channelStoreId }) {
+            if !stores.contains(where: { $0.id == channelStoreId }) {
                 _ = try await client.createStore(name: channelStoreId, topic: "x0x.group.\(groupPrefix).meta")
             }
         } catch { /* store may already exist */ }

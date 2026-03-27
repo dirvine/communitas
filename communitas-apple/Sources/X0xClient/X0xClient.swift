@@ -176,7 +176,7 @@ public final class X0xClient: Sendable {
     public func createTaskList(name: String, topic: String) async throws -> String {
         let body = CreateTaskListRequest(name: name, topic: topic)
         let resp: CreateTaskListResponse = try await post("/task-lists", body: body)
-        return resp.listId
+        return resp.id
     }
 
     /// List tasks in a task list. `GET /task-lists/:id/tasks`
@@ -218,12 +218,13 @@ public final class X0xClient: Sendable {
     public func createStore(name: String, topic: String) async throws -> String {
         let body = CreateStoreRequest(name: name, topic: topic)
         let resp: CreateStoreResponse = try await post("/stores", body: body)
-        return resp.storeId
+        return resp.id
     }
 
     /// List stores. `GET /stores`
     public func listStores() async throws -> [StoreSummary] {
-        try await get("/stores")
+        let resp: StoreListResponse = try await get("/stores")
+        return resp.stores
     }
 
     /// Join a store. `POST /stores/:id/join`
@@ -235,7 +236,7 @@ public final class X0xClient: Sendable {
     /// List keys in a store. `GET /stores/:id/keys`
     public func storeKeys(storeId: String) async throws -> [String] {
         let resp: StoreKeysResponse = try await get("/stores/\(storeId)/keys")
-        return resp.keys
+        return resp.keys.map(\.key)
     }
 
     /// Get a value from a store. `GET /stores/:id/:key`
@@ -388,7 +389,23 @@ public final class X0xClient: Sendable {
 
 // MARK: - Store Keys Response
 
+struct StoreKeyEntry: Codable {
+    let key: String
+    let contentType: String?
+    let contentHash: String?
+    let size: UInt64?
+    let updatedAt: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case contentType = "content_type"
+        case contentHash = "content_hash"
+        case size
+        case updatedAt = "updated_at"
+    }
+}
+
 struct StoreKeysResponse: Codable {
     let ok: Bool?
-    let keys: [String]
+    let keys: [StoreKeyEntry]
 }

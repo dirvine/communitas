@@ -184,14 +184,10 @@ public struct CreateTaskListRequest: Codable, Sendable {
     }
 }
 
+/// Response from creating a task list: `{"ok": true, "id": "..."}`.
 public struct CreateTaskListResponse: Codable, Sendable {
     public let ok: Bool?
-    public let listId: String
-
-    enum CodingKeys: String, CodingKey {
-        case ok
-        case listId = "list_id"
-    }
+    public let id: String
 }
 
 public struct AddTaskRequest: Codable, Sendable {
@@ -225,28 +221,22 @@ public struct CreateStoreRequest: Codable, Sendable {
     }
 }
 
-/// Response after creating a store.
+/// Response after creating a store: `{"ok": true, "id": "..."}`.
 public struct CreateStoreResponse: Codable, Sendable {
     public let ok: Bool?
-    public let storeId: String
-
-    enum CodingKeys: String, CodingKey {
-        case ok
-        case storeId = "store_id"
-    }
+    public let id: String
 }
 
-/// A store summary from `GET /stores`.
+/// A store summary from `GET /stores`: `{"id": "...", "topic": "..."}`.
 public struct StoreSummary: Codable, Sendable, Identifiable {
-    public var id: String { storeId }
-    public let storeId: String
-    public let name: String
+    public let id: String
     public let topic: String?
+}
 
-    enum CodingKeys: String, CodingKey {
-        case storeId = "store_id"
-        case name, topic
-    }
+/// Wrapper for `GET /stores` response.
+public struct StoreListResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let stores: [StoreSummary]
 }
 
 /// Request body for `PUT /stores/:id/:key`.

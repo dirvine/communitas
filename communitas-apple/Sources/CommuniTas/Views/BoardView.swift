@@ -208,7 +208,7 @@ struct BoardView: View {
     private func ensureBoardStore() async {
         do {
             let stores = try await appState.client.listStores()
-            if !stores.contains(where: { $0.storeId == boardStoreName || $0.name == boardStoreName }) {
+            if !stores.contains(where: { $0.id == boardStoreName }) {
                 let prefix = appState.groupPrefix(for: groupId)
                 _ = try await appState.client.createStore(name: boardStoreName, topic: "x0x.group.\(prefix).board")
             }

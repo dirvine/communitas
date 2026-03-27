@@ -209,8 +209,7 @@ struct BoardView: View {
         do {
             let stores = try await appState.client.listStores()
             if !stores.contains(where: { $0.id == boardStoreName }) {
-                let prefix = appState.groupPrefix(for: groupId)
-                _ = try await appState.client.createStore(name: boardStoreName, topic: "x0x.group.\(prefix).board")
+                _ = try await appState.client.createStore(name: boardStoreName, topic: boardStoreName)
             }
         } catch { /* store may already exist */ }
     }

@@ -216,7 +216,7 @@ struct WikiView: View {
         do {
             let stores = try await appState.client.listStores()
             if !stores.contains(where: { $0.id == storeName }) {
-                _ = try await appState.client.createStore(name: storeName, topic: "x0x.wiki.\(prefix)")
+                _ = try await appState.client.createStore(name: storeName, topic: storeName)
             }
         } catch { /* store may already exist */ }
     }

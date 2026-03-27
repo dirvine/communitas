@@ -116,6 +116,12 @@ final class AppState: ObservableObject {
             groups = []
         }
 
+        // Auto-select first group if none selected
+        if selectedGroup == nil, let first = groups.first {
+            selectedGroup = first
+            selectedChannel = "general"
+        }
+
         errorMessage = nil
     }
 

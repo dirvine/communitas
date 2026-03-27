@@ -24,11 +24,11 @@ struct WebPublishView: View {
     }
 
     private func indexKey() -> String {
-        "\(storeName):web:index"
+        "web_index"
     }
 
     private func webKey(_ path: String) -> String {
-        "\(storeName):web:\(path)"
+        "web:\(path)"
     }
 
     var body: some View {

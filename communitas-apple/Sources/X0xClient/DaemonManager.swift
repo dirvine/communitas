@@ -1,16 +1,16 @@
 import Foundation
 
-/// Manages the lifecycle of the x0x daemon (x0xd) process.
+/// Manages the lifecycle of the x0x daemon process.
 public final class DaemonManager: Sendable {
     private let client: X0xClient
 
-    /// Common install locations for the x0xd binary.
+    /// Common install locations for the x0x binary.
     private static let searchPaths: [String] = [
-        "/usr/local/bin/x0xd",
-        "/opt/homebrew/bin/x0xd",
-        "/opt/zerobrew/bin/x0xd",
-        "\(NSHomeDirectory())/.cargo/bin/x0xd",
-        "\(NSHomeDirectory())/.x0x/bin/x0xd",
+        "/usr/local/bin/x0x",
+        "/opt/homebrew/bin/x0x",
+        "/opt/zerobrew/bin/x0x",
+        "\(NSHomeDirectory())/.cargo/bin/x0x",
+        "\(NSHomeDirectory())/.x0x/bin/x0x",
     ]
 
     public init(client: X0xClient = X0xClient()) {
@@ -33,12 +33,12 @@ public final class DaemonManager: Sendable {
         }
     }
 
-    /// Check whether the x0xd binary exists on disk.
+    /// Check whether the x0x binary exists on disk.
     public func isInstalled() -> Bool {
         return binaryPath() != nil
     }
 
-    /// Find the x0xd binary path.
+    /// Find the x0x binary path.
     public func binaryPath() -> String? {
         for path in Self.searchPaths {
             if FileManager.default.isExecutableFile(atPath: path) {
@@ -48,7 +48,7 @@ public final class DaemonManager: Sendable {
         return nil
     }
 
-    /// Start the daemon process.
+    /// Start the daemon process using `x0x start`.
     public func start() async throws {
         guard let path = binaryPath() else {
             throw X0xError.daemonNotInstalled
@@ -56,7 +56,7 @@ public final class DaemonManager: Sendable {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = ["--daemon"]
+        process.arguments = ["start"]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
 
@@ -75,7 +75,8 @@ public final class DaemonManager: Sendable {
         }
     }
 
-    /// Ensure the daemon is running. Starts it if not already running.
+    /// Ensure the daemon is running. If not running, throws an error
+    /// indicating the daemon needs to be started manually.
     public func ensureRunning() async throws {
         let currentState = await state()
         switch currentState {

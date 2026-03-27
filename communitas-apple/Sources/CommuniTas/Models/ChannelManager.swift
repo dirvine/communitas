@@ -36,20 +36,32 @@ final class ChannelManager: ObservableObject {
 
     // MARK: - Topic Helpers
 
+    /// First 16 characters of the group ID, matching the Dioxus x0x_contract convention.
+    private var groupPrefix: String {
+        String(groupId.prefix(16))
+    }
+
+    /// Channel store ID: `x0x-channels-{groupPrefix}`.
+    private var channelStoreId: String {
+        "x0x-channels-\(groupPrefix)"
+    }
+
     private func channelTopic(name: String) -> String {
-        "x0x.group.\(groupId).chat/\(name)"
+        "x0x.group.\(groupPrefix).chat/\(name)"
     }
 
     private func threadTopic(parentMessageId: String) -> String {
-        "x0x.group.\(groupId).thread/\(parentMessageId)"
+        "x0x.group.\(groupPrefix).thread/\(parentMessageId)"
     }
 
+    /// Flat key inside the channel store (matches Dioxus `CHANNELS_INDEX_KEY`).
     private var channelIndexKey: String {
-        "channels.\(groupId).index"
+        "channels_index"
     }
 
+    /// Per-channel metadata key inside the channel store.
     private func channelMetaKey(name: String) -> String {
-        "channels.\(groupId).\(name).meta"
+        "channel:\(name)"
     }
 
     // MARK: - Channel Management
@@ -185,7 +197,7 @@ final class ChannelManager: ObservableObject {
     }
 
     private func startListening() {
-        let ws = X0xWebSocket()
+        let ws = X0xWebSocket(path: "/ws")
         self.webSocket = ws
         ws.connect()
 
@@ -249,10 +261,10 @@ final class ChannelManager: ObservableObject {
 
         // Track unread for other channels
         if let topic = event.topic, topic != channelTopic(name: currentChannel) {
-            // Extract channel name from topic
-            let prefix = "x0x.group.\(groupId).chat/"
-            if topic.hasPrefix(prefix) {
-                let channelName = String(topic.dropFirst(prefix.count))
+            // Extract channel name from topic using group prefix
+            let topicPrefix = "x0x.group.\(groupPrefix).chat/"
+            if topic.hasPrefix(topicPrefix) {
+                let channelName = String(topic.dropFirst(topicPrefix.count))
                 unreadCounts[channelName, default: 0] += 1
             }
         }

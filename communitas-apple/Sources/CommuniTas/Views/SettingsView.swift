@@ -34,16 +34,10 @@ struct SettingsView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
-                    if let fourWords = identity.fourWords {
-                        LabeledContent("Connection Words") {
-                            Text(fourWords)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    if let publicKey = identity.publicKey {
-                        LabeledContent("Public Key") {
-                            Text(publicKey)
-                                .font(.system(.caption2, design: .monospaced))
+                    if let machineId = identity.machineId {
+                        LabeledContent("Machine ID") {
+                            Text(machineId)
+                                .font(.system(.caption, design: .monospaced))
                                 .textSelection(.enabled)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -57,7 +51,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("App") {
-                    Text("CommuniTas")
+                    Text("Communitas")
                 }
                 LabeledContent("Framework") {
                     Text("SwiftUI + x0x")

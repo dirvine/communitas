@@ -24,11 +24,11 @@ struct WikiView: View {
     }
 
     private func indexKey() -> String {
-        "\(storeName):wiki:index"
+        "wiki_index"
     }
 
     private func pageKey(_ slug: String) -> String {
-        "\(storeName):wiki:\(slug)"
+        "wiki:\(slug)"
     }
 
     var body: some View {

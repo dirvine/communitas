@@ -5,8 +5,12 @@ public final class X0xWebSocket: NSObject, Sendable {
     private let url: URL
     private let task: URLSessionWebSocketTask
 
-    /// Creates a WebSocket connection to the daemon events endpoint.
-    public init(baseURL: URL = URL(string: "ws://127.0.0.1:12700")!, path: String = "/events") {
+    /// Creates a WebSocket connection to the daemon.
+    /// - Parameters:
+    ///   - baseURL: The base WebSocket URL (default: `ws://127.0.0.1:12700`).
+    ///   - path: The endpoint path. Use `/ws` for the general-purpose WebSocket
+    ///           or `/ws/direct` for direct-message WebSocket.
+    public init(baseURL: URL = URL(string: "ws://127.0.0.1:12700")!, path: String = "/ws") {
         guard let wsURL = URL(string: path, relativeTo: baseURL) else {
             fatalError("Invalid WebSocket URL: \(baseURL)\(path)")
         }
@@ -18,6 +22,11 @@ public final class X0xWebSocket: NSObject, Sendable {
     /// Connect and begin receiving messages.
     public func connect() {
         task.resume()
+    }
+
+    /// Send a JSON message to the server.
+    public func send(_ text: String) async throws {
+        try await task.send(.string(text))
     }
 
     /// Receive the next message as a string.

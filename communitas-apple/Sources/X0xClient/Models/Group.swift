@@ -31,18 +31,23 @@ public struct CreatedGroup: Codable, Sendable {
 }
 
 /// Summary of a group the agent is a member of.
+/// ```json
+/// {"group_id":"hex","name":"...","description":"","creator":"hex","created_at":1234,"member_count":1}
+/// ```
 public struct GroupSummary: Codable, Sendable, Identifiable, Hashable {
     public var id: String { groupId }
     public let groupId: String
     public let name: String
-    public let memberCount: UInt64?
     public let description: String?
+    public let creator: String?
+    public let createdAt: UInt64?
+    public let memberCount: UInt64?
 
     enum CodingKeys: String, CodingKey {
         case groupId = "group_id"
-        case name
+        case name, description, creator
+        case createdAt = "created_at"
         case memberCount = "member_count"
-        case description
     }
 }
 

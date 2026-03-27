@@ -84,25 +84,27 @@ struct X0xClientTests {
         #expect(dict["payload"] == "aGVsbG8=")
     }
 
-    @Test("ApiResponse decodes envelope with data")
-    func apiResponseDecoding() throws {
+    @Test("HealthStatus decodes flat response")
+    func healthStatusDecoding() throws {
         let json = """
         {
             "ok": true,
-            "data": {
-                "status": "healthy",
-                "version": "0.1.0"
-            }
+            "status": "healthy",
+            "version": "0.10.0",
+            "peers": 4,
+            "uptime_secs": 300
         }
         """
         let data = Data(json.utf8)
-        let response = try JSONDecoder().decode(ApiResponse<HealthStatus>.self, from: data)
-        #expect(response.ok)
-        #expect(response.data?.status == "healthy")
-        #expect(response.data?.version == "0.1.0")
+        let health = try JSONDecoder().decode(HealthStatus.self, from: data)
+        #expect(health.ok == true)
+        #expect(health.status == "healthy")
+        #expect(health.version == "0.10.0")
+        #expect(health.peers == 4)
+        #expect(health.uptimeSecs == 300)
     }
 
-    @Test("ApiResponse decodes error envelope")
+    @Test("ApiEnvelope decodes error response")
     func apiErrorDecoding() throws {
         let json = """
         {
@@ -111,10 +113,117 @@ struct X0xClientTests {
         }
         """
         let data = Data(json.utf8)
-        let response = try JSONDecoder().decode(ApiResponse<HealthStatus>.self, from: data)
-        #expect(!response.ok)
-        #expect(response.error == "not found")
-        #expect(response.data == nil)
+        let envelope = try JSONDecoder().decode(ApiEnvelope.self, from: data)
+        #expect(!envelope.ok)
+        #expect(envelope.error == "not found")
+    }
+
+    @Test("DaemonStatus decodes flat response")
+    func daemonStatusDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "status": "connected",
+            "version": "0.10.0",
+            "uptime_secs": 300,
+            "api_address": "127.0.0.1:12700",
+            "external_addrs": ["203.0.113.5:5483"],
+            "agent_id": "8a3f0000",
+            "peers": 4,
+            "warnings": []
+        }
+        """
+        let data = Data(json.utf8)
+        let status = try JSONDecoder().decode(DaemonStatus.self, from: data)
+        #expect(status.status == "connected")
+        #expect(status.uptimeSecs == 300)
+        #expect(status.apiAddress == "127.0.0.1:12700")
+        #expect(status.agentId == "8a3f0000")
+        #expect(status.peers == 4)
+    }
+
+    @Test("AgentIdentity decodes flat response")
+    func agentIdentityDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "agent_id": "hex64abc",
+            "machine_id": "hex64def",
+            "user_id": null
+        }
+        """
+        let data = Data(json.utf8)
+        let agent = try JSONDecoder().decode(AgentIdentity.self, from: data)
+        #expect(agent.agentId == "hex64abc")
+        #expect(agent.machineId == "hex64def")
+        #expect(agent.userId == nil)
+    }
+
+    @Test("ContactListResponse decodes wrapped list")
+    func contactListDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "contacts": [
+                {"agent_id": "abc", "trust_level": "known", "label": "Alice", "added_at": 1234, "last_seen": null}
+            ]
+        }
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(ContactListResponse.self, from: data)
+        #expect(resp.contacts.count == 1)
+        #expect(resp.contacts[0].agentId == "abc")
+    }
+
+    @Test("GroupListResponse decodes wrapped list")
+    func groupListDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "groups": [
+                {"group_id": "grp1", "name": "Team", "description": "", "creator": "abc", "created_at": 1234, "member_count": 3}
+            ]
+        }
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(GroupListResponse.self, from: data)
+        #expect(resp.groups.count == 1)
+        #expect(resp.groups[0].creator == "abc")
+    }
+
+    @Test("NetworkStatus decodes flat response")
+    func networkStatusDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "avg_rtt_ms": 76.5,
+            "can_receive_direct": true,
+            "connected_peers": 4,
+            "direct_connections": 11,
+            "external_addrs": ["203.0.113.5:5483"],
+            "hole_punch_success_rate": 0.0,
+            "nat_type": "FullCone"
+        }
+        """
+        let data = Data(json.utf8)
+        let status = try JSONDecoder().decode(NetworkStatus.self, from: data)
+        #expect(status.connectedPeers == 4)
+        #expect(status.natType == "FullCone")
+        #expect(status.externalAddrs?.count == 1)
+    }
+
+    @Test("PeerListResponse decodes wrapped list")
+    func peerListDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "peers": ["peer1", "peer2", "peer3"]
+        }
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(PeerListResponse.self, from: data)
+        #expect(resp.peers.count == 3)
+        #expect(resp.peerInfos[0].peerId == "peer1")
     }
 
     @Test("ChatMessage creates from gossip payload")

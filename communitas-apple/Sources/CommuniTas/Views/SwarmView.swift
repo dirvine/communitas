@@ -304,7 +304,7 @@ struct SwarmView: View {
     }
 
     private func startListening() {
-        let ws = X0xWebSocket()
+        let ws = X0xWebSocket(path: "/ws")
         self.webSocket = ws
         ws.connect()
 

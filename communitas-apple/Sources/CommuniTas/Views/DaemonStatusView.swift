@@ -80,11 +80,13 @@ struct DaemonStatusView: View {
                             .truncationMode(.middle)
                     }
 
-                    if let fourWords = identity.fourWords {
-                        LabeledContent("Connection Words") {
-                            Text(fourWords)
+                    if let machineId = identity.machineId {
+                        LabeledContent("Machine ID") {
+                            Text(machineId)
                                 .font(.system(.body, design: .monospaced))
                                 .textSelection(.enabled)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
                     }
 

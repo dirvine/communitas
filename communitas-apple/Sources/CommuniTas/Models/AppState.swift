@@ -51,7 +51,7 @@ final class AppState: ObservableObject {
     @Published var contacts: [Contact] = []
     @Published var groups: [GroupSummary] = []
     @Published var errorMessage: String?
-    @Published var selectedNavigation: NavigationItem? = .status
+    @Published var selectedNavigation: NavigationItem? = .dashboard
 
     /// Active channel managers keyed by group ID.
     @Published var channelManagers: [String: ChannelManager] = [:]

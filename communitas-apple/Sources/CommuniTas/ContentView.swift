@@ -33,7 +33,7 @@ struct ContentView: View {
                         .environmentObject(appState)
                 }
         }
-        .navigationTitle("CommuniTas")
+        .navigationTitle("Communitas")
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {

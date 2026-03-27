@@ -59,13 +59,13 @@ struct DashboardView: View {
             )
             StatCard(
                 title: "Peers",
-                value: daemonStatus?.peerCount.map { "\($0)" } ?? "0",
+                value: daemonStatus?.peers.map { "\($0)" } ?? healthStatus?.peers.map { "\($0)" } ?? "0",
                 icon: "person.2",
                 color: DeepSpace.violet
             )
             StatCard(
                 title: "Uptime",
-                value: formatUptime(healthStatus?.uptime),
+                value: formatUptime(healthStatus?.uptimeSecs),
                 icon: "clock",
                 color: DeepSpace.amber
             )
@@ -79,8 +79,8 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if let identity = appState.agentIdentity {
                     copyableRow(label: "Agent ID", value: identity.agentId)
-                    if let fourWords = identity.fourWords {
-                        copyableRow(label: "Connection Words", value: fourWords)
+                    if let machineId = identity.machineId {
+                        copyableRow(label: "Machine ID", value: machineId)
                     }
                 } else {
                     Text("Not connected to daemon")

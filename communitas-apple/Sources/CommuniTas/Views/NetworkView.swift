@@ -45,25 +45,25 @@ struct NetworkView: View {
         LazyVGrid(columns: statsColumns, spacing: 12) {
             StatCard(
                 title: "Status",
-                value: networkStatus?.connected == true ? "Connected" : "Disconnected",
+                value: (networkStatus?.connectedPeers ?? 0) > 0 ? "Connected" : "Disconnected",
                 icon: "wifi",
-                color: networkStatus?.connected == true ? DeepSpace.green : DeepSpace.red
+                color: (networkStatus?.connectedPeers ?? 0) > 0 ? DeepSpace.green : DeepSpace.red
             )
             StatCard(
                 title: "Peers",
-                value: "\(networkStatus?.peerCount ?? 0)",
+                value: "\(networkStatus?.connectedPeers ?? 0)",
                 icon: "person.2",
                 color: DeepSpace.cyan
             )
             StatCard(
-                title: "Connected",
-                value: "\(peers.count)",
+                title: "NAT Type",
+                value: networkStatus?.natType ?? "--",
                 icon: "link",
                 color: DeepSpace.violet
             )
             StatCard(
                 title: "Addresses",
-                value: "\(networkStatus?.listenAddresses?.count ?? 0)",
+                value: "\(networkStatus?.externalAddrs?.count ?? 0)",
                 icon: "globe",
                 color: DeepSpace.amber
             )
@@ -74,7 +74,7 @@ struct NetworkView: View {
 
     private var listenAddresses: some View {
         GroupBox {
-            if let addrs = networkStatus?.listenAddresses, !addrs.isEmpty {
+            if let addrs = networkStatus?.externalAddrs, !addrs.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(addrs, id: \.self) { addr in
                         HStack {
@@ -133,10 +133,6 @@ struct NetworkView: View {
                     HStack {
                         Text("Peer ID")
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Address")
-                            .frame(width: 180, alignment: .leading)
-                        Text("Latency")
-                            .frame(width: 80, alignment: .trailing)
                     }
                     .font(.caption2)
                     .fontWeight(.semibold)
@@ -155,15 +151,6 @@ struct NetworkView: View {
                                 .foregroundStyle(DeepSpace.textPrimary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .lineLimit(1)
-                            Text(peer.address ?? "--")
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundStyle(DeepSpace.textSecondary)
-                                .frame(width: 180, alignment: .leading)
-                                .lineLimit(1)
-                            Text(peer.latency.map { "\($0)ms" } ?? "--")
-                                .font(.caption2)
-                                .foregroundStyle(DeepSpace.textSecondary)
-                                .frame(width: 80, alignment: .trailing)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
@@ -171,12 +158,6 @@ struct NetworkView: View {
                             Button("Copy Peer ID") {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(peer.peerId, forType: .string)
-                            }
-                            if let address = peer.address {
-                                Button("Copy Address") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(address, forType: .string)
-                                }
                             }
                         }
                     }

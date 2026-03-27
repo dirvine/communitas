@@ -2,6 +2,12 @@
 //!
 //! Supports the daemon's `/ws` and `/ws/direct` endpoints. Note that `/events`
 //! and `/direct/events` are server-sent event streams, not WebSocket endpoints.
+//!
+//! Authentication is handled by appending `?token=<token>` to the WebSocket URL,
+//! as required by the x0xd WebSocket API. Use [`X0xWebSocket::connect`] or
+//! [`X0xWebSocket::connect_direct`] with auto-discovery, or
+//! [`X0xWebSocket::connect_with_token`] / [`X0xWebSocket::connect_direct_with_token`]
+//! when you already have a token.
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
@@ -16,6 +22,11 @@ use crate::types::{WsInbound, WsOutbound};
 /// Provides typed send/receive for the x0x WebSocket protocol.
 /// The connection is maintained by a background task; dropping the
 /// handle closes the connection.
+///
+/// Authentication is performed by appending `?token=<token>` to the WebSocket
+/// URL. Use [`X0xWebSocket::connect`] to auto-discover the token from the x0xd
+/// config files, or [`X0xWebSocket::connect_with_token`] when you already have
+/// a [`crate::config::X0xConfig`].
 pub struct X0xWebSocket {
     tx: mpsc::UnboundedSender<WsOutbound>,
     rx: mpsc::UnboundedReceiver<WsInbound>,
@@ -23,13 +34,58 @@ pub struct X0xWebSocket {
 
 impl X0xWebSocket {
     /// Connect to the daemon's general-purpose WebSocket endpoint.
+    ///
+    /// Attempts to auto-discover the daemon address and token from x0xd config
+    /// files. Falls back to `ws://127.0.0.1:12700/ws` with no token if the
+    /// config files are not found.
     pub async fn connect() -> Result<Self> {
-        Self::connect_to("ws://127.0.0.1:12700/ws").await
+        match crate::config::discover() {
+            Ok(cfg) => Self::connect_with_config(&cfg, "/ws").await,
+            Err(e) => {
+                tracing::debug!(
+                    "x0x config discovery failed ({e}); falling back to ws://127.0.0.1:12700/ws with no token"
+                );
+                Self::connect_to("ws://127.0.0.1:12700/ws").await
+            }
+        }
     }
 
     /// Connect to the daemon's direct-message WebSocket endpoint.
+    ///
+    /// Attempts to auto-discover the daemon address and token from x0xd config
+    /// files. Falls back to `ws://127.0.0.1:12700/ws/direct` with no token if
+    /// the config files are not found.
     pub async fn connect_direct() -> Result<Self> {
-        Self::connect_to("ws://127.0.0.1:12700/ws/direct").await
+        match crate::config::discover() {
+            Ok(cfg) => Self::connect_with_config(&cfg, "/ws/direct").await,
+            Err(e) => {
+                tracing::debug!(
+                    "x0x config discovery failed ({e}); falling back to ws://127.0.0.1:12700/ws/direct with no token"
+                );
+                Self::connect_to("ws://127.0.0.1:12700/ws/direct").await
+            }
+        }
+    }
+
+    /// Connect to the general-purpose WebSocket endpoint using an explicit token.
+    pub async fn connect_with_token(address: &str, token: &str) -> Result<Self> {
+        let url = format!("ws://{address}/ws?token={token}");
+        Self::connect_to(&url).await
+    }
+
+    /// Connect to the direct-message WebSocket endpoint using an explicit token.
+    pub async fn connect_direct_with_token(address: &str, token: &str) -> Result<Self> {
+        let url = format!("ws://{address}/ws/direct?token={token}");
+        Self::connect_to(&url).await
+    }
+
+    /// Connect using a discovered [`crate::config::X0xConfig`] and a path (e.g. `/ws`).
+    async fn connect_with_config(
+        cfg: &crate::config::X0xConfig,
+        path: &str,
+    ) -> Result<Self> {
+        let url = format!("ws://{}{}?token={}", cfg.address, path, cfg.token);
+        Self::connect_to(&url).await
     }
 
     /// Connect to a custom WebSocket URL.

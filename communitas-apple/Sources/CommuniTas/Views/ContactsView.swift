@@ -43,6 +43,9 @@ struct ContactsView: View {
     private var contactList: some View {
         List(appState.contacts, selection: $selectedContact) { contact in
             HStack {
+                // Presence dot
+                PresenceDot(isOnline: appState.onlineAgents.contains(contact.agentId))
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(contact.label ?? truncatedId(contact.agentId))
                         .font(.headline)

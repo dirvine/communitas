@@ -26,8 +26,12 @@ base64 = "0.22"
 # Error handling
 thiserror = { workspace = true }
 
+# Platform directories (for x0x config discovery)
+dirs-next = "2"
+
 # Logging
 tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
+tempfile = "3"

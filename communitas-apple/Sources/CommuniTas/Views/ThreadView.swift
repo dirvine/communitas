@@ -123,9 +123,7 @@ struct ThreadView: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
-                Text(parentMessage.text)
-                    .font(.body)
-                    .textSelection(.enabled)
+                MarkdownMessageView(text: parentMessage.text)
 
                 Text("\(replies.count) \(replies.count == 1 ? "reply" : "replies")")
                     .font(.caption)
@@ -166,9 +164,7 @@ struct ThreadView: View {
                             .foregroundStyle(.orange)
                     }
                 }
-                Text(reply.text)
-                    .font(.body)
-                    .textSelection(.enabled)
+                MarkdownMessageView(text: reply.text)
             }
 
             Spacer()

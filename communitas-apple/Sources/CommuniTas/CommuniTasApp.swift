@@ -11,6 +11,7 @@ struct CommuniTasApp: App {
                 .task {
                     NotificationService.shared.requestPermission()
                     await appState.refresh()
+                    appState.startPresencePolling()
                 }
                 .onAppear {
                     // Request notification permission on launch

@@ -111,6 +111,43 @@ impl PinnedThreads {
     }
 }
 
+/// Maximum number of pinned messages allowed per thread.
+pub const MAX_PINNED_MESSAGES: usize = 25;
+
+/// Persisted list of pinned message IDs for a single thread.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PinnedMessages {
+    /// Ordered list of pinned message IDs (most recently pinned last).
+    pub message_ids: Vec<String>,
+}
+
+impl PinnedMessages {
+    /// Check if a message is pinned.
+    pub fn is_pinned(&self, message_id: &str) -> bool {
+        self.message_ids.contains(&message_id.to_string())
+    }
+
+    /// Pin a message. Returns `true` if newly pinned, `false` if already pinned.
+    /// Returns an error message if the limit would be exceeded.
+    pub fn pin(&mut self, message_id: &str) -> Result<bool, &'static str> {
+        if self.is_pinned(message_id) {
+            return Ok(false);
+        }
+        if self.message_ids.len() >= MAX_PINNED_MESSAGES {
+            return Err("Maximum number of pinned messages reached");
+        }
+        self.message_ids.push(message_id.to_string());
+        Ok(true)
+    }
+
+    /// Unpin a message. Returns `true` if unpinned, `false` if it wasn't pinned.
+    pub fn unpin(&mut self, message_id: &str) -> bool {
+        let initial_len = self.message_ids.len();
+        self.message_ids.retain(|id| id != message_id);
+        self.message_ids.len() < initial_len
+    }
+}
+
 /// Typing indicator state with auto-expire tracking.
 ///
 /// Tracks which users are typing in each thread, with timestamps for auto-expiration.
@@ -195,6 +232,9 @@ pub struct MessagingService {
     typing_state: Arc<RwLock<TypingState>>,
     /// Persistent pinned threads (shared between service and event loop).
     pinned_threads: Arc<RwLock<PinnedThreads>>,
+    /// In-memory cache of pinned message IDs, keyed by thread_id.
+    /// Each thread's pinned messages are loaded on demand and then cached.
+    pinned_messages: Arc<RwLock<HashMap<String, PinnedMessages>>>,
     /// Presence state receiver for DM thread contact presence.
     presence_rx: watch::Receiver<PresenceSnapshot>,
     /// Pending messages (offline send queue).
@@ -256,6 +296,10 @@ impl MessagingService {
         };
         let pending_messages = Arc::new(RwLock::new(pending_messages));
 
+        // Pinned messages cache is populated lazily on first access per thread.
+        let pinned_messages: Arc<RwLock<HashMap<String, PinnedMessages>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+
         // Subscribe to message events for reactive updates
         let event_rx = app.subscribe(Subscription::MessageEvents);
 
@@ -299,6 +343,7 @@ impl MessagingService {
             active_thread,
             typing_state,
             pinned_threads,
+            pinned_messages,
             presence_rx,
             pending_messages,
         }
@@ -1382,6 +1427,150 @@ impl MessagingService {
             .unwrap_or_default()
     }
 
+    // ==================== Per-Message Pin Methods ====================
+
+    /// Load pinned messages for a thread from disk into the in-memory cache.
+    ///
+    /// This is called lazily the first time we need pinned message data for a thread.
+    fn ensure_pinned_messages_loaded(&self, thread_id: &str) {
+        // Check if already in cache (fast path under read lock).
+        if let Ok(cache) = self.pinned_messages.read() {
+            if cache.contains_key(thread_id) {
+                return;
+            }
+        }
+        // Not cached — load from disk under write lock.
+        if let Ok(mut cache) = self.pinned_messages.write() {
+            // Double-check after acquiring write lock to avoid races.
+            if cache.contains_key(thread_id) {
+                return;
+            }
+            let path = self.storage.pinned_messages_file(thread_id);
+            let data = match JsonFile::load(&path) {
+                Ok(Some(pm)) => pm,
+                Ok(None) => PinnedMessages::default(),
+                Err(e) => {
+                    warn!(error = %e, thread_id, "Failed to load pinned messages, using defaults");
+                    PinnedMessages::default()
+                }
+            };
+            cache.insert(thread_id.to_string(), data);
+        }
+    }
+
+    /// Persist pinned messages for a thread to disk.
+    fn persist_pinned_messages(&self, thread_id: &str) {
+        if let Ok(cache) = self.pinned_messages.read() {
+            if let Some(pm) = cache.get(thread_id) {
+                let path = self.storage.pinned_messages_file(thread_id);
+                if let Err(e) = JsonFile::save(&path, pm) {
+                    warn!(error = %e, thread_id, "Failed to persist pinned messages");
+                }
+            }
+        }
+    }
+
+    /// Pin a message in a thread.
+    ///
+    /// Up to [`MAX_PINNED_MESSAGES`] messages may be pinned per thread.
+    ///
+    /// # Returns
+    /// - `Ok(true)` if the message was newly pinned.
+    /// - `Ok(false)` if the message was already pinned.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the pin limit would be exceeded or lock fails.
+    #[instrument(skip(self), name = "ui.messaging.pin_message", fields(thread_id, message_id))]
+    pub async fn pin_message(
+        &self,
+        thread_id: &str,
+        message_id: &str,
+    ) -> Result<bool, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        self.ensure_pinned_messages_loaded(thread_id);
+
+        let newly_pinned = {
+            let mut cache = self.pinned_messages.write().map_err(|_| {
+                MessagingError::Internal("Failed to acquire pinned messages lock".to_string())
+            })?;
+            let pm = cache.entry(thread_id.to_string()).or_default();
+            match pm.pin(message_id) {
+                Ok(result) => result,
+                Err(e) => return Err(MessagingError::Internal(e.to_string())),
+            }
+        };
+
+        if newly_pinned {
+            self.persist_pinned_messages(thread_id);
+            debug!(thread_id, message_id, "Message pinned");
+        }
+
+        Ok(newly_pinned)
+    }
+
+    /// Unpin a message in a thread.
+    ///
+    /// # Returns
+    /// - `Ok(true)` if the message was unpinned.
+    /// - `Ok(false)` if the message wasn't pinned.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the lock cannot be acquired.
+    #[instrument(skip(self), name = "ui.messaging.unpin_message", fields(thread_id, message_id))]
+    pub async fn unpin_message(
+        &self,
+        thread_id: &str,
+        message_id: &str,
+    ) -> Result<bool, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        self.ensure_pinned_messages_loaded(thread_id);
+
+        let was_unpinned = {
+            let mut cache = self.pinned_messages.write().map_err(|_| {
+                MessagingError::Internal("Failed to acquire pinned messages lock".to_string())
+            })?;
+            cache
+                .entry(thread_id.to_string())
+                .or_default()
+                .unpin(message_id)
+        };
+
+        if was_unpinned {
+            self.persist_pinned_messages(thread_id);
+            debug!(thread_id, message_id, "Message unpinned");
+        }
+
+        Ok(was_unpinned)
+    }
+
+    /// Return the ordered list of pinned message IDs for a thread.
+    pub fn get_pinned_message_ids(&self, thread_id: &str) -> Vec<String> {
+        self.ensure_pinned_messages_loaded(thread_id);
+        self.pinned_messages
+            .read()
+            .ok()
+            .and_then(|cache| cache.get(thread_id).map(|pm| pm.message_ids.clone()))
+            .unwrap_or_default()
+    }
+
+    /// Check whether a specific message is currently pinned in its thread.
+    pub fn is_message_pinned(&self, thread_id: &str, message_id: &str) -> bool {
+        self.ensure_pinned_messages_loaded(thread_id);
+        self.pinned_messages
+            .read()
+            .ok()
+            .and_then(|cache| cache.get(thread_id).map(|pm| pm.is_pinned(message_id)))
+            .unwrap_or(false)
+    }
+
     // ==================== Typing Indicator Methods ====================
 
     /// Get the list of users currently typing in a thread.
@@ -2112,6 +2301,7 @@ mod tests {
             edited: false,
             reply_to_id: None,
             reactions: vec![],
+            is_pinned: false,
         }
     }
 

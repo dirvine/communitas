@@ -259,7 +259,7 @@ struct DirectMessageView: View {
     }
 
     private func startListening(contact: Contact) {
-        let ws = X0xWebSocket(path: "/ws/direct")
+        let ws = X0xWebSocket(baseURL: appState.client.webSocketBaseURL, path: "/ws/direct", token: appState.client.token)
         self.webSocket = ws
         ws.connect()
 

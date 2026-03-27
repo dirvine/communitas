@@ -1007,10 +1007,12 @@ name = "communitas-x0x-client"
 version = "0.8.6"
 dependencies = [
  "base64 0.22.1",
+ "dirs-next",
  "futures-util",
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite",

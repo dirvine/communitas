@@ -7,6 +7,7 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
+use crate::config::X0xConfig;
 use crate::error::{Result, X0xError};
 use crate::types::*;
 
@@ -16,6 +17,12 @@ use crate::types::*;
 /// This crate is explicitly frozen to REST + WebSocket only; SSE endpoints such
 /// as `/events` and `/direct/events` are intentionally out of scope.
 /// All methods are async and return typed responses.
+///
+/// Authentication is handled automatically: the client reads the `api.port` and
+/// `api-token` files written by x0xd and attaches `Authorization: Bearer <token>`
+/// to every request. If the config files are absent (e.g. during development
+/// before x0xd has been started), it falls back to `http://127.0.0.1:12700`
+/// with no token.
 #[derive(Debug, Clone)]
 pub struct X0xClient {
     base_url: String,
@@ -23,17 +30,76 @@ pub struct X0xClient {
 }
 
 impl X0xClient {
-    /// Create a new client pointing at the default daemon address.
+    /// Create a new client.
+    ///
+    /// Attempts to auto-discover the x0x daemon address and Bearer token from
+    /// the x0xd config files (`api.port` and `api-token`). Falls back to
+    /// `http://127.0.0.1:12700` with no authentication if the files are not
+    /// found, preserving backward compatibility for environments where x0xd has
+    /// not yet written its config.
     pub fn new() -> Self {
-        Self::with_base_url("http://127.0.0.1:12700")
+        match crate::config::discover() {
+            Ok(cfg) => Self::from_config(cfg),
+            Err(e) => {
+                tracing::debug!(
+                    "x0x config discovery failed ({e}); falling back to http://127.0.0.1:12700 with no auth"
+                );
+                Self::with_base_url("http://127.0.0.1:12700")
+            }
+        }
     }
 
-    /// Create a new client pointing at a custom base URL.
+    /// Create a client from a discovered [`X0xConfig`].
+    ///
+    /// The Bearer token is attached to every outgoing request via a default
+    /// header so callers never need to manage it manually.
+    pub fn from_config(config: X0xConfig) -> Self {
+        let base_url = format!("http://{}", config.address.trim_end_matches('/'));
+        let client = Self::build_authenticated_client(&config.token);
+        Self { base_url, client }
+    }
+
+    /// Discover the x0x daemon config and create an authenticated client.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`X0xError::Config`] if the `api.port` or `api-token` files
+    /// cannot be read, or [`X0xError::Http`] if the reqwest client cannot be
+    /// constructed.
+    pub fn discover() -> Result<Self> {
+        let cfg = crate::config::discover()?;
+        Ok(Self::from_config(cfg))
+    }
+
+    /// Create a new client pointing at a custom base URL with no authentication.
     pub fn with_base_url(base_url: &str) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_owned(),
             client: reqwest::Client::new(),
         }
+    }
+
+    /// Create a new client pointing at a custom base URL with an explicit Bearer token.
+    pub fn with_base_url_and_token(base_url: &str, token: &str) -> Self {
+        Self {
+            base_url: base_url.trim_end_matches('/').to_owned(),
+            client: Self::build_authenticated_client(token),
+        }
+    }
+
+    /// Build a `reqwest::Client` that injects `Authorization: Bearer <token>`
+    /// into every request.
+    fn build_authenticated_client(token: &str) -> reqwest::Client {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Ok(value) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+            headers.insert(reqwest::header::AUTHORIZATION, value);
+        } else {
+            tracing::warn!("x0x api token contains non-ASCII characters; auth header not set");
+        }
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .build()
+            .unwrap_or_default()
     }
 
     // ── helpers ──────────────────────────────────────────────────────────

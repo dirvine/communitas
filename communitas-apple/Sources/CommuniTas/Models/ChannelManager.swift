@@ -18,8 +18,26 @@ final class ChannelManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    /// Pinned message IDs for the current channel (loaded from KV store).
+    @Published var pinnedMessageIds: [String] = []
+
+    /// Maximum number of pinned messages per channel.
+    private let maxPins = 25
+
+    /// Typing users: keyed by senderId, value is (name, lastSeen).
+    @Published var typingUsers: [String: (name: String, lastSeen: Date)] = [:]
+
+    /// Tracks (messageId:emoji:senderId) triples we have seen to prevent duplicate reactions.
+    private var seenReactions: Set<String> = []
+
     private var webSocket: X0xWebSocket?
     private var listeningTask: Task<Void, Never>?
+
+    /// Last time a typing event was sent (for throttling to max 1 per 2 seconds).
+    private var lastTypingSent: Date?
+
+    /// Timer for expiring stale typing users (3-second timeout).
+    private var typingCleanupTimer: Timer?
 
     init(client: X0xClient, groupId: String, groupName: String, agentId: String, displayName: String) {
         self.client = client
@@ -32,6 +50,7 @@ final class ChannelManager: ObservableObject {
     deinit {
         listeningTask?.cancel()
         webSocket?.disconnect()
+        typingCleanupTimer?.invalidate()
     }
 
     // MARK: - Topic Helpers
@@ -200,6 +219,61 @@ final class ChannelManager: ObservableObject {
 
     // MARK: - Channel Subscription
 
+    // MARK: - Pinned Messages
+
+    private func pinnedMessagesKey(channel: String) -> String {
+        "pinned_messages_\(channel)"
+    }
+
+    /// Load pinned message IDs for the given channel from the KV store.
+    func loadPinnedMessages(channel: String) async {
+        do {
+            let json = try await client.storeGet(storeId: channelStoreId, key: pinnedMessagesKey(channel: channel))
+            guard let data = json.data(using: .utf8),
+                  let ids = try? JSONDecoder().decode([String].self, from: data) else { return }
+            pinnedMessageIds = ids
+        } catch {
+            pinnedMessageIds = []
+        }
+    }
+
+    private func savePinnedMessages(channel: String, ids: [String]) async throws {
+        let data = try JSONEncoder().encode(ids)
+        guard let json = String(data: data, encoding: .utf8) else { return }
+        try await client.storePut(storeId: channelStoreId, key: pinnedMessagesKey(channel: channel), value: json)
+    }
+
+    /// Pin a message in the current channel. Enforces 25-pin limit.
+    func pinMessage(messageId: String) async {
+        guard !pinnedMessageIds.contains(messageId) else { return }
+        guard pinnedMessageIds.count < maxPins else {
+            errorMessage = "Cannot pin more than \(maxPins) messages per channel."
+            return
+        }
+        var updated = pinnedMessageIds
+        updated.append(messageId)
+        do {
+            try await savePinnedMessages(channel: currentChannel, ids: updated)
+            pinnedMessageIds = updated
+        } catch {
+            errorMessage = "Failed to pin message: \(error.localizedDescription)"
+        }
+    }
+
+    /// Unpin a message in the current channel.
+    func unpinMessage(messageId: String) async {
+        var updated = pinnedMessageIds
+        updated.removeAll { $0 == messageId }
+        do {
+            try await savePinnedMessages(channel: currentChannel, ids: updated)
+            pinnedMessageIds = updated
+        } catch {
+            errorMessage = "Failed to unpin message: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Channel Subscription
+
     /// Subscribe to the current channel and start listening for messages.
     func subscribeToChannel(name: String) async {
         currentChannel = name
@@ -216,12 +290,15 @@ final class ChannelManager: ObservableObject {
             errorMessage = "Failed to subscribe: \(error.localizedDescription)"
         }
 
+        // Load pinned messages for the new channel
+        await loadPinnedMessages(channel: name)
+
         // Start WebSocket listener
         startListening()
     }
 
     private func startListening() {
-        let ws = X0xWebSocket(path: "/ws")
+        let ws = X0xWebSocket(baseURL: client.webSocketBaseURL, path: "/ws", token: client.token)
         self.webSocket = ws
         ws.connect()
 
@@ -256,8 +333,43 @@ final class ChannelManager: ObservableObject {
             return
         }
 
+        // Peek at the `type` field to distinguish reaction/typing events from chat messages
+        struct TypePeek: Codable { let type: String? }
+        let peeked = try? JSONDecoder().decode(TypePeek.self, from: payloadData)
+        if peeked?.type == "reaction" {
+            if let reaction = try? JSONDecoder().decode(ReactionEvent.self, from: payloadData) {
+                applyReactionEvent(reaction)
+            }
+            return
+        }
+        if peeked?.type == "typing" {
+            if let typingEvent = try? JSONDecoder().decode(TypingEvent.self, from: payloadData) {
+                // Ignore own typing events
+                guard typingEvent.senderId != agentId else { return }
+                typingUsers[typingEvent.senderId] = (name: typingEvent.senderName, lastSeen: Date())
+                scheduleTypingCleanup()
+            }
+            return
+        }
+
         guard let chatMsg = try? JSONDecoder().decode(ChannelChatMessage.self, from: payloadData) else {
             return
+        }
+
+        // Handle edit/delete events
+        switch chatMsg.type {
+        case .edit:
+            if let targetId = chatMsg.messageId {
+                applyEdit(messageId: targetId, newText: chatMsg.text, editedAt: chatMsg.timestamp)
+            }
+            return
+        case .delete:
+            if let targetId = chatMsg.messageId {
+                applyDelete(messageId: targetId)
+            }
+            return
+        case .message:
+            break
         }
 
         let expectedTopic = channelTopic(name: currentChannel)
@@ -296,17 +408,84 @@ final class ChannelManager: ObservableObject {
         }
     }
 
+    // MARK: - Edit / Delete helpers
+
+    private func applyEdit(messageId: String, newText: String, editedAt: Int64) {
+        if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+            messages[idx].text = newText
+            messages[idx].editedAt = editedAt
+            saveHistory(channel: currentChannel, messages: messages)
+        }
+    }
+
+    private func applyDelete(messageId: String) {
+        if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+            messages[idx].isDeleted = true
+            saveHistory(channel: currentChannel, messages: messages)
+        }
+    }
+
+    // MARK: - Reactions
+
+    /// Returns `true` if the given agent has already reacted with this emoji on this message.
+    func hasReacted(emoji: String, messageId: String, agentId: String) -> Bool {
+        let dedupKey = "\(messageId):\(emoji):\(agentId)"
+        return seenReactions.contains(dedupKey)
+    }
+
+    /// Publish an emoji reaction (add or remove) and optimistically update local state.
+    func sendReaction(emoji: String, messageId: String, action: ReactionAction) async throws {
+        let event = ReactionEvent(
+            messageId: messageId,
+            emoji: emoji,
+            action: action,
+            senderId: agentId,
+            senderName: displayName
+        )
+        let data = try JSONEncoder().encode(event)
+        let payload = data.base64EncodedString()
+        try await client.publish(topic: channelTopic(name: currentChannel), payload: payload)
+        // Optimistic local update using same dedup logic
+        applyReactionEvent(event)
+    }
+
+    /// Apply a reaction event to local message state with per-sender deduplication.
+    private func applyReactionEvent(_ reaction: ReactionEvent) {
+        let dedupKey = "\(reaction.messageId):\(reaction.emoji):\(reaction.senderId)"
+        if reaction.action == .add {
+            guard !seenReactions.contains(dedupKey) else { return }
+            seenReactions.insert(dedupKey)
+            if let idx = messages.firstIndex(where: { $0.id == reaction.messageId }) {
+                messages[idx].reactions[reaction.emoji, default: 0] += 1
+                saveHistory(channel: currentChannel, messages: messages)
+            }
+        } else {
+            guard seenReactions.contains(dedupKey) else { return }
+            seenReactions.remove(dedupKey)
+            if let idx = messages.firstIndex(where: { $0.id == reaction.messageId }) {
+                let current = messages[idx].reactions[reaction.emoji, default: 0]
+                if current <= 1 {
+                    messages[idx].reactions.removeValue(forKey: reaction.emoji)
+                } else {
+                    messages[idx].reactions[reaction.emoji] = current - 1
+                }
+                saveHistory(channel: currentChannel, messages: messages)
+            }
+        }
+    }
+
     // MARK: - Sending Messages
 
-    /// Send a message to the current channel.
-    func sendMessage(text: String) async throws {
+    /// Send a message to the current channel, optionally quoting/replying to another message.
+    func sendMessage(text: String, replyToId: String? = nil) async throws {
         let msg = ChannelChatMessage(
             id: UUID().uuidString,
             text: text,
             senderName: displayName,
             senderId: agentId,
             timestamp: Int64(Date().timeIntervalSince1970 * 1000),
-            channel: currentChannel
+            channel: currentChannel,
+            replyToId: replyToId
         )
 
         let payload = try encodeMessagePayload(msg)
@@ -374,6 +553,45 @@ final class ChannelManager: ObservableObject {
         return threadMessages[parentMessageId] ?? []
     }
 
+    /// Publish an edit event for a message the current user sent.
+    func editMessage(messageId: String, newText: String) async throws {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = ChannelChatMessage(
+            id: UUID().uuidString,
+            text: newText,
+            senderName: displayName,
+            senderId: agentId,
+            timestamp: now,
+            channel: currentChannel,
+            messageId: messageId,
+            type: .edit,
+            editedAt: now
+        )
+        let payload = try encodeMessagePayload(event)
+        try await client.publish(topic: channelTopic(name: currentChannel), payload: payload)
+        // Apply locally
+        applyEdit(messageId: messageId, newText: newText, editedAt: now)
+    }
+
+    /// Publish a delete event for a message the current user sent.
+    func deleteMessage(messageId: String) async throws {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = ChannelChatMessage(
+            id: UUID().uuidString,
+            text: "",
+            senderName: displayName,
+            senderId: agentId,
+            timestamp: now,
+            channel: currentChannel,
+            messageId: messageId,
+            type: .delete
+        )
+        let payload = try encodeMessagePayload(event)
+        try await client.publish(topic: channelTopic(name: currentChannel), payload: payload)
+        // Apply locally
+        applyDelete(messageId: messageId)
+    }
+
     // MARK: - Payload Encoding
 
     private func encodeMessagePayload(_ msg: ChannelChatMessage) throws -> String {
@@ -381,10 +599,59 @@ final class ChannelManager: ObservableObject {
         return data.base64EncodedString()
     }
 
+    // MARK: - Typing Indicators
+
+    /// Publish a typing event to the current channel (throttled to max 1 per 2 seconds).
+    func sendTypingEvent() {
+        let now = Date()
+        if let last = lastTypingSent, now.timeIntervalSince(last) < 2.0 {
+            return
+        }
+        lastTypingSent = now
+
+        let event = TypingEvent(
+            id: UUID().uuidString,
+            senderId: agentId,
+            senderName: displayName,
+            timestamp: Int64(now.timeIntervalSince1970 * 1000)
+        )
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let data = try JSONEncoder().encode(event)
+                let payload = data.base64EncodedString()
+                try await client.publish(topic: channelTopic(name: currentChannel), payload: payload)
+            } catch {
+                // Typing events are ephemeral — silently ignore publish failures
+            }
+        }
+    }
+
+    /// Schedule or reset the timer that expires stale typing users after 3 seconds.
+    private func scheduleTypingCleanup() {
+        typingCleanupTimer?.invalidate()
+        typingCleanupTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let cutoff = Date().addingTimeInterval(-3.0)
+                let before = self.typingUsers.count
+                self.typingUsers = self.typingUsers.filter { $0.value.lastSeen > cutoff }
+                if self.typingUsers.isEmpty {
+                    self.typingCleanupTimer?.invalidate()
+                    self.typingCleanupTimer = nil
+                }
+                _ = before // suppress warning
+            }
+        }
+    }
+
     // MARK: - Cleanup
 
     func disconnect() {
         listeningTask?.cancel()
         webSocket?.disconnect()
+        typingCleanupTimer?.invalidate()
+        typingCleanupTimer = nil
     }
 }

@@ -31,6 +31,10 @@ pub fn core_message_to_ui(msg: &MessageResponse) -> Message {
         edited: msg.edited_at.is_some(),
         reply_to_id: msg.reply_to_id.clone(),
         reactions: msg.reactions.iter().map(core_reaction_to_ui).collect(),
+        // Pin state is maintained by the UI service layer, not the core.
+        // Callers that need accurate pin state should call
+        // `MessagingService::is_message_pinned` and update this field.
+        is_pinned: false,
     }
 }
 

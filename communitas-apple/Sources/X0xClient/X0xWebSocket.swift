@@ -10,13 +10,37 @@ public final class X0xWebSocket: NSObject, Sendable {
     ///   - baseURL: The base WebSocket URL (default: `ws://127.0.0.1:12700`).
     ///   - path: The endpoint path. Use `/ws` for the general-purpose WebSocket
     ///           or `/ws/direct` for direct-message WebSocket.
-    public init(baseURL: URL = URL(string: "ws://127.0.0.1:12700")!, path: String = "/ws") {
-        guard let wsURL = URL(string: path, relativeTo: baseURL) else {
-            fatalError("Invalid WebSocket URL: \(baseURL)\(path)")
+    ///   - token: Optional bearer token. When provided it is appended as `?token=<token>`
+    ///            so the daemon can authenticate the connection before the upgrade completes.
+    public init(baseURL: URL = URL(string: "ws://127.0.0.1:12700")!, path: String = "/ws", token: String? = nil) {
+        // Append the auth token as a query parameter when present.
+        let rawPath: String
+        if let token, !token.isEmpty {
+            let separator = path.contains("?") ? "&" : "?"
+            rawPath = "\(path)\(separator)token=\(token)"
+        } else {
+            rawPath = path
+        }
+
+        guard let wsURL = URL(string: rawPath, relativeTo: baseURL) else {
+            // Fall back to the base URL so we never crash; the connection will simply fail.
+            self.url = baseURL
+            self.task = URLSession.shared.webSocketTask(with: baseURL)
+            super.init()
+            return
         }
         self.url = wsURL
         self.task = URLSession.shared.webSocketTask(with: wsURL)
         super.init()
+    }
+
+    /// Convenience initialiser that derives baseURL and token from a ``X0xConfig``.
+    /// - Parameters:
+    ///   - config: The discovered daemon configuration.
+    ///   - path: The endpoint path (default `/ws`).
+    public convenience init(config: X0xConfig, path: String = "/ws") {
+        let base = config.baseWSURL ?? URL(string: "ws://127.0.0.1:12700")!
+        self.init(baseURL: base, path: path, token: config.token)
     }
 
     /// Connect and begin receiving messages.

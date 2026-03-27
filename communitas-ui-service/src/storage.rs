@@ -82,6 +82,19 @@ impl UiStorage {
         self.root.join("pending_messages.json")
     }
 
+    /// Disk location for pinned messages persistence for a specific thread.
+    ///
+    /// Each thread maintains its own file so we avoid loading all pinned
+    /// message data for every thread on startup.
+    pub fn pinned_messages_file(&self, thread_id: &str) -> PathBuf {
+        // Sanitize thread_id to make it filesystem-safe.
+        let safe_id: String = thread_id
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        self.root.join(format!("pinned_messages_{safe_id}.json"))
+    }
+
     /// Disk location for active uploads persistence (for resume support).
     pub fn active_uploads_file(&self) -> PathBuf {
         self.root.join("active_uploads.json")

@@ -453,6 +453,58 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
         }
     };
 
+    // Pinned messages panel visibility toggle.
+    let mut show_pinned_panel = use_signal(|| false);
+
+    // Pin / unpin message handler.
+    // Called when the user clicks the pin button on any message bubble.
+    // Reads the current `is_pinned` field of the message to decide direction.
+    let services_for_pin = services.clone();
+    let thread_id_for_pin = thread_id.clone();
+    let on_pin_message = move |message_id: String| {
+        let services = services_for_pin.clone();
+        let thread_id = thread_id_for_pin.clone();
+        // Determine current pin state from the messages signal.
+        let currently_pinned = messages()
+            .iter()
+            .find(|m| m.id == message_id)
+            .map(|m| m.is_pinned)
+            .unwrap_or(false);
+
+        spawn(async move {
+            let result = if currently_pinned {
+                services
+                    .messaging()
+                    .unpin_message(&thread_id, &message_id)
+                    .await
+            } else {
+                services
+                    .messaging()
+                    .pin_message(&thread_id, &message_id)
+                    .await
+            };
+
+            match result {
+                Ok(_) => {
+                    // Update is_pinned on the message in the local signal.
+                    let mut msgs = messages();
+                    if let Some(msg) = msgs.iter_mut().find(|m| m.id == message_id) {
+                        msg.is_pinned = !currently_pinned;
+                    }
+                    messages.set(msgs);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to {} message {}: {}",
+                        if currently_pinned { "unpin" } else { "pin" },
+                        message_id,
+                        e
+                    );
+                }
+            }
+        });
+    };
+
     // Send message handler
     let services_for_send = services.clone();
     let on_send = move |_| {
@@ -538,6 +590,77 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                             show_search.set(false);
                         },
                     }
+                }
+            }
+
+            // Pinned messages banner — shown when there are pinned messages in this thread.
+            {
+                let pinned_count = messages().iter().filter(|m| m.is_pinned).count();
+                if pinned_count > 0 {
+                    rsx! {
+                        button {
+                            style: format!(
+                                "display: flex; \
+                                 align-items: center; \
+                                 gap: {}; \
+                                 width: 100%; \
+                                 padding: {} {}; \
+                                 margin-bottom: {}; \
+                                 background: {}22; \
+                                 border: none; \
+                                 border-left: 3px solid {}; \
+                                 border-radius: {}; \
+                                 cursor: pointer; \
+                                 text-align: left; \
+                                 font-size: {}; \
+                                 color: {}; \
+                                 transition: background 0.15s;",
+                                spacing::XS,
+                                spacing::XS,
+                                spacing::SM,
+                                spacing::XS,
+                                semantic::WARNING,
+                                semantic::WARNING,
+                                radius::SM,
+                                typography::SIZE_XS,
+                                semantic::WARNING,
+                            ),
+                            aria_label: format!(
+                                "{} pinned {}. Click to view.",
+                                pinned_count,
+                                if pinned_count == 1 { "message" } else { "messages" }
+                            ),
+                            onclick: move |_| show_pinned_panel.set(!show_pinned_panel()),
+                            span { "\u{1F4CC}" }
+                            span {
+                                {
+                                    format!(
+                                        "{} pinned {}",
+                                        pinned_count,
+                                        if pinned_count == 1 { "message" } else { "messages" }
+                                    )
+                                }
+                            }
+                            span {
+                                style: format!("margin-left: auto; color: {};", semantic::TEXT_MUTED),
+                                if show_pinned_panel() { "\u{25B2}" } else { "\u{25BC}" }
+                            }
+                        }
+
+                        // Inline pinned messages panel (slides in below the banner).
+                        if show_pinned_panel() {
+                            PinnedMessagesPanel {
+                                messages: messages()
+                                    .into_iter()
+                                    .filter(|m| m.is_pinned)
+                                    .collect::<Vec<_>>(),
+                                on_unpin: on_pin_message.clone(),
+                                on_close: move |_| show_pinned_panel.set(false),
+                            }
+                        }
+                    }
+                } else {
+                    rsx! {}
                 }
             }
 
@@ -644,6 +767,10 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                                             },
                                             on_edit: on_edit_handler,
                                             on_delete: move |msg_id: String| show_delete_confirm.set(Some(msg_id)),
+                                            on_pin: Some(EventHandler::new({
+                                                let handler = on_pin_message.clone();
+                                                move |msg_id: String| handler(msg_id)
+                                            })),
                                             on_emoji_select: on_emoji_select.clone(),
                                             on_picker_close: move |_| show_emoji_picker.set(None),
                                             on_scroll_to: Some(EventHandler::new(move |msg_id: String| {
@@ -682,6 +809,10 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                                             },
                                             on_edit: on_edit_handler,
                                             on_delete: move |msg_id: String| show_delete_confirm.set(Some(msg_id)),
+                                            on_pin: Some(EventHandler::new({
+                                                let handler = on_pin_message.clone();
+                                                move |msg_id: String| handler(msg_id)
+                                            })),
                                             on_emoji_select: on_emoji_select.clone(),
                                             on_picker_close: move |_| show_emoji_picker.set(None),
                                             on_scroll_to: Some(EventHandler::new(move |msg_id: String| {
@@ -758,7 +889,7 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
     }
 }
 
-/// Individual chat message item with reply/react/edit/delete handlers.
+/// Individual chat message item with reply/react/edit/delete/pin handlers.
 #[component]
 fn ChatMessageItem(
     message: MessageDisplay,
@@ -767,6 +898,9 @@ fn ChatMessageItem(
     on_react: EventHandler<String>,
     #[props(default)] on_edit: Option<EventHandler<(String, String)>>,
     #[props(default)] on_delete: Option<EventHandler<String>>,
+    /// Called when the user pins or unpins the message. Payload is the message_id.
+    #[props(default)]
+    on_pin: Option<EventHandler<String>>,
     on_emoji_select: EventHandler<String>,
     on_picker_close: EventHandler<()>,
     /// Called when user clicks the inline quote to scroll to original message.
@@ -777,6 +911,7 @@ fn ChatMessageItem(
     let msg_id_for_reply = msg_id.clone();
     let msg_id_for_react = msg_id.clone();
     let msg_id_for_delete = msg_id.clone();
+    let msg_id_for_pin = msg_id.clone();
 
     rsx! {
         div {
@@ -792,6 +927,14 @@ fn ChatMessageItem(
                     on_delete.map(|handler| {
                         EventHandler::new({
                             let id = msg_id_for_delete.clone();
+                            move |_msg_id: String| handler.call(id.clone())
+                        })
+                    })
+                },
+                on_pin: {
+                    on_pin.map(|handler| {
+                        EventHandler::new({
+                            let id = msg_id_for_pin.clone();
                             move |_msg_id: String| handler.call(id.clone())
                         })
                     })
@@ -866,6 +1009,188 @@ fn EmojiPicker(on_select: EventHandler<String>, on_close: EventHandler<()>) -> E
                         move |_| on_select.call(emoji.clone())
                     },
                     "{emoji}"
+                }
+            }
+        }
+    }
+}
+
+/// Panel listing pinned messages for the current thread.
+///
+/// Displayed inline below the pinned banner when the user clicks it.
+/// Shows a compact view of each pinned message with an "Unpin" action button.
+#[component]
+fn PinnedMessagesPanel(
+    /// The list of currently pinned messages (already filtered to `is_pinned == true`).
+    messages: Vec<communitas_ui_api::Message>,
+    /// Called when the user requests to unpin a message. Payload is the message_id.
+    on_unpin: EventHandler<String>,
+    /// Called when the close button is clicked.
+    on_close: EventHandler<()>,
+) -> Element {
+    rsx! {
+        div {
+            style: format!(
+                "margin-bottom: {}; \
+                 border: 1px solid {}; \
+                 border-radius: {}; \
+                 background: {}; \
+                 overflow: hidden; \
+                 animation: fadeIn 150ms ease-out;",
+                spacing::SM,
+                semantic::BORDER_SUBTLE,
+                radius::MD,
+                semantic::BG_SECONDARY,
+            ),
+            role: "region",
+            aria_label: "Pinned messages",
+
+            // Panel header
+            div {
+                style: format!(
+                    "display: flex; \
+                     align-items: center; \
+                     justify-content: space-between; \
+                     padding: {} {}; \
+                     border-bottom: 1px solid {};",
+                    spacing::XS,
+                    spacing::SM,
+                    semantic::BORDER_SUBTLE,
+                ),
+
+                span {
+                    style: format!(
+                        "font-size: {}; \
+                         font-weight: {}; \
+                         color: {};",
+                        typography::SIZE_XS,
+                        typography::WEIGHT_SEMIBOLD,
+                        semantic::WARNING,
+                    ),
+                    "\u{1F4CC} Pinned Messages"
+                }
+
+                button {
+                    style: format!(
+                        "background: none; \
+                         border: none; \
+                         cursor: pointer; \
+                         color: {}; \
+                         font-size: {}; \
+                         padding: 0;",
+                        semantic::TEXT_MUTED,
+                        typography::SIZE_SM,
+                    ),
+                    aria_label: "Close pinned messages panel",
+                    onclick: move |_| on_close.call(()),
+                    "\u{2715}"
+                }
+            }
+
+            // Message list (scrollable, max ~5 items visible)
+            div {
+                style: format!(
+                    "max-height: 240px; \
+                     overflow-y: auto; \
+                     scrollbar-width: thin; \
+                     scrollbar-color: {} transparent;",
+                    semantic::BORDER_DEFAULT,
+                ),
+
+                if messages.is_empty() {
+                    div {
+                        style: format!(
+                            "padding: {}; \
+                             text-align: center; \
+                             color: {}; \
+                             font-size: {};",
+                            spacing::BASE,
+                            semantic::TEXT_MUTED,
+                            typography::SIZE_XS,
+                        ),
+                        "No pinned messages."
+                    }
+                }
+
+                for msg in messages.iter() {
+                    {
+                        let msg_id = msg.id.clone();
+                        let unpin_handler = on_unpin.clone();
+                        rsx! {
+                            div {
+                                key: "{msg_id}",
+                                style: format!(
+                                    "display: flex; \
+                                     align-items: flex-start; \
+                                     gap: {}; \
+                                     padding: {} {}; \
+                                     border-bottom: 1px solid {};",
+                                    spacing::SM,
+                                    spacing::XS,
+                                    spacing::SM,
+                                    semantic::BORDER_SUBTLE,
+                                ),
+
+                                // Message content
+                                div {
+                                    style: "flex: 1; min-width: 0;",
+
+                                    span {
+                                        style: format!(
+                                            "display: block; \
+                                             font-size: {}; \
+                                             font-weight: {}; \
+                                             color: {}; \
+                                             margin-bottom: {};",
+                                            typography::SIZE_XXS,
+                                            typography::WEIGHT_SEMIBOLD,
+                                            semantic::TEXT_PRIMARY,
+                                            spacing::XXS,
+                                        ),
+                                        "{msg.sender_name}"
+                                    }
+
+                                    span {
+                                        style: format!(
+                                            "display: block; \
+                                             font-size: {}; \
+                                             color: {}; \
+                                             white-space: nowrap; \
+                                             overflow: hidden; \
+                                             text-overflow: ellipsis;",
+                                            typography::SIZE_XS,
+                                            semantic::TEXT_SECONDARY,
+                                        ),
+                                        "{msg.text}"
+                                    }
+                                }
+
+                                // Unpin button
+                                button {
+                                    style: format!(
+                                        "flex-shrink: 0; \
+                                         padding: {} {}; \
+                                         background: transparent; \
+                                         border: 1px solid {}; \
+                                         border-radius: {}; \
+                                         cursor: pointer; \
+                                         font-size: {}; \
+                                         color: {}; \
+                                         transition: background 0.15s, color 0.15s;",
+                                        spacing::XXS,
+                                        spacing::XS,
+                                        semantic::BORDER_DEFAULT,
+                                        radius::SM,
+                                        typography::SIZE_XXS,
+                                        semantic::TEXT_MUTED,
+                                    ),
+                                    aria_label: "Unpin message",
+                                    onclick: move |_| unpin_handler.call(msg_id.clone()),
+                                    "Unpin"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2669,6 +2994,7 @@ fn message_to_display_with_context(
             })
             .collect(),
         replied_to,
+        is_pinned: msg.is_pinned,
     }
 }
 

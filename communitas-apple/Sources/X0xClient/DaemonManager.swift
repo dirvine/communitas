@@ -17,10 +17,18 @@ public final class DaemonManager: Sendable {
         self.client = client
     }
 
-    /// Probe the daemon to determine its current state.
+    /// Probe the daemon to determine its current state using the instance's default client.
     public func state() async -> DaemonState {
+        await state(using: client)
+    }
+
+    /// Probe the daemon to determine its current state using a provided client.
+    ///
+    /// Use this overload when the caller holds an up-to-date authenticated ``X0xClient``
+    /// (e.g., one built from a freshly discovered ``X0xConfig``).
+    public func state(using overrideClient: X0xClient) async -> DaemonState {
         do {
-            let health = try await client.health()
+            let health = try await overrideClient.health()
             if health.status == "ok" || health.status == "healthy" {
                 return .running
             }
@@ -67,9 +75,12 @@ public final class DaemonManager: Sendable {
         }
 
         // Wait a moment for the daemon to initialize, then verify.
+        // Use a freshly discovered client so the health check goes to the correct port
+        // and carries the bearer token written by the newly started daemon.
         try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
 
-        let currentState = await state()
+        let probeClient = X0xClient.fromDiscovery() ?? client
+        let currentState = await state(using: probeClient)
         if currentState != .running {
             throw X0xError.daemonStartFailed(reason: "Daemon started but health check failed")
         }

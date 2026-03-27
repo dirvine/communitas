@@ -29,6 +29,8 @@ pub struct MessageDisplay {
     pub reactions: Vec<ReactionDisplay>,
     /// The message this is replying to, if any.
     pub replied_to: Option<RepliedToDisplay>,
+    /// Whether this message is currently pinned in the thread.
+    pub is_pinned: bool,
 }
 
 /// Simplified display info for replied-to messages.
@@ -255,6 +257,11 @@ pub fn MessageBubble(
     /// Payload is the original message ID.
     #[props(default)]
     on_scroll_to: Option<EventHandler<String>>,
+    /// Called when the user pins or unpins this message.
+    /// Payload is the message_id. The parent decides whether to pin or unpin
+    /// based on the current `message.is_pinned` state.
+    #[props(default)]
+    on_pin: Option<EventHandler<String>>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
     let mut show_actions = use_signal(|| false);
@@ -272,7 +279,9 @@ pub fn MessageBubble(
     let message_id_for_thread = message.id.clone();
     let message_id_for_edit_save = message.id.clone();
     let message_id_for_delete = message.id.clone();
+    let message_id_for_pin = message.id.clone();
     let message_content_for_edit = message.content.clone();
+    let message_is_pinned = message.is_pinned;
 
     let initials = message
         .author_name
@@ -656,6 +665,22 @@ pub fn MessageBubble(
                                     let id = message_id_for_delete.clone();
                                     move |_| {
                                         if let Some(ref handler) = on_delete {
+                                            handler.call(id.clone());
+                                        }
+                                    }
+                                },
+                            }
+                        }
+
+                        // Pin / Unpin button
+                        if on_pin.is_some() {
+                            MessageActionButton {
+                                icon: if message_is_pinned { "\u{1F4CC}" } else { "\u{1F4CD}" },
+                                tooltip: if message_is_pinned { "Unpin".to_string() } else { "Pin".to_string() },
+                                onclick: {
+                                    let id = message_id_for_pin.clone();
+                                    move |_| {
+                                        if let Some(ref handler) = on_pin {
                                             handler.call(id.clone());
                                         }
                                     }

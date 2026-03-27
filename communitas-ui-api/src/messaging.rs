@@ -56,6 +56,8 @@ pub struct Message {
     pub reply_to_id: Option<String>,
     /// Reactions on this message.
     pub reactions: Vec<MessageReaction>,
+    /// Whether this message has been pinned in the thread.
+    pub is_pinned: bool,
 }
 
 /// A reaction on a message (emoji + count).
@@ -232,6 +234,7 @@ mod tests {
                 count: 3,
                 reacted_by_me: true,
             }],
+            is_pinned: false,
         };
         assert_eq!(msg.reactions.len(), 1);
         assert!(msg.reactions[0].reacted_by_me);

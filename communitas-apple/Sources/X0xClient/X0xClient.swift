@@ -1,20 +1,116 @@
 import Foundation
 
+// MARK: - X0xConfig
+
+/// Configuration discovered from the x0x daemon's runtime files.
+///
+/// The x0x daemon writes two files into `~/Library/Application Support/x0x/` when running:
+/// - `api.port` — the host:port the API listens on (e.g., `127.0.0.1:12700`)
+/// - `api-token` — a 64-character hex bearer token required for authenticated endpoints
+public struct X0xConfig: Sendable {
+    /// The HTTP/WebSocket address of the daemon (e.g., `"127.0.0.1:12700"`).
+    public let address: String
+    /// The bearer token for authenticating API requests.
+    public let token: String
+
+    /// The base HTTP URL derived from the discovered address.
+    public var baseHTTPURL: URL? {
+        URL(string: "http://\(address)")
+    }
+
+    /// The base WebSocket URL derived from the discovered address.
+    public var baseWSURL: URL? {
+        URL(string: "ws://\(address)")
+    }
+
+    public init(address: String, token: String) {
+        self.address = address
+        self.token = token
+    }
+
+    /// Attempt to discover the running daemon's configuration from the filesystem.
+    ///
+    /// Reads `~/Library/Application Support/x0x/api.port` and `api-token`.
+    /// Returns `nil` if either file is missing or cannot be read (daemon not running).
+    public static func discover() -> X0xConfig? {
+        let fm = FileManager.default
+        guard let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let x0xDir = appSupport.appendingPathComponent("x0x")
+        let portFile = x0xDir.appendingPathComponent("api.port")
+        let tokenFile = x0xDir.appendingPathComponent("api-token")
+
+        guard let addressData = try? Data(contentsOf: portFile),
+              let tokenData = try? Data(contentsOf: tokenFile) else {
+            return nil
+        }
+
+        let address = String(decoding: addressData, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = String(decoding: tokenData, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !address.isEmpty, !token.isEmpty else {
+            return nil
+        }
+
+        return X0xConfig(address: address, token: token)
+    }
+}
+
+// MARK: - X0xClient
+
 /// HTTP client for the x0x daemon REST API at `http://127.0.0.1:12700`.
 ///
 /// The x0x API uses **flattened** JSON responses: `{"ok": true, "field": "value", ...}`.
 /// There is no universal `data` wrapper. Each response struct includes `ok` at the top level.
+///
+/// Authenticated endpoints require an `Authorization: Bearer <token>` header.
+/// Use ``X0xConfig/discover()`` to obtain the token from the daemon's runtime files, then
+/// initialise the client with ``init(config:)`` or ``fromDiscovery()``.
 public final class X0xClient: Sendable {
     /// Base URL of the x0x daemon.
     public let baseURL: URL
 
+    /// Bearer token for API authentication. `nil` means no auth header is sent.
+    public let token: String?
+
     private let session: URLSession
     private let decoder: JSONDecoder
 
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:12700")!) {
+    /// Initialise with an explicit base URL and optional bearer token.
+    /// - Parameters:
+    ///   - baseURL: HTTP base URL of the daemon. Defaults to `http://127.0.0.1:12700`.
+    ///   - token: Bearer token for authenticated endpoints. Pass `nil` to omit auth header.
+    public init(baseURL: URL = URL(string: "http://127.0.0.1:12700")!, token: String? = nil) {
         self.baseURL = baseURL
+        self.token = token
         self.session = URLSession.shared
         self.decoder = JSONDecoder()
+    }
+
+    /// Initialise from a discovered ``X0xConfig``.
+    public convenience init(config: X0xConfig) {
+        let url = config.baseHTTPURL ?? URL(string: "http://127.0.0.1:12700")!
+        self.init(baseURL: url, token: config.token)
+    }
+
+    /// Attempt to discover the daemon config and build a client.
+    /// Returns `nil` when the daemon is not running (config files absent).
+    public static func fromDiscovery() -> X0xClient? {
+        guard let config = X0xConfig.discover() else { return nil }
+        return X0xClient(config: config)
+    }
+
+    /// A WebSocket base URL derived from ``baseURL`` by substituting the `http` scheme for `ws`.
+    /// Falls back to `ws://127.0.0.1:12700` if the conversion fails.
+    public var webSocketBaseURL: URL {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            return URL(string: "ws://127.0.0.1:12700")!
+        }
+        components.scheme = components.scheme == "https" ? "wss" : "ws"
+        return components.url ?? URL(string: "ws://127.0.0.1:12700")!
     }
 
     // MARK: - Health & Status
@@ -138,6 +234,13 @@ public final class X0xClient: Sendable {
     /// Returns wrapped: `{"ok":true,"agents":[...]}`
     public func discoveredAgents() async throws -> [DiscoveredAgent] {
         let resp: DiscoveredAgentsResponse = try await get("/agents/discovered")
+        return resp.agents
+    }
+
+    /// Fetch online presence. `GET /presence`
+    /// Returns wrapped: `{"ok":true,"agents":["agentId1","agentId2"]}`
+    public func presence() async throws -> [String] {
+        let resp: PresenceResponse = try await get("/presence")
         return resp.agents
     }
 
@@ -347,8 +450,12 @@ public final class X0xClient: Sendable {
     }
 
     private func performRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        var authenticatedRequest = request
+        if let token {
+            authenticatedRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         do {
-            return try await session.data(for: request)
+            return try await session.data(for: authenticatedRequest)
         } catch {
             throw X0xError.daemonUnreachable
         }

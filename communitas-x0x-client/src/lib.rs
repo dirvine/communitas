@@ -21,7 +21,7 @@
 //! let dm = DaemonManager::new();
 //! dm.ensure_running().await?;
 //!
-//! // Use the REST API.
+//! // Auto-discover address + token from x0xd config files and connect.
 //! let client = X0xClient::new();
 //! let identity = client.agent().await?;
 //! println!("I am agent {}", identity.agent_id);
@@ -33,12 +33,14 @@
 //! ```
 
 pub mod client;
+pub mod config;
 pub mod daemon;
 pub mod error;
 pub mod types;
 pub mod websocket;
 
 pub use client::X0xClient;
+pub use config::{X0xConfig, discover as discover_x0x_config};
 pub use daemon::{DaemonManager, DaemonState};
 pub use error::{Result, X0xError};
 pub use types::*;

@@ -43,7 +43,8 @@ enum SpaceTab: String, CaseIterable, Identifiable, Hashable {
 /// Central application state shared across all views via `@EnvironmentObject`.
 @MainActor
 final class AppState: ObservableObject {
-    let client = X0xClient()
+    /// The HTTP client used by all views. Rebuilt whenever the daemon config is (re)discovered.
+    private(set) var client: X0xClient = X0xClient()
     let daemon = DaemonManager()
 
     @Published var daemonState: DaemonState = .notRunning
@@ -84,9 +85,30 @@ final class AppState: ObservableObject {
     /// Unread message counts per group ID.
     @Published var unreadCounts: [String: Int] = [:]
 
+    /// Set of agent IDs currently online (from the /presence endpoint).
+    @Published var onlineAgents: Set<String> = []
+
+    /// Last time the user interacted with the app (for auto-away tracking).
+    var lastInteractionTime: Date = Date()
+
+    /// Whether the user is considered "away" (no interaction for 5 minutes).
+    var isAway: Bool {
+        Date().timeIntervalSince(lastInteractionTime) > 300
+    }
+
+    /// Background task for presence polling.
+    private var presencePollingTask: Task<Void, Never>?
+
     /// Refresh all state from the daemon.
     func refresh() async {
-        daemonState = await daemon.state()
+        // Attempt to discover daemon config and build an authenticated client.
+        // If the daemon isn't running yet the config files won't exist; we fall
+        // back to an unauthenticated client so the health check can still run.
+        if let discovered = X0xClient.fromDiscovery() {
+            client = discovered
+        }
+
+        daemonState = await daemon.state(using: client)
 
         guard daemonState == .running else { return }
 
@@ -137,6 +159,10 @@ final class AppState: ObservableObject {
         daemonState = .starting
         do {
             try await daemon.ensureRunning()
+            // Re-discover config now that the daemon has written its api.port / api-token files.
+            if let discovered = X0xClient.fromDiscovery() {
+                client = discovered
+            }
             await refresh()
         } catch {
             daemonState = .error
@@ -179,5 +205,40 @@ final class AppState: ObservableObject {
     /// Helper to get the group prefix (first 16 chars of group ID).
     func groupPrefix(for groupId: String) -> String {
         String(groupId.prefix(16))
+    }
+
+    // MARK: - Presence (Phase 2.9)
+
+    /// Fetch presence from the daemon and update `onlineAgents`.
+    func refreshPresence() async {
+        guard daemonState == .running else { return }
+        do {
+            let agents = try await client.presence()
+            onlineAgents = Set(agents)
+        } catch {
+            // Presence is best-effort — silently ignore failures
+        }
+    }
+
+    /// Start polling presence every 60 seconds. Safe to call multiple times.
+    func startPresencePolling() {
+        presencePollingTask?.cancel()
+        presencePollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshPresence()
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+            }
+        }
+    }
+
+    /// Stop presence polling (call when app moves to background).
+    func stopPresencePolling() {
+        presencePollingTask?.cancel()
+        presencePollingTask = nil
+    }
+
+    /// Record a user interaction (resets auto-away timer).
+    func recordInteraction() {
+        lastInteractionTime = Date()
     }
 }

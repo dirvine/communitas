@@ -28,6 +28,10 @@ pub enum X0xError {
     /// Base64 decoding failed.
     #[error("base64 decode error: {0}")]
     Base64(#[from] base64::DecodeError),
+
+    /// x0x daemon configuration discovery failed (missing api.port / api-token files).
+    #[error("x0x config error: {0}")]
+    Config(String),
 }
 
 /// Convenience alias.

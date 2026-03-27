@@ -158,7 +158,7 @@ pub fn MessageList(props: MessageListProps) -> Element {
 fn render_message_groups(messages: Vec<Message>, on_reply: EventHandler<Message>) -> Element {
     let mut groups: Vec<MessageGroup> = Vec::new();
 
-    for msg in messages {
+    for msg in messages.clone() {
         let should_start_new_group = groups.last().is_none_or(|g| {
             g.sender_id != msg.sender_id || {
                 // Also break group if more than 5 minutes apart
@@ -183,6 +183,7 @@ fn render_message_groups(messages: Vec<Message>, on_reply: EventHandler<Message>
             MessageGroupView {
                 key: "{group.messages.first().map(|m| m.id.as_str()).unwrap_or(\"empty\")}",
                 group: group.clone(),
+                all_messages: messages.clone(),
                 on_reply,
             }
         }
@@ -201,6 +202,8 @@ struct MessageGroup {
 #[derive(Props, Clone, PartialEq)]
 struct MessageGroupViewProps {
     group: MessageGroup,
+    /// All messages in the thread (used to resolve replied-to content).
+    all_messages: Vec<Message>,
     on_reply: EventHandler<Message>,
 }
 
@@ -243,6 +246,7 @@ fn MessageGroupView(props: MessageGroupViewProps) -> Element {
                         key: "{msg.id}",
                         message: msg.clone(),
                         show_time: group.messages.len() > 1,
+                        all_messages: props.all_messages.clone(),
                         on_reply: props.on_reply,
                     }
                 }
@@ -256,6 +260,8 @@ fn MessageGroupView(props: MessageGroupViewProps) -> Element {
 struct MessageBubbleProps {
     message: Message,
     show_time: bool,
+    /// All messages in the thread, used to look up replied-to content.
+    all_messages: Vec<Message>,
     on_reply: EventHandler<Message>,
 }
 
@@ -265,6 +271,15 @@ fn MessageBubble(props: MessageBubbleProps) -> Element {
     let msg = &props.message;
     let mut hovered = use_signal(|| false);
 
+    // Resolve replied-to message content from all_messages.
+    let replied_to_display = msg.reply_to_id.as_ref().map(|reply_id| {
+        props
+            .all_messages
+            .iter()
+            .find(|m| &m.id == reply_id)
+            .map(|m| (m.sender_name.clone(), m.text.clone()))
+    });
+
     rsx! {
         div {
             class: "message-bubble group relative rounded-lg px-3 py-2 transition",
@@ -273,16 +288,44 @@ fn MessageBubble(props: MessageBubbleProps) -> Element {
             aria_label: format!("Message from {}", msg.sender_name),
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
-            // Reply-to indicator if present
-            if let Some(_reply_to) = &msg.reply_to_id {
-                div {
-                    class: "text-xs mb-1 flex items-center gap-1",
-                    style: format!("color: {};", colors::TEXT_MUTED),
-                    span {
-                        style: format!("color: {};", colors::TEXT_MUTED),
-                        "↩"
+            // Reply-to quote block if present
+            if let Some(reply_opt) = &replied_to_display {
+                if let Some((author_name, content)) = reply_opt {
+                    div {
+                        class: "text-xs mb-1 rounded",
+                        style: format!(
+                            "border-left: 2px solid {}; \
+                             padding: 2px 6px; \
+                             background-color: {}20;",
+                            colors::PRIMARY,
+                            colors::PRIMARY
+                        ),
+                        span {
+                            class: "font-medium block",
+                            style: format!("color: {};", colors::PRIMARY),
+                            "{author_name}"
+                        }
+                        span {
+                            style: format!(
+                                "color: {}; \
+                                 display: block; \
+                                 overflow: hidden; \
+                                 text-overflow: ellipsis; \
+                                 white-space: nowrap; \
+                                 max-width: 240px;",
+                                colors::TEXT_MUTED
+                            ),
+                            "{content}"
+                        }
                     }
-                    "Replying to a message"
+                } else {
+                    // Replied-to message not in local window
+                    div {
+                        class: "text-xs mb-1 flex items-center gap-1",
+                        style: format!("color: {};", colors::TEXT_MUTED),
+                        span { "↩" }
+                        "Replying to a message"
+                    }
                 }
             }
             // Message text

@@ -8,6 +8,7 @@
 //! - Typing indicators
 
 use crate::components::emoji_picker::{EmojiPicker, QuickReactionBar};
+use crate::components::markdown::MarkdownContent;
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
 use crate::styles_v2::avatar;
 use communitas_ui_service::UiServices;
@@ -250,6 +251,10 @@ pub fn MessageBubble(
     /// Called when the user deletes a message. Payload is the message_id.
     #[props(default)]
     on_delete: Option<EventHandler<String>>,
+    /// Called when user clicks the inline quote to scroll to the original message.
+    /// Payload is the original message ID.
+    #[props(default)]
+    on_scroll_to: Option<EventHandler<String>>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
     let mut show_actions = use_signal(|| false);
@@ -366,58 +371,69 @@ pub fn MessageBubble(
 
                     // Reply context (if this message is a reply)
                     if let Some(ref replied_to) = message.replied_to {
-                        div {
-                            style: format!(
-                                "display: flex; \
-                                 flex-direction: column; \
-                                 gap: {}; \
-                                 padding: {}; \
-                                 margin-bottom: {}; \
-                                 background: {}; \
-                                 border-left: 2px solid {}; \
-                                 border-radius: 0 {} {} 0; \
-                                 cursor: pointer; \
-                                 transition: {};",
-                                spacing::XXS,
-                                spacing::SM,
-                                spacing::SM,
-                                if message.is_own {
-                                    "rgba(0,0,0,0.15)"
-                                } else {
-                                    semantic::BG_SECONDARY
-                                },
-                                palette::JADE_500,
-                                radius::SM,
-                                radius::SM,
-                                motion::transition("background")
-                            ),
-                            // TODO: Add onclick to scroll to original message
+                        {
+                            let replied_to_id = replied_to.id.clone();
+                            rsx! {
+                                div {
+                                    style: format!(
+                                        "display: flex; \
+                                         flex-direction: column; \
+                                         gap: {}; \
+                                         padding: {}; \
+                                         margin-bottom: {}; \
+                                         background: {}; \
+                                         border-left: 2px solid {}; \
+                                         border-radius: 0 {} {} 0; \
+                                         cursor: pointer; \
+                                         transition: {};",
+                                        spacing::XXS,
+                                        spacing::SM,
+                                        spacing::SM,
+                                        if message.is_own {
+                                            "rgba(0,0,0,0.15)"
+                                        } else {
+                                            semantic::BG_SECONDARY
+                                        },
+                                        palette::JADE_500,
+                                        radius::SM,
+                                        radius::SM,
+                                        motion::transition("background")
+                                    ),
+                                    role: "button",
+                                    aria_label: format!("Jump to original message from {}", replied_to.author_name),
+                                    onclick: move |_| {
+                                        if let Some(ref handler) = on_scroll_to {
+                                            handler.call(replied_to_id.clone());
+                                        }
+                                    },
 
-                            span {
-                                style: format!(
-                                    "font-size: {}; \
-                                     font-weight: {}; \
-                                     color: {};",
-                                    typography::SIZE_XS,
-                                    typography::WEIGHT_SEMIBOLD,
-                                    palette::JADE_400
-                                ),
-                                "{replied_to.author_name}"
-                            }
+                                    span {
+                                        style: format!(
+                                            "font-size: {}; \
+                                             font-weight: {}; \
+                                             color: {};",
+                                            typography::SIZE_XS,
+                                            typography::WEIGHT_SEMIBOLD,
+                                            palette::JADE_400
+                                        ),
+                                        "{replied_to.author_name}"
+                                    }
 
-                            p {
-                                style: format!(
-                                    "margin: 0; \
-                                     font-size: {}; \
-                                     color: {}; \
-                                     overflow: hidden; \
-                                     text-overflow: ellipsis; \
-                                     white-space: nowrap; \
-                                     max-width: 200px;",
-                                    typography::SIZE_XS,
-                                    if message.is_own { "rgba(255,255,255,0.7)" } else { semantic::TEXT_MUTED }
-                                ),
-                                "{replied_to.content}"
+                                    p {
+                                        style: format!(
+                                            "margin: 0; \
+                                             font-size: {}; \
+                                             color: {}; \
+                                             overflow: hidden; \
+                                             text-overflow: ellipsis; \
+                                             white-space: nowrap; \
+                                             max-width: 200px;",
+                                            typography::SIZE_XS,
+                                            if message.is_own { "rgba(255,255,255,0.7)" } else { semantic::TEXT_MUTED }
+                                        ),
+                                        "{replied_to.content}"
+                                    }
+                                }
                             }
                         }
                     }
@@ -549,18 +565,9 @@ pub fn MessageBubble(
                             }
                         }
                     } else {
-                        p {
-                            style: format!(
-                                "margin: 0; \
-                                 font-size: {}; \
-                                 line-height: {}; \
-                                 color: {}; \
-                                 word-wrap: break-word;",
-                                typography::SIZE_BASE,
-                                typography::LEADING_RELAXED,
-                                if message.is_own { "white" } else { semantic::TEXT_PRIMARY }
-                            ),
-                            "{message.content}"
+                        MarkdownContent {
+                            content: message.content.clone(),
+                            is_own: message.is_own,
                         }
                     }
 
@@ -984,6 +991,12 @@ pub fn MessageComposerV2(
     /// The parent should append the emoji to the current message value.
     #[props(default)]
     on_emoji_insert: Option<EventHandler<String>>,
+    /// Optional reply context shown as a preview bar above the input.
+    #[props(default)]
+    reply_to: Option<RepliedToDisplay>,
+    /// Called when the user cancels the reply by clicking the X.
+    #[props(default)]
+    on_cancel_reply: Option<EventHandler<()>>,
 ) -> Element {
     let mut focused = use_signal(|| false);
     let mut show_emoji_picker = use_signal(|| false);
@@ -998,6 +1011,97 @@ pub fn MessageComposerV2(
                 semantic::BORDER_SUBTLE,
                 semantic::BG_SECONDARY
             ),
+
+            // Reply preview bar (shown when replying to a message)
+            if let Some(ref reply) = reply_to {
+                div {
+                    style: format!(
+                        "display: flex; \
+                         align-items: center; \
+                         gap: {}; \
+                         padding: {} {}; \
+                         margin-bottom: {}; \
+                         background: {}; \
+                         border-left: 2px solid {}; \
+                         border-radius: 0 {} {} 0;",
+                        spacing::SM,
+                        spacing::XS,
+                        spacing::SM,
+                        spacing::SM,
+                        semantic::BG_TERTIARY,
+                        palette::JADE_500,
+                        radius::SM,
+                        radius::SM
+                    ),
+                    aria_label: "Replying to message",
+
+                    // Reply icon
+                    span {
+                        style: format!("color: {}; font-size: {};", palette::JADE_400, typography::SIZE_BASE),
+                        aria_hidden: "true",
+                        "↩"
+                    }
+
+                    // Reply content
+                    div {
+                        style: "flex: 1; min-width: 0;",
+
+                        span {
+                            style: format!(
+                                "font-size: {}; \
+                                 font-weight: {}; \
+                                 color: {}; \
+                                 display: block;",
+                                typography::SIZE_XS,
+                                typography::WEIGHT_SEMIBOLD,
+                                palette::JADE_400
+                            ),
+                            "Replying to {reply.author_name}"
+                        }
+
+                        span {
+                            style: format!(
+                                "font-size: {}; \
+                                 color: {}; \
+                                 overflow: hidden; \
+                                 text-overflow: ellipsis; \
+                                 white-space: nowrap; \
+                                 display: block;",
+                                typography::SIZE_XS,
+                                semantic::TEXT_MUTED
+                            ),
+                            "{reply.content}"
+                        }
+                    }
+
+                    // Cancel button
+                    button {
+                        style: format!(
+                            "width: 20px; \
+                             height: 20px; \
+                             display: flex; \
+                             align-items: center; \
+                             justify-content: center; \
+                             background: transparent; \
+                             border: none; \
+                             color: {}; \
+                             cursor: pointer; \
+                             border-radius: {}; \
+                             flex-shrink: 0;",
+                            semantic::TEXT_MUTED,
+                            radius::FULL
+                        ),
+                        aria_label: "Cancel reply",
+                        title: "Cancel reply",
+                        onclick: move |_| {
+                            if let Some(ref handler) = on_cancel_reply {
+                                handler.call(());
+                            }
+                        },
+                        "✕"
+                    }
+                }
+            }
 
             // Main composer container
             div {

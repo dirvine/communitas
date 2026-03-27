@@ -244,6 +244,59 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
 
     let typing_users = services.messaging().get_typing_users(&thread_id);
 
+    // Hydrate replied-to messages that are not in the local window.
+    // After messages load, collect reply_to_ids that have no match in the local list and
+    // fetch them individually from the service.  When resolved they are appended to the
+    // messages signal so message_to_display_with_context can find them on the next render.
+    let services_for_hydrate = services.clone();
+    let thread_id_for_hydrate = thread_id.clone();
+    use_effect(move || {
+        let msgs = messages();
+        if msgs.is_empty() {
+            return;
+        }
+        // Collect unresolved reply IDs
+        let local_ids: std::collections::HashSet<String> =
+            msgs.iter().map(|m| m.id.clone()).collect();
+        let unresolved: Vec<String> = msgs
+            .iter()
+            .filter_map(|m| m.reply_to_id.as_ref())
+            .filter(|rid| !local_ids.contains(*rid))
+            .cloned()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        if unresolved.is_empty() {
+            return;
+        }
+
+        let services = services_for_hydrate.clone();
+        let thread_id = thread_id_for_hydrate.clone();
+        spawn(async move {
+            for reply_id in unresolved {
+                match services.messaging().get_message(&thread_id, &reply_id).await {
+                    Ok(fetched) => {
+                        let mut current = messages();
+                        // Avoid duplicates
+                        if !current.iter().any(|m| m.id == fetched.id) {
+                            current.push(fetched);
+                            messages.set(current);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            thread_id = %thread_id,
+                            reply_id = %reply_id,
+                            error = %e,
+                            "Could not hydrate replied-to message"
+                        );
+                    }
+                }
+            }
+        });
+    });
+
     // Memoize display_messages to avoid recomputing on every render
     let current_user_id_clone = current_user_id.clone();
     let display_messages = use_memo(move || {
@@ -537,6 +590,9 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                                             on_delete: move |msg_id: String| show_delete_confirm.set(Some(msg_id)),
                                             on_emoji_select: on_emoji_select.clone(),
                                             on_picker_close: move |_| show_emoji_picker.set(None),
+                                            on_scroll_to: Some(EventHandler::new(move |msg_id: String| {
+                                                scroll_to_message(&msg_id);
+                                            })),
                                         }
                                     }
                                 }
@@ -572,6 +628,9 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                                             on_delete: move |msg_id: String| show_delete_confirm.set(Some(msg_id)),
                                             on_emoji_select: on_emoji_select.clone(),
                                             on_picker_close: move |_| show_emoji_picker.set(None),
+                                            on_scroll_to: Some(EventHandler::new(move |msg_id: String| {
+                                                scroll_to_message(&msg_id);
+                                            })),
                                         }
                                     }
                                 }
@@ -584,14 +643,6 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                 if !typing_users.is_empty() {
                     TypingIndicatorV2 {
                         names: typing_users,
-                    }
-                }
-
-                // Reply preview
-                if let Some(reply) = reply_to() {
-                    ReplyPreview {
-                        message: reply,
-                        on_cancel: move |_| reply_to.set(None),
                     }
                 }
 
@@ -627,13 +678,20 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                         current.push_str(&emoji);
                         message_input.set(current);
                     })),
+                    reply_to: reply_to().map(|r| {
+                        crate::components::messaging_v2::RepliedToDisplay {
+                            id: r.id.clone(),
+                            author_name: r.author_name.clone(),
+                            content: r.content.clone(),
+                        }
+                    }),
+                    on_cancel_reply: Some(EventHandler::new(move |_| reply_to.set(None))),
                 }
             }
         }
     }
 }
 
-/// Emoji picker for reactions.
 /// Individual chat message item with reply/react/edit/delete handlers.
 #[component]
 fn ChatMessageItem(
@@ -645,13 +703,18 @@ fn ChatMessageItem(
     #[props(default)] on_delete: Option<EventHandler<String>>,
     on_emoji_select: EventHandler<String>,
     on_picker_close: EventHandler<()>,
+    /// Called when user clicks the inline quote to scroll to original message.
+    #[props(default)]
+    on_scroll_to: Option<EventHandler<String>>,
 ) -> Element {
-    let msg_id_for_reply = message.id.clone();
-    let msg_id_for_react = message.id.clone();
-    let msg_id_for_delete = message.id.clone();
+    let msg_id = message.id.clone();
+    let msg_id_for_reply = msg_id.clone();
+    let msg_id_for_react = msg_id.clone();
+    let msg_id_for_delete = msg_id.clone();
 
     rsx! {
         div {
+            id: "msg-{msg_id}",
             style: "position: relative;",
 
             MessageBubble {
@@ -662,11 +725,12 @@ fn ChatMessageItem(
                 on_delete: {
                     on_delete.map(|handler| {
                         EventHandler::new({
-                            let msg_id = msg_id_for_delete.clone();
-                            move |_msg_id: String| handler.call(msg_id.clone())
+                            let id = msg_id_for_delete.clone();
+                            move |_msg_id: String| handler.call(id.clone())
                         })
                     })
                 },
+                on_scroll_to: on_scroll_to,
             }
 
             // Emoji picker for this message
@@ -2474,6 +2538,19 @@ fn QuickActionCard(
             }
         }
     }
+}
+
+/// Scroll the message list to the element with id `msg-{message_id}` using smooth scroll.
+///
+/// Uses the browser's `scrollIntoView` API via JS eval. Silently ignores errors if the
+/// element is not found (e.g. message is outside the virtual window).
+fn scroll_to_message(message_id: &str) {
+    let js = format!(
+        "const el = document.getElementById('msg-{message_id}'); \
+         if (el) {{ el.scrollIntoView({{ behavior: 'smooth', block: 'center' }}); }}",
+        message_id = message_id
+    );
+    let _ = eval(&js);
 }
 
 /// Convert a Message from the service to MessageDisplay for the UI.

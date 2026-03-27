@@ -41,6 +41,8 @@ pub mod kanban;
 pub mod layout;
 pub mod local_x0x_profile_view;
 #[allow(dead_code)]
+pub mod markdown;
+#[allow(dead_code)]
 mod message_list;
 #[allow(dead_code)]
 pub mod messaging_v2;
@@ -168,6 +170,10 @@ pub use messaging_v2::{
     ChatView, DateSeparator, MessageBubble, MessageComposerV2, MessageDisplay,
     MessageListContainer, NewMessageIndicator, ReactionChip, ReactionDisplay, TypingIndicatorV2,
 };
+
+// Re-export markdown renderer for message display
+#[allow(unused_imports)]
+pub use markdown::MarkdownContent;
 
 // Re-export sidebar components for main app layout
 #[allow(unused_imports)]

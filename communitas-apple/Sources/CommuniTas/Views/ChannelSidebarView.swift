@@ -20,7 +20,7 @@ struct ChannelSidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .navigationTitle("Channels")
+        .navigationTitle("Spaces")
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {

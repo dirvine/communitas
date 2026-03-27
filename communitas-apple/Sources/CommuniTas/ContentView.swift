@@ -14,7 +14,7 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 160, ideal: 180)
             .listStyle(.sidebar)
         } content: {
-            // Secondary column: channel sidebar when messaging, DM contact list, or nothing
+            // Secondary column: space/channel sidebar when on Spaces, DM contact list for DMs, hidden otherwise
             switch appState.selectedNavigation {
             case .messaging:
                 ChannelSidebarView()
@@ -23,7 +23,8 @@ struct ContentView: View {
                 dmSidebar
                     .navigationSplitViewColumnWidth(min: 180, ideal: 220)
             default:
-                EmptyView()
+                Color.clear
+                    .navigationSplitViewColumnWidth(min: 0, ideal: 0, max: 0)
             }
         } detail: {
             detailView

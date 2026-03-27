@@ -95,6 +95,8 @@ enum Route {
     Network {},
     #[route("/settings")]
     Settings {},
+    #[route("/about")]
+    About {},
     // Legacy routes kept for backward compatibility with pages.rs
     #[route("/login")]
     LoginRoute {},
@@ -357,6 +359,7 @@ fn AppShell(children: Element) -> Element {
         Route::People {} => "/people".to_string(),
         Route::Network {} => "/network".to_string(),
         Route::Settings {} => "/settings".to_string(),
+        Route::About {} => "/about".to_string(),
         Route::MoreRoute {} => "/more".to_string(),
         // Legacy routes all map to "/"
         _ => "/".to_string(),
@@ -387,10 +390,18 @@ fn AppShell(children: Element) -> Element {
                             "/people" => Route::People {},
                             "/network" => Route::Network {},
                             "/settings" => Route::Settings {},
+                            "/about" => Route::About {},
                             other => {
-                                if let Some(space_id) = other.strip_prefix("/space/") {
-                                    Route::SpaceView {
-                                        space_id: space_id.to_string(),
+                                if let Some(rest) = other.strip_prefix("/space/") {
+                                    // Could be "/space/{id}" or "/space/{id}/{tab}"
+                                    let mut parts = rest.splitn(2, '/');
+                                    let space_id = parts.next().unwrap_or("").to_string();
+                                    match parts.next() {
+                                        Some(tab) if !tab.is_empty() => Route::SpaceTab {
+                                            space_id,
+                                            tab: tab.to_string(),
+                                        },
+                                        _ => Route::SpaceView { space_id },
                                     }
                                 } else if let Some(agent_id) = other.strip_prefix("/dm/") {
                                     Route::DirectMessage {
@@ -638,6 +649,30 @@ fn Settings() -> Element {
     rsx! {
         AppShell {
             components::SettingsView {}
+        }
+    }
+}
+
+#[component]
+fn About() -> Element {
+    rsx! {
+        AppShell {
+            div {
+                style: "display: flex; flex-direction: column; align-items: center; \
+                        justify-content: center; height: 100%; gap: 1rem; color: #b0b3cc;",
+                div {
+                    style: "font-size: 1.125rem; font-weight: 600; color: #e4e6f0;",
+                    "Communitas"
+                }
+                div {
+                    style: "font-size: 0.875rem; color: #747896;",
+                    "Local-first, PQC-ready collaboration platform"
+                }
+                div {
+                    style: "font-size: 0.75rem; font-family: ui-monospace, monospace; color: #747896;",
+                    {format!("v{}", env!("CARGO_PKG_VERSION"))}
+                }
+            }
         }
     }
 }

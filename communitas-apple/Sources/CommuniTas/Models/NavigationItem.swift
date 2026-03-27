@@ -1,28 +1,20 @@
 import Foundation
 
-/// Sidebar navigation items.
-enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
-    case dashboard = "Dashboard"
-    case status = "Status"
+/// System-level navigation pages shown in the SYSTEM section of the sidebar.
+enum SystemPage: String, CaseIterable, Identifiable, Hashable {
+    case people = "People"
     case network = "Network"
-    case messaging = "Spaces"
-    case directMessages = "Direct Messages"
-    case contacts = "Contacts"
-    case groups = "Groups"
     case settings = "Settings"
+    case about = "About"
 
     var id: String { rawValue }
 
     var systemImage: String {
         switch self {
-        case .dashboard: return "square.grid.2x2"
-        case .status: return "circle.fill"
+        case .people: return "person.2"
         case .network: return "network"
-        case .messaging: return "building.2"
-        case .directMessages: return "envelope"
-        case .contacts: return "person.2"
-        case .groups: return "bubble.left.and.bubble.right"
         case .settings: return "gear"
+        case .about: return "info.circle"
         }
     }
 }

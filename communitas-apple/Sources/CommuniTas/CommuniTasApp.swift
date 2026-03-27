@@ -15,7 +15,6 @@ struct CommuniTasApp: App {
                         appState.startPresencePolling()
                     }
                     .onAppear {
-                        // Request notification permission on launch
                         NotificationService.shared.requestPermission()
                     }
             }
@@ -36,24 +35,6 @@ struct CommuniTasApp: App {
                 .keyboardShortcut("j", modifiers: [.command, .shift])
             }
 
-            CommandMenu("Space") {
-                Button("New Channel") {
-                    // Navigate to messaging and trigger channel creation
-                    appState.selectedNavigation = .messaging
-                }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-
-                Divider()
-
-                Button("Invite to Space") {
-                    if let group = appState.selectedGroup {
-                        appState.selectedInspectorItem = .space(group)
-                        appState.showInspector = true
-                    }
-                }
-                .keyboardShortcut("i", modifiers: .command)
-            }
-
             CommandGroup(replacing: .toolbar) {
                 Button("Toggle Sidebar") {
                     NSApp.keyWindow?.firstResponder?.tryToPerform(
@@ -69,42 +50,35 @@ struct CommuniTasApp: App {
                 .keyboardShortcut("i", modifiers: [.command, .option])
             }
 
+            CommandMenu("Space") {
+                Button("Invite to Space") {
+                    if let group = appState.selectedGroup {
+                        appState.selectedInspectorItem = .space(group)
+                        appState.showInspector = true
+                    }
+                }
+                .keyboardShortcut("i", modifiers: .command)
+            }
+
             // Quick navigation shortcuts
             CommandGroup(after: .toolbar) {
                 Divider()
 
-                Button("Dashboard") {
-                    appState.selectedNavigation = .dashboard
-                }
-                .keyboardShortcut("1", modifiers: .command)
-
-                Button("Status") {
-                    appState.selectedNavigation = .status
-                }
-                .keyboardShortcut("2", modifiers: .command)
-
                 Button("Network") {
-                    appState.selectedNavigation = .network
+                    appState.selectedSystemPage = .network
+                    appState.selectedDMContact = nil
                 }
                 .keyboardShortcut("3", modifiers: .command)
 
-                Button("Messaging") {
-                    appState.selectedNavigation = .messaging
-                }
-                .keyboardShortcut("4", modifiers: .command)
-
-                Button("Contacts") {
-                    appState.selectedNavigation = .contacts
+                Button("People") {
+                    appState.selectedSystemPage = .people
+                    appState.selectedDMContact = nil
                 }
                 .keyboardShortcut("5", modifiers: .command)
 
-                Button("Groups") {
-                    appState.selectedNavigation = .groups
-                }
-                .keyboardShortcut("6", modifiers: .command)
-
                 Button("Settings") {
-                    appState.selectedNavigation = .settings
+                    appState.selectedSystemPage = .settings
+                    appState.selectedDMContact = nil
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }

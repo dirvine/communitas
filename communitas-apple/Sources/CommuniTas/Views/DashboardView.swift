@@ -109,7 +109,8 @@ struct DashboardView: View {
             .disabled(appState.daemonState != .running)
 
             Button {
-                appState.selectedNavigation = .network
+                appState.selectedSystemPage = .network
+                appState.selectedDMContact = nil
             } label: {
                 Label("View Network", systemImage: "network")
             }

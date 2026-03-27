@@ -110,7 +110,6 @@ struct ChannelSidebarView: View {
         return Button {
             Task {
                 await appState.selectGroupAndChannel(group: group, channel: channel.name)
-                appState.selectedNavigation = .messaging
                 manager.unreadCounts[channel.name] = 0
             }
         } label: {

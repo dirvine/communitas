@@ -52,7 +52,6 @@ final class AppState: ObservableObject {
     @Published var contacts: [Contact] = []
     @Published var groups: [GroupSummary] = []
     @Published var errorMessage: String?
-    @Published var selectedNavigation: NavigationItem? = .messaging
 
     /// Active channel managers keyed by group ID.
     @Published var channelManagers: [String: ChannelManager] = [:]
@@ -67,11 +66,14 @@ final class AppState: ObservableObject {
     /// Defaults to the first 8 chars of the agent ID (never "Me").
     @Published var displayName: String = ""
 
-    /// The active space tab.
+    /// The active space tab (Chat is default; sidebar shortcuts override this).
     @Published var selectedSpaceTab: SpaceTab = .chat
 
     /// The currently selected contact for direct messaging.
     @Published var selectedDMContact: Contact?
+
+    /// The active system page (People, Network, Settings, About).
+    @Published var selectedSystemPage: SystemPage?
 
     /// The item currently shown in the inspector panel.
     @Published var selectedInspectorItem: InspectorItem?

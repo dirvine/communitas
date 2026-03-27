@@ -622,6 +622,11 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
                     placeholder: format!("Message #{}", entity.name),
                     oninput: move |evt: FormEvent| message_input.set(evt.value()),
                     onsubmit: on_send,
+                    on_emoji_insert: Some(EventHandler::new(move |emoji: String| {
+                        let mut current = message_input();
+                        current.push_str(&emoji);
+                        message_input.set(current);
+                    })),
                 }
             }
         }
@@ -2663,6 +2668,7 @@ pub fn EntityChatPageV2(entity: UnifiedEntity) -> Element {
                             MessageBubble {
                                 message: msg.clone(),
                                 show_avatar: idx == 0 || display_messages.get(idx.saturating_sub(1)).map(|prev| prev.author_id != msg.author_id).unwrap_or(true),
+                                thread_id: thread_id.clone(),
                                 on_reply: move |_id| {},
                                 on_react: move |_id| {},
                             }
@@ -2681,6 +2687,11 @@ pub fn EntityChatPageV2(entity: UnifiedEntity) -> Element {
                     placeholder: format!("Message #{}", entity.name),
                     oninput: move |evt: FormEvent| message_input.set(evt.value()),
                     onsubmit: on_send,
+                    on_emoji_insert: Some(EventHandler::new(move |emoji: String| {
+                        let mut current = message_input();
+                        current.push_str(&emoji);
+                        message_input.set(current);
+                    })),
                 }
             }
         }

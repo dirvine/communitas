@@ -15,6 +15,10 @@ mod composer;
 #[allow(dead_code)]
 pub mod confirm_dialog;
 pub mod create_channel_modal;
+#[allow(dead_code)]
+pub mod emoji_data;
+#[allow(dead_code)]
+pub mod emoji_picker;
 pub mod create_space_modal;
 #[allow(dead_code)]
 pub mod daemon_status;

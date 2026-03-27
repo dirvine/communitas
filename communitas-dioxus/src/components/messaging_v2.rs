@@ -7,9 +7,12 @@
 //! - Rich composer
 //! - Typing indicators
 
+use crate::components::emoji_picker::{EmojiPicker, QuickReactionBar};
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
 use crate::styles_v2::avatar;
+use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
+use std::sync::Arc;
 
 /// Message data structure for display.
 #[derive(Clone, PartialEq)]
@@ -236,6 +239,9 @@ fn MessageEmptyState() -> Element {
 pub fn MessageBubble(
     message: MessageDisplay,
     #[props(default = false)] show_avatar: bool,
+    /// The entity/thread ID this message belongs to (used for reaction backend calls).
+    #[props(default)]
+    thread_id: String,
     on_reply: EventHandler<String>,
     on_react: EventHandler<String>,
     /// Called when the user saves an edit. Payload is (message_id, new_text).
@@ -249,6 +255,11 @@ pub fn MessageBubble(
     let mut show_actions = use_signal(|| false);
     let mut editing = use_signal(|| false);
     let mut edit_text = use_signal(String::new);
+    let mut show_quick_reactions = use_signal(|| false);
+    let mut show_full_picker = use_signal(|| false);
+
+    // Optional services context — may not be available in all render contexts (e.g. tests).
+    let services: Option<Arc<UiServices>> = use_context();
 
     // Clone message.id for use in multiple closures
     let message_id_for_reply = message.id.clone();
@@ -604,7 +615,14 @@ pub fn MessageBubble(
                         MessageActionButton {
                             icon: "😊".to_string(),
                             tooltip: "React".to_string(),
-                            onclick: move |_| on_react.call(message_id_for_react.clone()),
+                            onclick: move |_| {
+                                // Toggle quick-reaction bar; also notify parent via on_react
+                                let next = !show_quick_reactions();
+                                show_quick_reactions.set(next);
+                                if next {
+                                    on_react.call(message_id_for_react.clone());
+                                }
+                            },
                         }
 
                         // Edit button (own messages only)
@@ -650,6 +668,47 @@ pub fn MessageBubble(
                 }
             }
 
+            // Quick-reaction bar and full picker (shown when react is active)
+            if show_quick_reactions() || show_full_picker() {
+                div {
+                    style: format!(
+                        "position: relative; \
+                         display: flex; \
+                         justify-content: {}; \
+                         margin-left: {};",
+                        if message.is_own { "flex-end" } else { "flex-start" },
+                        if message.is_own { "0" } else { "36px" }
+                    ),
+
+                    if show_quick_reactions() && !show_full_picker() {
+                        QuickReactionBar {
+                            on_select: move |emoji: String| {
+                                on_react.call(emoji);
+                                show_quick_reactions.set(false);
+                            },
+                            on_more: move |_| {
+                                show_quick_reactions.set(false);
+                                show_full_picker.set(true);
+                            },
+                        }
+                    }
+
+                    if show_full_picker() {
+                        EmojiPicker {
+                            on_select: move |emoji: String| {
+                                on_react.call(emoji);
+                                show_full_picker.set(false);
+                                show_quick_reactions.set(false);
+                            },
+                            on_close: move |_| {
+                                show_full_picker.set(false);
+                                show_quick_reactions.set(false);
+                            },
+                        }
+                    }
+                }
+            }
+
             // Reactions
             if !message.reactions.is_empty() {
                 div {
@@ -663,11 +722,43 @@ pub fn MessageBubble(
                     ),
 
                     for reaction in message.reactions.iter() {
-                        ReactionChip {
-                            emoji: reaction.emoji.clone(),
-                            count: reaction.count,
-                            has_reacted: reaction.has_reacted,
-                            onclick: move |_| {},
+                        {
+                            let emoji = reaction.emoji.clone();
+                            let has_reacted = reaction.has_reacted;
+                            let msg_id = message.id.clone();
+                            let tid = thread_id.clone();
+                            let svc = services.clone();
+                            rsx! {
+                                ReactionChip {
+                                    key: "{emoji}",
+                                    emoji: emoji.clone(),
+                                    count: reaction.count,
+                                    has_reacted,
+                                    onclick: move |_| {
+                                        let emoji = emoji.clone();
+                                        let msg_id = msg_id.clone();
+                                        let tid = tid.clone();
+                                        if let Some(svc) = svc.clone() {
+                                            spawn(async move {
+                                                let result = if has_reacted {
+                                                    svc.messaging().remove_reaction(&tid, &msg_id, &emoji).await
+                                                } else {
+                                                    svc.messaging().add_reaction(&tid, &msg_id, &emoji).await
+                                                };
+                                                if let Err(e) = result {
+                                                    tracing::warn!(
+                                                        error = %e,
+                                                        thread_id = %tid,
+                                                        message_id = %msg_id,
+                                                        emoji = %emoji,
+                                                        "Reaction toggle failed"
+                                                    );
+                                                }
+                                            });
+                                        }
+                                    },
+                                }
+                            }
                         }
                     }
                 }
@@ -889,8 +980,13 @@ pub fn MessageComposerV2(
     #[props(default = false)] disabled: bool,
     oninput: EventHandler<FormEvent>,
     onsubmit: EventHandler<()>,
+    /// Called when the user inserts an emoji from the picker (payload = emoji string).
+    /// The parent should append the emoji to the current message value.
+    #[props(default)]
+    on_emoji_insert: Option<EventHandler<String>>,
 ) -> Element {
     let mut focused = use_signal(|| false);
+    let mut show_emoji_picker = use_signal(|| false);
 
     rsx! {
         div {
@@ -965,17 +1061,33 @@ pub fn MessageComposerV2(
                     },
                 }
 
-                // Emoji button
+                // Emoji button — opens the emoji picker above the composer
                 ComposerButton {
                     icon: "😊".to_string(),
                     tooltip: "Emoji".to_string(),
-                    onclick: move |_| {},
+                    onclick: move |_| show_emoji_picker.set(!show_emoji_picker()),
                 }
 
                 // Send button
                 SendButton {
                     disabled: disabled || value.trim().is_empty(),
                     onclick: move |_| onsubmit.call(()),
+                }
+            }
+
+            // Emoji picker (appears above composer bar when emoji button is clicked)
+            if show_emoji_picker() {
+                div {
+                    style: "position: relative;",
+                    EmojiPicker {
+                        on_select: move |emoji: String| {
+                            if let Some(ref handler) = on_emoji_insert {
+                                handler.call(emoji);
+                            }
+                            show_emoji_picker.set(false);
+                        },
+                        on_close: move |_| show_emoji_picker.set(false),
+                    }
                 }
             }
 

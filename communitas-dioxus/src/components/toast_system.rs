@@ -73,11 +73,7 @@ impl Toast {
     /// Create a new toast notification.
     pub fn new(kind: ToastKind, message: String) -> Self {
         // Generate a simple unique ID from the message and kind.
-        let id = format!(
-            "toast-{:?}-{}",
-            kind,
-            message.len()
-        );
+        let id = format!("toast-{:?}-{}", kind, message.len());
         Self {
             id,
             kind,
@@ -402,8 +398,8 @@ mod tests {
 
     #[test]
     fn toast_with_description() {
-        let toast = Toast::new(ToastKind::Info, "Test".to_string())
-            .with_description("Details".to_string());
+        let toast =
+            Toast::new(ToastKind::Info, "Test".to_string()).with_description("Details".to_string());
         assert_eq!(toast.description, Some("Details".to_string()));
     }
 

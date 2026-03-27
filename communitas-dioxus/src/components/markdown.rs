@@ -82,12 +82,10 @@ fn parse_blocks(text: &str) -> Vec<Block> {
         // Block quote: starts with `> `
         if line.starts_with("> ") || line == ">" {
             let mut quote_lines: Vec<&str> = Vec::new();
-            while i < lines.len()
-                && (lines[i].starts_with("> ") || lines[i] == ">")
-            {
-                let stripped = lines[i].strip_prefix("> ").unwrap_or(
-                    lines[i].strip_prefix('>').unwrap_or(lines[i]),
-                );
+            while i < lines.len() && (lines[i].starts_with("> ") || lines[i] == ">") {
+                let stripped = lines[i]
+                    .strip_prefix("> ")
+                    .unwrap_or(lines[i].strip_prefix('>').unwrap_or(lines[i]));
                 quote_lines.push(stripped);
                 i += 1;
             }
@@ -142,9 +140,8 @@ fn parse_inlines(text: &str) -> Vec<Inline> {
 
         // @mention: `@` at start or preceded by whitespace, followed by mention chars.
         if c == '@' {
-            let at_start_or_after_space = i == 0
-                || chars[i - 1].is_whitespace()
-                || chars[i - 1] == '\n';
+            let at_start_or_after_space =
+                i == 0 || chars[i - 1].is_whitespace() || chars[i - 1] == '\n';
             if at_start_or_after_space {
                 // Collect name chars after `@`
                 let name_start = i + 1;
@@ -252,9 +249,11 @@ pub fn MarkdownContent(
     is_own: bool,
 ) -> Element {
     let blocks = parse_blocks(&content);
-    let color = text_color
-        .as_deref()
-        .unwrap_or(if is_own { "white" } else { semantic::TEXT_PRIMARY });
+    let color = text_color.as_deref().unwrap_or(if is_own {
+        "white"
+    } else {
+        semantic::TEXT_PRIMARY
+    });
 
     rsx! {
         div {

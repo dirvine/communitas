@@ -90,7 +90,13 @@ impl UiStorage {
         // Sanitize thread_id to make it filesystem-safe.
         let safe_id: String = thread_id
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         self.root.join(format!("pinned_messages_{safe_id}.json"))
     }

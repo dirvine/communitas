@@ -80,10 +80,7 @@ impl X0xWebSocket {
     }
 
     /// Connect using a discovered [`crate::config::X0xConfig`] and a path (e.g. `/ws`).
-    async fn connect_with_config(
-        cfg: &crate::config::X0xConfig,
-        path: &str,
-    ) -> Result<Self> {
+    async fn connect_with_config(cfg: &crate::config::X0xConfig, path: &str) -> Result<Self> {
         let url = format!("ws://{}{}?token={}", cfg.address, path, cfg.token);
         Self::connect_to(&url).await
     }

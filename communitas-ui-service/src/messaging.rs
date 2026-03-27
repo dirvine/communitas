@@ -1434,10 +1434,10 @@ impl MessagingService {
     /// This is called lazily the first time we need pinned message data for a thread.
     fn ensure_pinned_messages_loaded(&self, thread_id: &str) {
         // Check if already in cache (fast path under read lock).
-        if let Ok(cache) = self.pinned_messages.read() {
-            if cache.contains_key(thread_id) {
-                return;
-            }
+        if let Ok(cache) = self.pinned_messages.read()
+            && cache.contains_key(thread_id)
+        {
+            return;
         }
         // Not cached — load from disk under write lock.
         if let Ok(mut cache) = self.pinned_messages.write() {
@@ -1460,12 +1460,12 @@ impl MessagingService {
 
     /// Persist pinned messages for a thread to disk.
     fn persist_pinned_messages(&self, thread_id: &str) {
-        if let Ok(cache) = self.pinned_messages.read() {
-            if let Some(pm) = cache.get(thread_id) {
-                let path = self.storage.pinned_messages_file(thread_id);
-                if let Err(e) = JsonFile::save(&path, pm) {
-                    warn!(error = %e, thread_id, "Failed to persist pinned messages");
-                }
+        if let Ok(cache) = self.pinned_messages.read()
+            && let Some(pm) = cache.get(thread_id)
+        {
+            let path = self.storage.pinned_messages_file(thread_id);
+            if let Err(e) = JsonFile::save(&path, pm) {
+                warn!(error = %e, thread_id, "Failed to persist pinned messages");
             }
         }
     }
@@ -1481,7 +1481,11 @@ impl MessagingService {
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
     /// - [`MessagingError::Internal`] if the pin limit would be exceeded or lock fails.
-    #[instrument(skip(self), name = "ui.messaging.pin_message", fields(thread_id, message_id))]
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.pin_message",
+        fields(thread_id, message_id)
+    )]
     pub async fn pin_message(
         &self,
         thread_id: &str,
@@ -1521,7 +1525,11 @@ impl MessagingService {
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
     /// - [`MessagingError::Internal`] if the lock cannot be acquired.
-    #[instrument(skip(self), name = "ui.messaging.unpin_message", fields(thread_id, message_id))]
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.unpin_message",
+        fields(thread_id, message_id)
+    )]
     pub async fn unpin_message(
         &self,
         thread_id: &str,

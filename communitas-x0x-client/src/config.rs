@@ -62,13 +62,11 @@ pub fn x0x_data_dir() -> Option<PathBuf> {
 /// Returns [`X0xError::Config`] if the data directory cannot be determined or
 /// the file is missing/unreadable.
 pub fn read_api_address() -> Result<String> {
-    let dir = x0x_data_dir().ok_or_else(|| {
-        X0xError::Config("cannot determine x0x data directory".to_owned())
-    })?;
+    let dir = x0x_data_dir()
+        .ok_or_else(|| X0xError::Config("cannot determine x0x data directory".to_owned()))?;
     let path = dir.join("api.port");
-    let raw = std::fs::read_to_string(&path).map_err(|e| {
-        X0xError::Config(format!("cannot read {}: {e}", path.display()))
-    })?;
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| X0xError::Config(format!("cannot read {}: {e}", path.display())))?;
     Ok(raw.trim().to_owned())
 }
 
@@ -81,13 +79,11 @@ pub fn read_api_address() -> Result<String> {
 /// Returns [`X0xError::Config`] if the data directory cannot be determined or
 /// the file is missing/unreadable.
 pub fn read_api_token() -> Result<String> {
-    let dir = x0x_data_dir().ok_or_else(|| {
-        X0xError::Config("cannot determine x0x data directory".to_owned())
-    })?;
+    let dir = x0x_data_dir()
+        .ok_or_else(|| X0xError::Config("cannot determine x0x data directory".to_owned()))?;
     let path = dir.join("api-token");
-    let raw = std::fs::read_to_string(&path).map_err(|e| {
-        X0xError::Config(format!("cannot read {}: {e}", path.display()))
-    })?;
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| X0xError::Config(format!("cannot read {}: {e}", path.display())))?;
     Ok(raw.trim().to_owned())
 }
 

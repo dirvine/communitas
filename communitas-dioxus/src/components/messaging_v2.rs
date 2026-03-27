@@ -1563,7 +1563,11 @@ pub fn NewMessageIndicator(count: u32) -> Element {
 pub fn apply_mention_selection(text: &str, display_name: &str) -> String {
     if let Some(at_pos) = text.rfind('@') {
         // Verify the `@` is at start or after whitespace.
-        let valid = at_pos == 0 || text[..at_pos].chars().next_back().is_some_and(|c| c.is_whitespace());
+        let valid = at_pos == 0
+            || text[..at_pos]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_whitespace());
         if valid {
             let after = &text[at_pos + 1..];
             // Only replace if there's no space after `@` (i.e. query is still in-flight).

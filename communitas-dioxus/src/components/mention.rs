@@ -75,13 +75,8 @@ pub fn MentionAutocomplete(props: MentionAutocompleteProps) -> Element {
     let filtered = filter_candidates(&props.candidates, &props.query);
 
     // Keyboard-controlled selected index (None = nothing highlighted yet).
-    let mut selected_idx: Signal<Option<usize>> = use_signal(|| {
-        if filtered.is_empty() {
-            None
-        } else {
-            Some(0)
-        }
-    });
+    let mut selected_idx: Signal<Option<usize>> =
+        use_signal(|| if filtered.is_empty() { None } else { Some(0) });
 
     // Re-reset selection whenever filtered list changes length.
     let filtered_len = filtered.len();

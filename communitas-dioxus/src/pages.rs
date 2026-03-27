@@ -40,6 +40,8 @@ fn contact_route(contact: &UnifiedContact) -> Route {
     }
 }
 
+use crate::components::mention::MentionCandidate;
+use crate::components::toast_system::use_toast;
 use crate::components::{
     // Accessibility announcer
     AnnouncementMode,
@@ -68,8 +70,6 @@ use crate::components::{
 };
 use crate::design_tokens::{motion, palette, radius, semantic, shadow, spacing, typography};
 use std::collections::HashSet;
-use crate::components::mention::MentionCandidate;
-use crate::components::toast_system::use_toast;
 
 /// Unified entity page that handles all tabs (Chat, Board, Drive, Docs, Details).
 ///
@@ -331,7 +331,11 @@ fn EntityChatContent(entity: UnifiedEntity) -> Element {
         let thread_id = thread_id_for_hydrate.clone();
         spawn(async move {
             for reply_id in unresolved {
-                match services.messaging().get_message(&thread_id, &reply_id).await {
+                match services
+                    .messaging()
+                    .get_message(&thread_id, &reply_id)
+                    .await
+                {
                     Ok(fetched) => {
                         let mut current = messages();
                         // Avoid duplicates
@@ -1115,7 +1119,7 @@ fn PinnedMessagesPanel(
                 for msg in messages.iter() {
                     {
                         let msg_id = msg.id.clone();
-                        let unpin_handler = on_unpin.clone();
+                        let unpin_handler = on_unpin;
                         rsx! {
                             div {
                                 key: "{msg_id}",

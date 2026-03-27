@@ -15,10 +15,6 @@ mod composer;
 #[allow(dead_code)]
 pub mod confirm_dialog;
 pub mod create_channel_modal;
-#[allow(dead_code)]
-pub mod emoji_data;
-#[allow(dead_code)]
-pub mod emoji_picker;
 pub mod create_space_modal;
 #[allow(dead_code)]
 pub mod daemon_status;
@@ -27,6 +23,10 @@ pub mod detail_panel;
 pub mod dm_view;
 #[allow(dead_code)]
 pub mod drive;
+#[allow(dead_code)]
+pub mod emoji_data;
+#[allow(dead_code)]
+pub mod emoji_picker;
 #[allow(dead_code)]
 pub mod entity_view;
 #[allow(dead_code)]
@@ -130,10 +130,8 @@ pub use layout::{
 #[allow(unused_imports)]
 pub use offline::{
     ConflictBanner, ConflictBannerVariant, ConnectionBadge, ConnectionState, OfflineBanner,
-    SyncState, SyncStatusIndicator,
-    Toast as OfflineToast, ToastContainer as OfflineToastContainer,
-    ToastNotification, ToastVariant,
-    use_connection_state,
+    SyncState, SyncStatusIndicator, Toast as OfflineToast, ToastContainer as OfflineToastContainer,
+    ToastNotification, ToastVariant, use_connection_state,
 };
 // Re-export settings components for application preferences
 // Note: These will be used when settings UI is integrated
@@ -181,7 +179,9 @@ pub use markdown::MarkdownContent;
 
 // Re-export @mention autocomplete components
 #[allow(unused_imports)]
-pub use mention::{MentionAutocomplete, MentionCandidate, filter_candidates as filter_mention_candidates};
+pub use mention::{
+    MentionAutocomplete, MentionCandidate, filter_candidates as filter_mention_candidates,
+};
 
 // Toast notification system
 #[allow(dead_code)]

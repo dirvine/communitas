@@ -3,6 +3,8 @@ name: Build Binaries (Artifacts)
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -23,7 +25,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
-
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@1.88.0
@@ -81,7 +82,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@1.88.0
       with:
@@ -116,12 +116,10 @@ jobs:
         path: target/universal-apple-darwin/communitas-dioxus-macos-universal.tar.gz
 
   build-windows:
-    continue-on-error: true
     name: Build Windows Binaries
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@1.88.0
@@ -140,3 +138,48 @@ jobs:
       with:
         name: communitas-dioxus-windows-x86_64
         path: target/release/communitas-dioxus-windows-x86_64.zip
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Release Job — only runs on v* tag pushes
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  release:
+    name: Attach Binaries to GitHub Release
+    needs: [build-linux, build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: communitas-dioxus-linux-x86_64
+          path: ./release
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: communitas-dioxus-macos-universal
+          path: ./release
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: communitas-dioxus-windows-x86_64
+          path: ./release
+
+      - name: List release assets
+        run: ls -lh ./release/
+
+      - name: Upload binaries to GitHub Release
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            ./release/communitas-dioxus-x86_64-unknown-linux-gnu.tar.gz \
+            ./release/communitas-dioxus-macos-universal.tar.gz \
+            ./release/communitas-dioxus-windows-x86_64.zip \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

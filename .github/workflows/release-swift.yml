@@ -1,80 +1,305 @@
-name: Build Swift App (macOS)
+name: Release Swift App (macOS)
 
+# Trigger on swift-v* tags or manual dispatch
 on:
   push:
     tags:
-      - 'swift-v*'
+      - 'swift-v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+concurrency:
+  group: release-swift-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
   build-swift:
-    name: Build CommuniTas Swift App
+    name: Build & Sign CommuniTas Swift App
     runs-on: macos-latest
+    outputs:
+      dmg_name: ${{ steps.bundle.outputs.dmg_name }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build release binary
+      - name: Get version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/swift-v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/swift-v}
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building Swift release version: $VERSION"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Build Universal Binary
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Build universal binary
         run: |
           cd communitas-apple
-          swift build -c release
+          # Swift supports multi-arch builds directly producing a universal binary
+          swift build -c release --arch arm64 --arch x86_64
 
-      - name: Get binary info
+      - name: Verify universal binary
         run: |
-          BINARY=communitas-apple/.build/release/CommuniTas
+          BINARY=communitas-apple/.build/apple/Products/Release/CommuniTas
           ls -la "$BINARY"
           file "$BINARY"
           lipo -info "$BINARY"
 
-      - name: Ad-hoc sign
-        run: |
-          codesign --force --sign - communitas-apple/.build/release/CommuniTas
+      # ─────────────────────────────────────────────────────────────────────────
+      # Bundle .app
+      # ─────────────────────────────────────────────────────────────────────────
 
-      - name: Create archive
+      - name: Create .app bundle
+        id: bundle
         run: |
-          cd communitas-apple/.build/release
-          tar -czf CommuniTas-macos-arm64.tar.gz CommuniTas
+          VERSION="${{ steps.version.outputs.version }}"
+          APP_DIR="$RUNNER_TEMP/CommuniTas.app"
+          CONTENTS="$APP_DIR/Contents"
+          MACOS_DIR="$CONTENTS/MacOS"
+          RESOURCES_DIR="$CONTENTS/Resources"
 
-      - name: Upload artifact
+          mkdir -p "$MACOS_DIR"
+          mkdir -p "$RESOURCES_DIR"
+
+          # Copy universal binary
+          BINARY=communitas-apple/.build/apple/Products/Release/CommuniTas
+          cp "$BINARY" "$MACOS_DIR/CommuniTas"
+          chmod +x "$MACOS_DIR/CommuniTas"
+
+          # Create Info.plist
+          cat > "$CONTENTS/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleIdentifier</key>
+              <string>com.saorsalabs.communitas</string>
+              <key>CFBundleName</key>
+              <string>CommuniTas</string>
+              <key>CFBundleExecutable</key>
+              <string>CommuniTas</string>
+              <key>CFBundleVersion</key>
+              <string>${VERSION}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${VERSION}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleSignature</key>
+              <string>????</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>13.0</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>NSPrincipalClass</key>
+              <string>NSApplication</string>
+          </dict>
+          </plist>
+          EOF
+
+          echo "app_path=$APP_DIR" >> $GITHUB_OUTPUT
+          echo "dmg_name=CommuniTas-${VERSION}-universal.dmg" >> $GITHUB_OUTPUT
+          echo "Created .app bundle: $APP_DIR"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Code Signing
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Import certificates
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Decode certificate
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          security import "$CERTIFICATE_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add to keychain search list
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          echo "Certificate imported successfully"
+
+      - name: Sign app bundle
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          APP_PATH="${{ steps.bundle.outputs.app_path }}"
+
+          echo "Signing app bundle: $APP_PATH"
+
+          # Sign with hardened runtime and entitlements
+          codesign --deep --force --verify --verbose \
+            --options runtime \
+            --entitlements communitas-apple/entitlements.plist \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$APP_PATH"
+
+          echo "Verifying signature..."
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Create DMG
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Create DMG
+        run: |
+          APP_PATH="${{ steps.bundle.outputs.app_path }}"
+          DMG_NAME="${{ steps.bundle.outputs.dmg_name }}"
+          DMG_STAGING=$RUNNER_TEMP/dmg-staging
+
+          mkdir -p "$DMG_STAGING"
+
+          # Copy app to staging
+          cp -R "$APP_PATH" "$DMG_STAGING/"
+
+          # Create symlink to Applications
+          ln -s /Applications "$DMG_STAGING/Applications"
+
+          # Create DMG
+          hdiutil create -volname "CommuniTas" \
+            -srcfolder "$DMG_STAGING" \
+            -ov -format UDZO \
+            "$RUNNER_TEMP/$DMG_NAME"
+
+          echo "Created DMG: $RUNNER_TEMP/$DMG_NAME"
+
+      - name: Sign DMG
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          DMG_PATH="$RUNNER_TEMP/${{ steps.bundle.outputs.dmg_name }}"
+
+          codesign --force --verify --verbose \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$DMG_PATH"
+
+          echo "DMG signed successfully"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Notarization
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Notarize DMG
+        env:
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+        run: |
+          DMG_PATH="$RUNNER_TEMP/${{ steps.bundle.outputs.dmg_name }}"
+
+          echo "Submitting for notarization..."
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
+            --password "$MACOS_NOTARIZATION_PASSWORD" \
+            --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
+            --wait
+
+          echo "Stapling notarization ticket..."
+          xcrun stapler staple "$DMG_PATH"
+
+          echo "Notarization complete!"
+
+      - name: Verify notarization
+        run: |
+          DMG_PATH="$RUNNER_TEMP/${{ steps.bundle.outputs.dmg_name }}"
+
+          echo "Verifying notarization..."
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
+
+          echo "Checking staple..."
+          xcrun stapler validate "$DMG_PATH"
+
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CommuniTas-macos-arm64
-          path: communitas-apple/.build/release/CommuniTas-macos-arm64.tar.gz
+          name: ${{ steps.bundle.outputs.dmg_name }}
+          path: ${{ runner.temp }}/${{ steps.bundle.outputs.dmg_name }}
+          retention-days: 90
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Release Job
+  # ═══════════════════════════════════════════════════════════════════════════
 
   release:
-    name: Create Release
+    name: Create GitHub Release
     needs: build-swift
-    if: startsWith(github.ref, 'refs/tags/swift-v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download artifact
+      - name: Download DMG
         uses: actions/download-artifact@v4
         with:
-          name: CommuniTas-macos-arm64
+          name: ${{ needs.build-swift.outputs.dmg_name }}
           path: ./release
 
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
-          name: CommuniTas (Swift) ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          name: CommuniTas (Swift) ${{ needs.build-swift.outputs.version }}
           body: |
-            ## CommuniTas macOS App
+            ## CommuniTas ${{ needs.build-swift.outputs.version }} — Swift/SwiftUI macOS App
 
-            Swift/SwiftUI native macOS application.
-            Requires x0x daemon running on localhost:12700.
+            ### Downloads
+            - **macOS (Universal)**: `${{ needs.build-swift.outputs.dmg_name }}`
+              - Supports both Intel (x86_64) and Apple Silicon (M1/M2/M3/M4)
+              - Signed and notarized by Apple
 
             ### Installation
-            1. Download and extract the archive
-            2. Move CommuniTas to /Applications
-            3. Install x0x: `curl -sfL https://x0x.md | sh && x0x autostart && x0x start`
-            4. Launch CommuniTas
-          files: ./release/CommuniTas-macos-arm64.tar.gz
-          draft: true
+            1. Download the DMG file
+            2. Open the DMG
+            3. Drag CommuniTas to your Applications folder
+            4. Launch from Applications
+            5. If prompted, allow the app in System Preferences > Security & Privacy
+
+            ### Requirements
+            - macOS 13.0 (Ventura) or later
+            - x0x daemon running: `curl -sfL https://x0x.md | sh && x0x autostart && x0x start`
+
+            ### What's New
+            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+            ### Support
+            - Issues: https://github.com/${{ github.repository }}/issues
+          files: |
+            ./release/${{ needs.build-swift.outputs.dmg_name }}
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

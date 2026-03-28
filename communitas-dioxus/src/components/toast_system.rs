@@ -72,8 +72,14 @@ pub struct Toast {
 impl Toast {
     /// Create a new toast notification.
     pub fn new(kind: ToastKind, message: String) -> Self {
-        // Generate a simple unique ID from the message and kind.
-        let id = format!("toast-{:?}-{}", kind, message.len());
+        // Generate a collision-safe ID using a timestamp.
+        let id = format!(
+            "toast-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
         Self {
             id,
             kind,

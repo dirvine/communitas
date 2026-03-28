@@ -15,6 +15,8 @@ pub mod colors {
     pub const PRIMARY: &str = "#00d4ff";
     /// Primary hover state (lighter cyan)
     pub const PRIMARY_HOVER: &str = "#33ddff";
+    /// Primary hover background (semi-transparent cyan overlay)
+    pub const PRIMARY_HOVER_BG: &str = "rgba(0, 212, 255, 0.12)";
     /// Secondary accent color (amber)
     pub const SECONDARY: &str = "#f59e0b";
     /// Danger/error color (red)
@@ -462,6 +464,11 @@ mod tests {
     #[test]
     fn color_overlay_is_rgba() {
         assert!(colors::SURFACE_OVERLAY.starts_with("rgba("));
+    }
+
+    #[test]
+    fn primary_hover_bg_is_rgba() {
+        assert!(colors::PRIMARY_HOVER_BG.starts_with("rgba("));
     }
 
     #[test]

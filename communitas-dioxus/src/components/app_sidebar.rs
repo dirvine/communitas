@@ -50,9 +50,6 @@ pub struct AppSidebarProps {
     /// Callback when a contact is clicked for profile view.
     #[props(default)]
     pub on_contact_click: Option<EventHandler<String>>,
-    /// Callback when space info icon is clicked.
-    #[props(default)]
-    pub on_space_info: Option<EventHandler<String>>,
     /// Callback to open the create/join space modal.
     #[props(default)]
     pub on_create_space: Option<EventHandler<()>>,
@@ -205,7 +202,8 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
     let nav_item_style = |path: &str| -> String {
         if props.current_path == path {
             format!(
-                "{nav_item_base} background-color: rgba(0, 212, 255, 0.12); color: {};",
+                "{nav_item_base} background-color: {}; color: {};",
+                colors::PRIMARY_HOVER_BG,
                 colors::PRIMARY,
             )
         } else {
@@ -223,6 +221,20 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                 colors::TEXT_MUTED
             }
         )
+    };
+
+    // Pre-compute per-group data so we take the read lock once (Fix #7).
+    let group_render_data: Vec<(String, String, bool, Vec<ChannelMeta>)> = {
+        let snap = space_channels.read();
+        props
+            .groups
+            .iter()
+            .map(|g| {
+                let loaded = snap.contains_key(&g.id);
+                let chans = snap.get(&g.id).cloned().unwrap_or_default();
+                (g.id.clone(), g.name.clone(), loaded, chans)
+            })
+            .collect()
     };
 
     let identity_dot_color = if props.connected {
@@ -378,17 +390,15 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                         }
                     }
                 } else {
-                    for group in &props.groups {
+                    // Iterate over pre-computed group_render_data (lock already released).
+                    for (group_id, group_name, channels_loaded, channels_for_group) in &group_render_data {
                         {
-                            let group_id = group.id.clone();
-                            let group_name = group.name.clone();
+                            let group_id = group_id.clone();
+                            let group_name = group_name.clone();
+                            let channels_loaded = *channels_loaded;
+                            let channels_for_group = channels_for_group.clone();
                             let on_nav = props.on_navigate;
                             let is_expanded = expanded_space_id().as_deref() == Some(&group_id);
-                            let channels_for_group = space_channels
-                                .read()
-                                .get(&group_id)
-                                .cloned()
-                                .unwrap_or_default();
                             let current_path = props.current_path.clone();
                             let on_create_space = props.on_create_space;
 
@@ -400,6 +410,7 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                                     is_expanded,
                                     is_collapsed,
                                     channels: channels_for_group,
+                                    channels_loaded,
                                     current_path: current_path.clone(),
                                     on_toggle: move |_| {
                                         if is_expanded {
@@ -520,16 +531,8 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
 
                 if !is_collapsed {
                     div {
-                        style: format!(
-                            "font-size: {}; color: {}; font-weight: 600; \
-                             text-transform: uppercase; letter-spacing: 0.08em; \
-                             padding: {} {}; white-space: nowrap;",
-                            typography::TEXT_XS,
-                            colors::TEXT_MUTED,
-                            spacing::SM,
-                            spacing::MD,
-                        ),
-                        "System"
+                        style: "{section_header_style}",
+                        span { "System" }
                     }
                 }
 
@@ -613,6 +616,8 @@ struct SpaceAccordionItemProps {
     /// Whether the *sidebar itself* is collapsed (icon-only mode).
     is_collapsed: bool,
     channels: Vec<ChannelMeta>,
+    /// True once channels have been fetched for this group (even if the list is empty).
+    channels_loaded: bool,
     current_path: String,
     on_toggle: EventHandler<()>,
     on_navigate: EventHandler<String>,
@@ -625,6 +630,35 @@ fn SpaceAccordionItem(props: SpaceAccordionItemProps) -> Element {
 
     // Whether the current path is inside this space
     let is_space_active = props.current_path.starts_with(&space_path);
+
+    // Shared helper for channel/tab button styles (Fix #8).
+    let active_item_style = |is_active: bool| -> String {
+        format!(
+            "display: flex; align-items: center; gap: {}; \
+             padding: {} {}; \
+             border-radius: {}; cursor: pointer; \
+             font-size: {}; white-space: nowrap; \
+             transition: background-color 150ms ease, color 150ms ease; \
+             border: none; background: {}; \
+             width: 100%; text-align: left; \
+             color: {};",
+            spacing::XS,
+            spacing::XS,
+            spacing::SM,
+            radius::MD,
+            typography::TEXT_SM,
+            if is_active {
+                colors::PRIMARY_HOVER_BG
+            } else {
+                "none"
+            },
+            if is_active {
+                colors::PRIMARY
+            } else {
+                colors::TEXT_SECONDARY
+            },
+        )
+    };
 
     let header_style = format!(
         "display: flex; align-items: center; gap: {}; \
@@ -702,8 +736,8 @@ fn SpaceAccordionItem(props: SpaceAccordionItemProps) -> Element {
                         spacing::SM,
                     ),
 
-                    // Channels list
-                    if props.channels.is_empty() {
+                    // Channels list (Fix #9: distinguish loading vs truly empty)
+                    if !props.channels_loaded {
                         div {
                             style: format!(
                                 "padding: {} 0; font-size: {}; color: {};",
@@ -713,39 +747,32 @@ fn SpaceAccordionItem(props: SpaceAccordionItemProps) -> Element {
                             ),
                             "Loading channels…"
                         }
+                    } else if props.channels.is_empty() {
+                        div {
+                            style: format!(
+                                "padding: {} 0; font-size: {}; color: {};",
+                                spacing::XS,
+                                typography::TEXT_XS,
+                                colors::TEXT_MUTED,
+                            ),
+                            "No channels yet"
+                        }
                     } else {
                         for channel in &props.channels {
                             {
-                                let channel_path = format!("/space/{}", props.group_id);
                                 let chan_name = channel.name.clone();
                                 let on_nav = props.on_navigate;
-                                // Highlight if this is the active channel path
-                                let is_selected = props.current_path == channel_path;
-                                let chan_style = format!(
-                                    "display: flex; align-items: center; gap: {}; \
-                                     padding: {} {}; \
-                                     border-radius: {}; cursor: pointer; \
-                                     font-size: {}; white-space: nowrap; \
-                                     transition: background-color 150ms ease, color 150ms ease; \
-                                     border: none; background: {}; \
-                                     width: 100%; text-align: left; \
-                                     color: {};",
-                                    spacing::XS,
-                                    spacing::XS,
-                                    spacing::SM,
-                                    radius::MD,
-                                    typography::TEXT_SM,
-                                    if is_selected {
-                                        "rgba(0, 212, 255, 0.12)"
-                                    } else {
-                                        "none"
-                                    },
-                                    if is_selected {
-                                        colors::PRIMARY
-                                    } else {
-                                        colors::TEXT_SECONDARY
-                                    },
-                                );
+                                // Fix #1: include channel name in path; keep /space/{id} for "general".
+                                let channel_path = if chan_name == "general" {
+                                    format!("/space/{}", props.group_id)
+                                } else {
+                                    format!("/space/{}/{}", props.group_id, chan_name)
+                                };
+                                // Fix #1: match against both the exact path and the base path for "general".
+                                let is_selected = props.current_path == channel_path
+                                    || (chan_name == "general"
+                                        && props.current_path == format!("/space/{}", props.group_id));
+                                let chan_style = active_item_style(is_selected);
                                 rsx! {
                                     button {
                                         key: "{chan_name}",
@@ -792,7 +819,7 @@ fn SpaceAccordionItem(props: SpaceAccordionItemProps) -> Element {
                         "+ Add channel"
                     }
 
-                    // App shortcut tabs
+                    // App shortcut tabs (Fix #8: reuse active_item_style helper)
                     div {
                         style: format!("margin-top: {};", spacing::XS),
                         for (tab_key, tab_icon, tab_label) in SPACE_TABS {
@@ -801,23 +828,7 @@ fn SpaceAccordionItem(props: SpaceAccordionItemProps) -> Element {
                                 let on_nav = props.on_navigate;
                                 let tab_path_clone = tab_path.clone();
                                 let is_tab_active = props.current_path == tab_path;
-                                let tab_style = format!(
-                                    "display: flex; align-items: center; gap: {}; \
-                                     padding: {} {}; \
-                                     border-radius: {}; cursor: pointer; \
-                                     font-size: {}; white-space: nowrap; \
-                                     transition: background-color 150ms ease, color 150ms ease; \
-                                     border: none; background: {}; \
-                                     width: 100%; text-align: left; \
-                                     color: {};",
-                                    spacing::XS,
-                                    spacing::XS,
-                                    spacing::SM,
-                                    radius::MD,
-                                    typography::TEXT_SM,
-                                    if is_tab_active { "rgba(0, 212, 255, 0.12)" } else { "none" },
-                                    if is_tab_active { colors::PRIMARY } else { colors::TEXT_SECONDARY },
-                                );
+                                let tab_style = active_item_style(is_tab_active);
                                 rsx! {
                                     button {
                                         key: "{tab_key}",

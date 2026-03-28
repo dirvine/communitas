@@ -1,16 +1,6 @@
 import SwiftUI
 import X0xClient
 
-// MARK: - Navigation Selection
-
-/// Unified sidebar selection discriminant.
-enum SidebarSelection: Hashable {
-    case channel(spaceId: String, channelName: String)
-    case spaceTab(spaceId: String, tab: SpaceTab)
-    case dm(agentId: String)
-    case system(SystemPage)
-}
-
 // MARK: - ContentView
 
 struct ContentView: View {
@@ -56,10 +46,16 @@ struct ContentView: View {
             }
         }
         .task {
-            // Load channels for all groups on launch
-            for group in appState.groups {
-                let manager = appState.channelManager(for: group)
-                await manager.loadChannels()
+            // Load channels for all groups concurrently on launch.
+            await withTaskGroup(of: Void.self) { taskGroup in
+                for group in appState.groups {
+                    let manager = appState.channelManager(for: group)
+                    // Skip groups whose channels are already populated.
+                    guard manager.channels.isEmpty else { continue }
+                    taskGroup.addTask {
+                        await manager.loadChannels()
+                    }
+                }
             }
             // Auto-expand the space containing the selected group
             if let selected = appState.selectedGroup {
@@ -97,14 +93,20 @@ struct ContentView: View {
                     .font(.headline)
                     .fontWeight(.semibold)
                 if let agentId = appState.agentIdentity?.agentId {
-                    Text(truncatedAgentId(agentId))
+                    Text(truncatedId(agentId))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fontDesign(.monospaced)
                 }
-                Text("Agent \u{00B7} Machine")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                if let agentId = appState.agentIdentity?.agentId {
+                    Text("agent:\(String(agentId.prefix(8))) \u{00B7} machine")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text("Agent \u{00B7} Machine")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
             .padding(.vertical, 4)
         }
@@ -120,7 +122,8 @@ struct ContentView: View {
         return "CommuniTas"
     }
 
-    private func truncatedAgentId(_ id: String) -> String {
+    /// Truncate any ID for display (first 12 chars + ellipsis).
+    private func truncatedId(_ id: String) -> String {
         guard id.count > 16 else { return id }
         return String(id.prefix(12)) + "..."
     }
@@ -304,10 +307,15 @@ struct ContentView: View {
         (manager.unreadCounts[channel] ?? 0) > 0
     }
 
-    private func spaceColor(for groupId: String) -> Color {
+    /// Shared color-from-id helper used by spaces and DM avatars.
+    private func colorForId(_ id: String) -> Color {
         let palette: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
-        let index = abs(groupId.hashValue) % palette.count
+        let index = abs(id.hashValue) % palette.count
         return palette[index]
+    }
+
+    private func spaceColor(for groupId: String) -> Color {
+        colorForId(groupId)
     }
 
     // MARK: - Direct Messages Section
@@ -330,7 +338,7 @@ struct ContentView: View {
         let isSelected = appState.selectedDMContact?.agentId == contact.agentId
             && appState.selectedSystemPage == nil
         let isOnline = appState.onlineAgents.contains(contact.agentId)
-        let displayLabel = contact.label ?? dmTruncatedId(contact.agentId)
+        let displayLabel = contact.label ?? truncatedId(contact.agentId)
 
         return Button {
             appState.selectedDMContact = contact
@@ -356,17 +364,6 @@ struct ContentView: View {
                 ? Color.accentColor.opacity(0.12)
                 : Color.clear
         )
-    }
-
-    private func dmTruncatedId(_ id: String) -> String {
-        guard id.count > 16 else { return id }
-        return String(id.prefix(8)) + "..." + String(id.suffix(6))
-    }
-
-    private func dmAvatarColor(for agentId: String) -> Color {
-        let palette: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
-        let index = abs(agentId.hashValue) % palette.count
-        return palette[index]
     }
 
     // MARK: - System Section

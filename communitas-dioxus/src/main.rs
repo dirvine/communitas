@@ -330,17 +330,9 @@ fn AppShell(children: Element) -> Element {
                     .into_iter()
                     .map(|c| ContactEntry {
                         agent_id: c.agent_id.clone(),
-                        label: c.label.unwrap_or_else(|| {
-                            if c.agent_id.len() > 12 {
-                                format!(
-                                    "{}..{}",
-                                    &c.agent_id[..6],
-                                    &c.agent_id[c.agent_id.len() - 4..]
-                                )
-                            } else {
-                                c.agent_id.clone()
-                            }
-                        }),
+                        label: c
+                            .label
+                            .unwrap_or_else(|| x0x_contract::fallback_sender_name(&c.agent_id)),
                         online: false, // presence will be wired later
                     })
                     .collect();
@@ -417,9 +409,6 @@ fn AppShell(children: Element) -> Element {
                     on_contact_click: move |aid: String| {
                         detail_content.set(DetailContent::AgentProfile { agent_id: aid });
                     },
-                    on_space_info: move |gid: String| {
-                        detail_content.set(DetailContent::SpaceInfo { group_id: gid });
-                    },
                     on_create_space: move |_: ()| {
                         show_space_modal.set(true);
                         space_modal_tab.set(SpaceModalTab::Create);
@@ -427,6 +416,7 @@ fn AppShell(children: Element) -> Element {
                         space_description.set(String::new());
                         space_invite_link.set(String::new());
                         space_display_name.set(String::new());
+                        space_submitting.set(false);
                         space_error.set(None);
                     },
                 }
@@ -655,21 +645,32 @@ fn Settings() -> Element {
 
 #[component]
 fn About() -> Element {
+    use tokens::typography;
     rsx! {
         AppShell {
             div {
-                style: "display: flex; flex-direction: column; align-items: center; \
-                        justify-content: center; height: 100%; gap: 1rem; color: #b0b3cc;",
+                style: format!(
+                    "display: flex; flex-direction: column; align-items: center; \
+                     justify-content: center; height: 100%; gap: 1rem; color: {};",
+                    colors::TEXT_SECONDARY,
+                ),
                 div {
-                    style: "font-size: 1.125rem; font-weight: 600; color: #e4e6f0;",
+                    style: format!(
+                        "font-size: 1.125rem; font-weight: 600; color: {};",
+                        colors::TEXT_PRIMARY,
+                    ),
                     "Communitas"
                 }
                 div {
-                    style: "font-size: 0.875rem; color: #747896;",
+                    style: format!("font-size: 0.875rem; color: {};", colors::TEXT_MUTED),
                     "Local-first, PQC-ready collaboration platform"
                 }
                 div {
-                    style: "font-size: 0.75rem; font-family: ui-monospace, monospace; color: #747896;",
+                    style: format!(
+                        "font-size: 0.75rem; font-family: {}; color: {};",
+                        typography::FONT_MONO,
+                        colors::TEXT_MUTED,
+                    ),
                     {format!("v{}", env!("CARGO_PKG_VERSION"))}
                 }
             }

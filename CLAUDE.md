@@ -20,7 +20,7 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 ### Swift Application (macOS)
 - **Location**: `communitas-apple/`
 - **Framework**: SwiftUI, Swift Package Manager, macOS 14+
-- **Targets**: `CommuniTas` (executable) + `X0xClient` (library)
+- **Targets**: `Communitas` (executable) + `X0xClient` (library)
 - **Daemon**: Discovers x0xd config from `~/Library/Application Support/x0x/api.port` and `api-token`
 
 ### Rust Core Library

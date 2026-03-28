@@ -14,7 +14,7 @@ Native macOS application for Communitas, built with SwiftUI.
 communitas-apple/
   Package.swift
   Sources/
-    CommuniTas/       # Main app target (executable)
+    Communitas/       # Main app target (executable)
       Views/          # SwiftUI views
       Models/         # AppState, ChannelManager, NavigationItem
       Services/       # NotificationService

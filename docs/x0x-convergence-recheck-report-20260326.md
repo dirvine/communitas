@@ -323,8 +323,8 @@ Files reviewed:
 - `communitas-apple/Sources/X0xClient/Models/Contact.swift`
 - `communitas-apple/Sources/X0xClient/Models/Group.swift`
 - `communitas-apple/Sources/X0xClient/Models/Channel.swift`
-- `communitas-apple/Sources/CommuniTas/Models/AppState.swift`
-- `communitas-apple/Sources/CommuniTas/Models/ChannelManager.swift`
+- `communitas-apple/Sources/Communitas/Models/AppState.swift`
+- `communitas-apple/Sources/Communitas/Models/ChannelManager.swift`
 - `docs/x0x-integration-contract.md`
 - `docs/x0x-interop-test-matrix.md`
 - `../x0x/docs/api-reference.md`
@@ -399,10 +399,10 @@ File-by-file:
   - Channel payload shape is close enough for `id`, `text`, `sender_name`, `sender_id`, `timestamp`, `channel`, `thread_root`, `broadcast`.
   - Persisted channel metadata still depends on an invented `ChannelIndex` plus flags that are not part of the frozen GUI-compatible schema.
 
-- `communitas-apple/Sources/CommuniTas/Models/AppState.swift`
+- `communitas-apple/Sources/Communitas/Models/AppState.swift`
   - It is downstream of the broken shared Swift x0x layer. Most UI state drift should not be fixed here first.
 
-- `communitas-apple/Sources/CommuniTas/Models/ChannelManager.swift`
+- `communitas-apple/Sources/Communitas/Models/ChannelManager.swift`
   - Uses full `groupId` in topics instead of the 16-char prefix.
   - Persists channel metadata under `channels.{groupId}.index` and `channels.{groupId}.{name}.meta`, which the frozen contract explicitly forbids.
   - Treats inbound messages as custom gossip-event objects rather than x0x WS frames.
@@ -442,10 +442,10 @@ File-by-file rewrite plan in execution order:
 7. `communitas-apple/Sources/X0xClient/Models/Channel.swift`
    - Trim persisted schema to the frozen channel object.
 
-8. `communitas-apple/Sources/CommuniTas/Models/ChannelManager.swift`
+8. `communitas-apple/Sources/Communitas/Models/ChannelManager.swift`
    - Rewrite topics, store id, key name, store payload, WS parsing, and create-channel flow.
 
-9. `communitas-apple/Sources/CommuniTas/Models/AppState.swift`
+9. `communitas-apple/Sources/Communitas/Models/AppState.swift`
    - Update only after the shared Swift x0x layer is exact.
 
 What can be rewritten safely before UI changes:

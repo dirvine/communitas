@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct CommuniTasApp: App {
+struct CommunitasApp: App {
     @StateObject private var appState = AppState()
 
     var body: some Scene {

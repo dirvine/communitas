@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   build-swift:
-    name: Build & Sign CommuniTas Swift App
+    name: Build & Sign Communitas Swift App
     runs-on: macos-latest
     outputs:
       dmg_name: ${{ steps.bundle.outputs.dmg_name }}
@@ -52,7 +52,7 @@ jobs:
 
       - name: Verify universal binary
         run: |
-          BINARY=communitas-apple/.build/apple/Products/Release/CommuniTas
+          BINARY=communitas-apple/.build/apple/Products/Release/Communitas
           ls -la "$BINARY"
           file "$BINARY"
           lipo -info "$BINARY"
@@ -65,7 +65,7 @@ jobs:
         id: bundle
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          APP_DIR="$RUNNER_TEMP/CommuniTas.app"
+          APP_DIR="$RUNNER_TEMP/Communitas.app"
           CONTENTS="$APP_DIR/Contents"
           MACOS_DIR="$CONTENTS/MacOS"
           RESOURCES_DIR="$CONTENTS/Resources"
@@ -74,9 +74,9 @@ jobs:
           mkdir -p "$RESOURCES_DIR"
 
           # Copy universal binary
-          BINARY=communitas-apple/.build/apple/Products/Release/CommuniTas
-          cp "$BINARY" "$MACOS_DIR/CommuniTas"
-          chmod +x "$MACOS_DIR/CommuniTas"
+          BINARY=communitas-apple/.build/apple/Products/Release/Communitas
+          cp "$BINARY" "$MACOS_DIR/Communitas"
+          chmod +x "$MACOS_DIR/Communitas"
 
           # Create Info.plist
           cat > "$CONTENTS/Info.plist" << EOF
@@ -87,9 +87,9 @@ jobs:
               <key>CFBundleIdentifier</key>
               <string>com.saorsalabs.communitas</string>
               <key>CFBundleName</key>
-              <string>CommuniTas</string>
+              <string>Communitas</string>
               <key>CFBundleExecutable</key>
-              <string>CommuniTas</string>
+              <string>Communitas</string>
               <key>CFBundleVersion</key>
               <string>${VERSION}</string>
               <key>CFBundleShortVersionString</key>
@@ -181,7 +181,7 @@ jobs:
           ln -s /Applications "$DMG_STAGING/Applications"
 
           # Create DMG
-          hdiutil create -volname "CommuniTas" \
+          hdiutil create -volname "Communitas" \
             -srcfolder "$DMG_STAGING" \
             -ov -format UDZO \
             "$RUNNER_TEMP/$DMG_NAME"

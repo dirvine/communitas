@@ -119,7 +119,7 @@ struct ContentView: View {
         if let agentId = appState.agentIdentity?.agentId {
             return String(agentId.prefix(8))
         }
-        return "CommuniTas"
+        return "Communitas"
     }
 
     /// Truncate any ID for display (first 12 chars + ellipsis).
@@ -441,7 +441,7 @@ struct ContentView: View {
             Image(systemName: "building.2")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
-            Text("Welcome to CommuniTas")
+            Text("Welcome to Communitas")
                 .font(.title2)
             Text("Select a space and channel from the sidebar.")
                 .foregroundStyle(.secondary)
@@ -459,7 +459,7 @@ struct AboutView: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.secondary)
 
-            Text("CommuniTas")
+            Text("Communitas")
                 .font(.largeTitle)
                 .fontWeight(.bold)
 

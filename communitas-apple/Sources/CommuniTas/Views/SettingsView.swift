@@ -15,7 +15,7 @@ struct SettingsView: View {
 
                 HStack {
                     statusDot
-                    Text(appState.daemonState.rawValue.replacingOccurrences(of: "n", with: "N", options: [], range: nil))
+                    Text(daemonStateLabel)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -68,6 +68,16 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
+    }
+
+    private var daemonStateLabel: String {
+        switch appState.daemonState {
+        case .running: return "Running"
+        case .starting: return "Starting..."
+        case .notRunning: return "Not Running"
+        case .notInstalled: return "Not Installed"
+        case .error: return "Error"
+        }
     }
 
     private var statusDot: some View {

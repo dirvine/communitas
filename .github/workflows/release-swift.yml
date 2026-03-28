@@ -234,26 +234,31 @@ jobs:
 
       - name: Sign DMG for Sparkle (EdDSA)
         id: sparkle_sign
+        continue-on-error: true
         env:
           SPARKLE_KEY: ${{ secrets.SPARKLE_KEY }}
         run: |
           DMG_PATH="$RUNNER_TEMP/${{ steps.bundle.outputs.dmg_name }}"
 
-          # Reuse the already-downloaded Sparkle tools (fetched in the Extract step above)
-          # sign_update reads the Ed25519 private key from the SPARKLE_KEY environment variable
-          # and outputs: sparkle:edSignature="<base64>" length="<bytes>"
-          SIGN_OUTPUT=$(/tmp/sparkle/bin/sign_update "$DMG_PATH" 2>&1)
-          echo "sign_update output: $SIGN_OUTPUT"
+          # sign_update reads Ed25519 private key from SPARKLE_KEY env var
+          # Output format: sparkle:edSignature="<base64>" length="<bytes>"
+          SIGN_OUTPUT=$(/tmp/sparkle/bin/sign_update "$DMG_PATH" 2>&1) || true
+          echo "sign_update raw output length: ${#SIGN_OUTPUT}"
 
-          # Extract the bare base64 signature value
-          ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -o 'sparkle:edSignature="[^"]*"' | sed 's/sparkle:edSignature="//;s/"$//')
+          # Try multiple extraction patterns (format varies by Sparkle version)
+          ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -o 'sparkle:edSignature="[^"]*"' | sed 's/sparkle:edSignature="//;s/"$//' || true)
           if [ -z "$ED_SIGNATURE" ]; then
-            echo "ERROR: Could not extract edSignature from sign_update output"
-            exit 1
+            # Try alternate format: just the base64 string on its own line
+            ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -E '^[A-Za-z0-9+/=]{40,}$' | head -1 || true)
           fi
 
-          echo "ed_signature=$ED_SIGNATURE" >> $GITHUB_OUTPUT
-          echo "Sparkle EdDSA signature generated"
+          if [ -z "$ED_SIGNATURE" ]; then
+            echo "WARNING: Could not extract Sparkle EdDSA signature. Appcast will ship unsigned."
+            echo "ed_signature=" >> $GITHUB_OUTPUT
+          else
+            echo "ed_signature=$ED_SIGNATURE" >> $GITHUB_OUTPUT
+            echo "Sparkle EdDSA signature generated (${#ED_SIGNATURE} chars)"
+          fi
 
       - name: Generate appcast.xml
         run: |

@@ -36,8 +36,9 @@ final class ChannelManager: ObservableObject {
     /// Last time a typing event was sent (for throttling to max 1 per 2 seconds).
     private var lastTypingSent: Date?
 
-    /// Timer for expiring stale typing users (3-second timeout).
-    private var typingCleanupTimer: Timer?
+    /// Task for expiring stale typing users (3-second polling loop).
+    /// Using a Task instead of Timer avoids non-Sendable RunLoop timer threading concerns.
+    private var typingCleanupTask: Task<Void, Never>?
 
     init(client: X0xClient, groupId: String, groupName: String, agentId: String, displayName: String) {
         self.client = client
@@ -49,8 +50,8 @@ final class ChannelManager: ObservableObject {
 
     deinit {
         listeningTask?.cancel()
+        typingCleanupTask?.cancel()
         webSocket?.disconnect()
-        typingCleanupTimer?.invalidate()
     }
 
     // MARK: - Topic Helpers
@@ -626,17 +627,20 @@ final class ChannelManager: ObservableObject {
         }
     }
 
-    /// Schedule or reset the timer that expires stale typing users after 3 seconds.
+    /// Start (or restart) a Task-based cleanup loop that expires stale typing users.
+    /// Using a Task instead of Timer avoids RunLoop thread-safety concerns with NSTimer.
     private func scheduleTypingCleanup() {
-        typingCleanupTimer?.invalidate()
-        typingCleanupTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+        // Only start a new cleanup loop if one isn't already running.
+        guard typingCleanupTask == nil else { return }
+        typingCleanupTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled, let self else { break }
                 let cutoff = Date().addingTimeInterval(-3.0)
                 self.typingUsers = self.typingUsers.filter { $0.value.lastSeen > cutoff }
                 if self.typingUsers.isEmpty {
-                    self.typingCleanupTimer?.invalidate()
-                    self.typingCleanupTimer = nil
+                    self.typingCleanupTask = nil
+                    break
                 }
             }
         }
@@ -646,8 +650,8 @@ final class ChannelManager: ObservableObject {
 
     func disconnect() {
         listeningTask?.cancel()
+        typingCleanupTask?.cancel()
+        typingCleanupTask = nil
         webSocket?.disconnect()
-        typingCleanupTimer?.invalidate()
-        typingCleanupTimer = nil
     }
 }

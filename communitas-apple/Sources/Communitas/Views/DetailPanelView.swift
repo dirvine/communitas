@@ -96,10 +96,10 @@ struct AgentProfilePanel: View {
                             .font(.caption2)
                             .foregroundStyle(DeepSpace.textMuted)
                         HStack(spacing: 6) {
-                            trustButton("Blocked", level: .untrusted, color: DeepSpace.red)
-                            trustButton("Unknown", level: .known, color: DeepSpace.amber)
-                            trustButton("Known", level: .trusted, color: DeepSpace.cyan)
-                            trustButton("Trusted", level: .verified, color: DeepSpace.green)
+                            trustButton("Blocked", level: .blocked, color: DeepSpace.red)
+                            trustButton("Unknown", level: .unknown, color: DeepSpace.amber)
+                            trustButton("Known", level: .known, color: DeepSpace.cyan)
+                            trustButton("Trusted", level: .trusted, color: DeepSpace.green)
                         }
                     }
                     .padding(4)
@@ -130,8 +130,8 @@ struct AgentProfilePanel: View {
                                         Text(truncatedId(machine.machineId))
                                             .font(.system(.caption2, design: .monospaced))
                                             .foregroundStyle(DeepSpace.textPrimary)
-                                        if let addr = machine.address {
-                                            Text(addr)
+                                        if let label = machine.label {
+                                            Text(label)
                                                 .font(.caption2)
                                                 .foregroundStyle(DeepSpace.textSecondary)
                                         }
@@ -395,7 +395,7 @@ struct SpaceInfoPanel: View {
             defer { isGeneratingInvite = false }
             do {
                 let response = try await appState.client.invite(groupId: group.groupId)
-                inviteLink = response.invite
+                inviteLink = response.inviteLink
             } catch {
                 appState.errorMessage = error.localizedDescription
             }

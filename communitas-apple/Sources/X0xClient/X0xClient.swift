@@ -245,22 +245,31 @@ public final class X0xClient: Sendable {
     }
 
     /// List machines associated with a contact. `GET /contacts/:agent_id/machines`
+    /// Returns wrapped: `{"ok":true,"machines":[...]}`
     public func listMachines(agentId: String) async throws -> [MachineRecord] {
-        try await get("/contacts/\(agentId)/machines")
+        let resp: MachineListResponse = try await get("/contacts/\(agentId)/machines")
+        return resp.machines
     }
 
     // MARK: - File Transfer
 
     /// Initiate a file send. `POST /files/send`
-    public func sendFile(agentId: String, filename: String, size: UInt64) async throws -> String {
-        let body = SendFileRequest(agentId: agentId, filename: filename, size: size)
+    /// - Parameters:
+    ///   - agentId: Destination agent ID (hex).
+    ///   - filename: Original filename.
+    ///   - size: File size in bytes.
+    ///   - sha256: SHA-256 hash of the file (required by daemon).
+    public func sendFile(agentId: String, filename: String, size: UInt64, sha256: String) async throws -> String {
+        let body = SendFileRequest(agentId: agentId, filename: filename, size: size, sha256: sha256)
         let resp: SendFileResponse = try await post("/files/send", body: body)
         return resp.transferId
     }
 
     /// List active file transfers. `GET /files/transfers`
+    /// Returns wrapped: `{"ok":true,"transfers":[...]}`
     public func listTransfers() async throws -> [FileTransfer] {
-        try await get("/files/transfers")
+        let resp: FileTransferListResponse = try await get("/files/transfers")
+        return resp.transfers
     }
 
     /// Accept an incoming file transfer. `POST /files/accept/:id`
@@ -283,6 +292,7 @@ public final class X0xClient: Sendable {
     }
 
     /// List tasks in a task list. `GET /task-lists/:id/tasks`
+    /// Returns wrapped: `{"ok":true,"tasks":[...]}`
     public func listTasks(listId: String) async throws -> [TaskItem] {
         let resp: TaskList = try await get("/task-lists/\(listId)/tasks")
         return resp.tasks

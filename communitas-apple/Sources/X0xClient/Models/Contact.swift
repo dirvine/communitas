@@ -1,11 +1,12 @@
 import Foundation
 
 /// Trust level assigned to a contact.
+/// Matches the x0x daemon values: `blocked`, `unknown`, `known`, `trusted`.
 public enum TrustLevel: String, Codable, Sendable, CaseIterable, Hashable {
-    case untrusted
+    case blocked
+    case unknown
     case known
     case trusted
-    case verified
 }
 
 /// A contact stored in the x0x daemon.
@@ -57,17 +58,26 @@ public struct AddContactRequest: Codable, Sendable {
 }
 
 /// A machine record associated with an agent.
+/// Daemon returns: `{ machine_id, label?, first_seen, last_seen, pinned }`.
 public struct MachineRecord: Codable, Sendable, Identifiable {
     public var id: String { machineId }
     public let machineId: String
-    public let agentId: String
-    public let address: String?
+    public let label: String?
+    public let firstSeen: UInt64?
     public let lastSeen: UInt64?
+    public let pinned: Bool?
 
     enum CodingKeys: String, CodingKey {
         case machineId = "machine_id"
-        case agentId = "agent_id"
-        case address
+        case label
+        case firstSeen = "first_seen"
         case lastSeen = "last_seen"
+        case pinned
     }
+}
+
+/// Wrapper for `GET /contacts/:agent_id/machines` response.
+public struct MachineListResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let machines: [MachineRecord]
 }

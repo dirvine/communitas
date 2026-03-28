@@ -148,7 +148,7 @@ struct ContactsView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(agent.displayName ?? truncatedId(agent.agentId))
+                    Text(truncatedId(agent.agentId))
                         .font(.headline)
                     // AI / Agent label badge
                     Text("Agent")
@@ -228,10 +228,10 @@ struct ContactsView: View {
 
     private func trustColor(_ level: TrustLevel) -> Color {
         switch level {
-        case .untrusted: return .red
-        case .known: return .orange
-        case .trusted: return .blue
-        case .verified: return .green
+        case .blocked: return .red
+        case .unknown: return .orange
+        case .known: return .blue
+        case .trusted: return .green
         }
     }
 

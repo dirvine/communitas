@@ -94,6 +94,15 @@ pub struct DiscoveredAgentList {
     pub agents: Vec<DiscoveredAgent>,
 }
 
+/// Internal wrapper for `GET /agents/discovered/:agent_id`.
+///
+/// The daemon returns `{"ok": true, "agent": {...}}` with the agent nested
+/// under the `"agent"` key rather than flattened at the root level.
+#[derive(Debug, Deserialize)]
+pub(crate) struct DiscoveredAgentWrapper {
+    pub agent: DiscoveredAgent,
+}
+
 /// Response wrapper for `GET /presence`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PresenceList {
@@ -315,12 +324,15 @@ pub struct SetTrustRequest {
 }
 
 /// Request body for `PATCH /contacts/:agent_id`.
+///
+/// The daemon accepts `trust_level` and `identity_type`; it does not support
+/// a `label` field on this endpoint.
 #[derive(Debug, Serialize)]
 pub struct UpdateContactRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trust_level: Option<TrustLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    pub identity_type: Option<String>,
 }
 
 /// A contact from `GET /contacts`.
@@ -721,13 +733,20 @@ pub struct StoreKeyIndex {
 // ── File transfer ───────────────────────────────────────────────────────────
 
 /// Request body for `POST /files/send`.
+///
+/// The daemon requires both `agent_id` and `sha256` to be non-empty.
+/// `path` is an optional local source path that x0xd uses when reading file
+/// content to send; omit it if x0xd will receive the data over the QUIC stream.
 #[derive(Debug, Serialize)]
 pub struct SendFileRequest {
     pub agent_id: String,
     pub filename: String,
     pub size: u64,
+    /// SHA-256 hex digest of the file content. Required by the daemon.
+    pub sha256: String,
+    /// Optional local filesystem path for x0xd to read the file from.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha256: Option<String>,
+    pub path: Option<String>,
 }
 
 /// Response from initiating a file send.
@@ -776,6 +795,15 @@ pub struct FileTransfer {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TransferList {
     pub transfers: Vec<FileTransfer>,
+}
+
+/// Internal wrapper for `GET /files/transfers/:id`.
+///
+/// The daemon returns `{"ok": true, "transfer": {...}}` with the transfer nested
+/// under the `"transfer"` key rather than flattened at the root level.
+#[derive(Debug, Deserialize)]
+pub(crate) struct FileTransferWrapper {
+    pub transfer: FileTransfer,
 }
 
 /// Request body for `POST /files/reject/:id`.

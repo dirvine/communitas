@@ -185,7 +185,7 @@ struct SwarmView: View {
                                 Image(systemName: "cpu")
                                     .font(.system(size: 8))
                                     .foregroundStyle(.blue)
-                                Text(agent.displayName ?? String(agent.agentId.prefix(8)))
+                                Text(String(agent.agentId.prefix(8)))
                                     .font(.caption)
                             }
                             .padding(.horizontal, 8)

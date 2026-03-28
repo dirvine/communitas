@@ -1,3 +1,4 @@
+import CryptoKit
 import SwiftUI
 import X0xClient
 
@@ -76,7 +77,7 @@ struct FilesView: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            let incoming = transfers.filter { $0.direction == .download && $0.status == .pending }
+            let incoming = transfers.filter { $0.direction == .receiving && $0.status == .pending }
             if incoming.isEmpty {
                 Text("No pending incoming files.")
                     .font(.caption)
@@ -97,7 +98,7 @@ struct FilesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(transfer.filename)
                     .font(.subheadline)
-                Text(formatSize(transfer.size))
+                Text(formatSize(transfer.totalSize))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -127,7 +128,7 @@ struct FilesView: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            let active = transfers.filter { $0.status == .inProgress || $0.status == .completed }
+            let active = transfers.filter { $0.status == .inProgress || $0.status == .complete }
             if active.isEmpty {
                 Text("No active transfers.")
                     .font(.caption)
@@ -143,13 +144,13 @@ struct FilesView: View {
 
     private func transferRow(_ transfer: FileTransfer) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: transfer.direction == .upload ? "arrow.up.doc" : "arrow.down.doc")
-                .foregroundStyle(transfer.direction == .upload ? .orange : .blue)
+            Image(systemName: transfer.direction == .sending ? "arrow.up.doc" : "arrow.down.doc")
+                .foregroundStyle(transfer.direction == .sending ? .orange : .blue)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(transfer.filename)
                     .font(.subheadline)
-                Text(formatSize(transfer.size))
+                Text(formatSize(transfer.totalSize))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -158,10 +159,8 @@ struct FilesView: View {
 
             statusBadge(transfer.status)
 
-            if let progress = transfer.progress {
-                ProgressView(value: progress)
-                    .frame(width: 80)
-            }
+            ProgressView(value: transfer.progress)
+                .frame(width: 80)
         }
         .padding(10)
         .background(Color.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
@@ -181,9 +180,9 @@ struct FilesView: View {
         switch status {
         case .pending: return .gray
         case .inProgress: return .blue
-        case .completed: return .green
+        case .complete: return .green
         case .failed: return .red
-        case .cancelled: return .orange
+        case .rejected: return .orange
         }
     }
 
@@ -247,17 +246,25 @@ struct FilesView: View {
     private func sendFileAction(url: URL) async {
         guard !selectedAgentId.isEmpty else { return }
         let filename = url.lastPathComponent
-        let size: UInt64
+        let fileData: Data
         do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-            size = (attributes[.size] as? UInt64) ?? 0
+            fileData = try Data(contentsOf: url)
         } catch {
             errorMessage = "Cannot read file: \(error.localizedDescription)"
             return
         }
+        let size = UInt64(fileData.count)
+        let sha256 = SHA256.hash(data: fileData)
+            .map { String(format: "%02x", $0) }
+            .joined()
 
         do {
-            _ = try await appState.client.sendFile(agentId: selectedAgentId, filename: filename, size: size)
+            _ = try await appState.client.sendFile(
+                agentId: selectedAgentId,
+                filename: filename,
+                size: size,
+                sha256: sha256
+            )
             await refreshTransfers()
         } catch {
             errorMessage = "Failed to send: \(error.localizedDescription)"

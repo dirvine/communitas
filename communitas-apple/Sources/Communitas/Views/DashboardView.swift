@@ -147,7 +147,7 @@ struct DashboardView: View {
                                 .fill(DeepSpace.green)
                                 .frame(width: 8, height: 8)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(agent.displayName ?? truncatedId(agent.agentId))
+                                Text(truncatedId(agent.agentId))
                                     .font(.subheadline)
                                     .foregroundStyle(DeepSpace.textPrimary)
                                 Text(truncatedId(agent.agentId))

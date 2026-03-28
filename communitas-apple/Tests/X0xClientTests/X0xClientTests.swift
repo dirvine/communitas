@@ -32,10 +32,10 @@ struct X0xClientTests {
     func trustLevelCases() {
         let cases = TrustLevel.allCases
         #expect(cases.count == 4)
-        #expect(cases.contains(.untrusted))
+        #expect(cases.contains(.blocked))
+        #expect(cases.contains(.unknown))
         #expect(cases.contains(.known))
         #expect(cases.contains(.trusted))
-        #expect(cases.contains(.verified))
     }
 
     @Test("Contact model decodes from JSON")
@@ -217,7 +217,7 @@ struct X0xClientTests {
         let json = """
         {
             "ok": true,
-            "peers": ["peer1", "peer2", "peer3"]
+            "peers": [{"id": "peer1"}, {"id": "peer2"}, {"id": "peer3"}]
         }
         """
         let data = Data(json.utf8)
@@ -251,19 +251,22 @@ struct X0xClientTests {
         {
             "transfer_id": "tx-001",
             "filename": "doc.pdf",
-            "size": 1024,
-            "direction": "upload",
-            "status": "in_progress",
-            "peer_agent_id": "agent-x",
-            "progress": 0.5
+            "total_size": 1024,
+            "bytes_transferred": 512,
+            "direction": "Sending",
+            "status": "InProgress",
+            "remote_agent_id": "agent-x",
+            "sha256": "abc123",
+            "started_at": 1700000000
         }
         """
         let data = Data(json.utf8)
         let transfer = try JSONDecoder().decode(FileTransfer.self, from: data)
         #expect(transfer.transferId == "tx-001")
-        #expect(transfer.direction == .upload)
+        #expect(transfer.direction == .sending)
         #expect(transfer.status == .inProgress)
         #expect(transfer.progress == 0.5)
+        #expect(transfer.remoteAgentId == "agent-x")
     }
 
     @Test("DaemonState has expected raw values")

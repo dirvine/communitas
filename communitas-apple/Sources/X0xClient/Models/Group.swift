@@ -51,11 +51,23 @@ public struct GroupSummary: Codable, Sendable, Identifiable, Hashable {
     }
 }
 
+/// A member entry within detailed group information.
+/// Daemon returns `{ "agent_id": "hex", "display_name": "Alice" }` per member.
+public struct GroupMember: Codable, Sendable {
+    public let agentId: String
+    public let displayName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case displayName = "display_name"
+    }
+}
+
 /// Detailed group information.
 public struct GroupInfo: Codable, Sendable {
     public let groupId: String
     public let name: String
-    public let members: [String]?
+    public let members: [GroupMember]?
     public let description: String?
 
     enum CodingKeys: String, CodingKey {
@@ -80,9 +92,22 @@ public struct InviteRequest: Codable, Sendable {
     }
 }
 
-/// Response containing the invite token.
+/// Response containing the invite link.
+/// Daemon returns `{ "ok": true, "invite_link": "...", "group_id": "...", "group_name": "...", "expires_at": N }`.
 public struct InviteResponse: Codable, Sendable {
-    public let invite: String
+    public let ok: Bool?
+    public let inviteLink: String
+    public let groupId: String?
+    public let groupName: String?
+    public let expiresAt: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case inviteLink = "invite_link"
+        case groupId = "group_id"
+        case groupName = "group_name"
+        case expiresAt = "expires_at"
+    }
 }
 
 /// Request to join a group via invite token.
@@ -102,13 +127,18 @@ public struct JoinGroupRequest: Codable, Sendable {
 }
 
 /// Response after joining a group.
+/// Daemon returns `{ "ok": true, "group_id": "...", "group_name": "...", "chat_topic": "..." }`.
 public struct JoinGroupResponse: Codable, Sendable {
+    public let ok: Bool?
     public let groupId: String
-    public let name: String
+    public let groupName: String
+    public let chatTopic: String?
 
     enum CodingKeys: String, CodingKey {
+        case ok
         case groupId = "group_id"
-        case name
+        case groupName = "group_name"
+        case chatTopic = "chat_topic"
     }
 }
 

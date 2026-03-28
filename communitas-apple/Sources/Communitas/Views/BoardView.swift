@@ -80,7 +80,7 @@ struct BoardView: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
-                let count = tasks.filter { $0.status == status }.count
+                let count = tasks.filter { $0.state == status }.count
                 Text("\(count)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -104,7 +104,7 @@ struct BoardView: View {
 
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    ForEach(tasks.filter { $0.status == status }) { task in
+                    ForEach(tasks.filter { $0.state == status }) { task in
                         taskCard(task: task, status: status)
                     }
 
@@ -145,7 +145,7 @@ struct BoardView: View {
 
                 Spacer()
 
-                Text(String(task.taskId.prefix(6)))
+                Text(String(task.id.prefix(6)))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .fontDesign(.monospaced)
@@ -267,7 +267,7 @@ struct BoardView: View {
     private func claimTaskAction(_ task: TaskItem) async {
         guard let listId else { return }
         do {
-            try await appState.client.claimTask(listId: listId, taskId: task.taskId)
+            try await appState.client.claimTask(listId: listId, taskId: task.id)
             await refreshTasks()
         } catch {
             errorMessage = "Failed to claim task: \(error.localizedDescription)"
@@ -277,7 +277,7 @@ struct BoardView: View {
     private func completeTaskAction(_ task: TaskItem) async {
         guard let listId else { return }
         do {
-            try await appState.client.completeTask(listId: listId, taskId: task.taskId)
+            try await appState.client.completeTask(listId: listId, taskId: task.id)
             await refreshTasks()
         } catch {
             errorMessage = "Failed to complete task: \(error.localizedDescription)"

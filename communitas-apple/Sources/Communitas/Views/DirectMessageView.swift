@@ -360,10 +360,10 @@ struct DirectMessageView: View {
 
     private func trustColor(_ level: TrustLevel) -> Color {
         switch level {
-        case .untrusted: return .red
-        case .known: return .orange
-        case .trusted: return .blue
-        case .verified: return .green
+        case .blocked: return .red
+        case .unknown: return .orange
+        case .known: return .blue
+        case .trusted: return .green
         }
     }
 }

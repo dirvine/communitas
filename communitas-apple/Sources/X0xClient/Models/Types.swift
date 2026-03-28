@@ -156,20 +156,21 @@ public struct DirectMessage: Codable, Sendable, Identifiable {
 
 // MARK: - Tasks
 
+/// Wrapper for `GET /task-lists/:id/tasks` response: `{"ok":true,"tasks":[...]}`.
 public struct TaskList: Codable, Sendable {
+    public let ok: Bool?
     public let tasks: [TaskItem]
 }
 
+/// A task item returned by `GET /task-lists/:id/tasks`.
+/// Daemon returns: `{ id, title, description, state, assignee?, priority }`.
 public struct TaskItem: Codable, Sendable, Identifiable {
-    public var id: String { taskId }
-    public let taskId: String
+    public let id: String
+    public let title: String?
     public let description: String
-    public let status: String
-
-    enum CodingKeys: String, CodingKey {
-        case taskId = "task_id"
-        case description, status
-    }
+    public let state: String
+    public let assignee: String?
+    public let priority: UInt8?
 }
 
 // MARK: - Task List Requests
@@ -297,25 +298,24 @@ public struct NetworkStatus: Codable, Sendable {
     }
 }
 
-/// Response from `GET /peers` - wrapped: `{"ok":true,"peers":["peer1","peer2"]}`.
+/// Response from `GET /peers` - wrapped: `{"ok":true,"peers":[{"id":"hex"}]}`.
 public struct PeerListResponse: Codable, Sendable {
     public let ok: Bool?
-    public let peers: [String]
+    public let peers: [PeerInfo]
 
-    /// Helper to create PeerInfo models from the raw peer ID strings.
+    /// Helper accessor for symmetry with other list responses.
     public var peerInfos: [PeerInfo] {
-        peers.map { PeerInfo(peerId: $0) }
+        peers
     }
 }
 
-/// A peer for display. The `/peers` endpoint returns string IDs;
-/// we wrap them for UI convenience.
+/// A peer entry from `GET /peers`. The daemon returns `{"id":"hex"}` objects.
 public struct PeerInfo: Codable, Sendable, Identifiable {
     public var id: String { peerId }
     public let peerId: String
 
     enum CodingKeys: String, CodingKey {
-        case peerId = "peer_id"
+        case peerId = "id"
     }
 
     public init(peerId: String) {
@@ -329,15 +329,23 @@ public struct DiscoveredAgentsResponse: Codable, Sendable {
     public let agents: [DiscoveredAgent]
 }
 
+/// A discovered agent entry from `GET /agents/discovered`.
+/// Daemon returns: `{ agent_id, machine_id, user_id?, addresses: [String], announced_at, last_seen }`.
 public struct DiscoveredAgent: Codable, Sendable, Identifiable {
     public var id: String { agentId }
     public let agentId: String
-    public let displayName: String?
+    public let machineId: String
+    public let userId: String?
+    public let addresses: [String]
+    public let announcedAt: UInt64?
     public let lastSeen: UInt64?
 
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
-        case displayName = "display_name"
+        case machineId = "machine_id"
+        case userId = "user_id"
+        case addresses
+        case announcedAt = "announced_at"
         case lastSeen = "last_seen"
     }
 }
@@ -362,15 +370,17 @@ public struct GroupListResponse: Codable, Sendable {
     public let groups: [GroupSummary]
 }
 
+/// Request body for `PUT /groups/:id/display-name`.
+/// The daemon expects `{"name": "..."}` — NOT `"display_name"`.
 public struct SetGroupDisplayNameRequest: Codable, Sendable {
-    public let displayName: String
+    public let name: String
 
     enum CodingKeys: String, CodingKey {
-        case displayName = "display_name"
+        case name
     }
 
     public init(displayName: String) {
-        self.displayName = displayName
+        self.name = displayName
     }
 }
 

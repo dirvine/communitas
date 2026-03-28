@@ -83,7 +83,7 @@ struct GroupsView: View {
                         do {
                             let response = try await appState.client.invite(groupId: group.groupId)
                             NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(response.invite, forType: .string)
+                            NSPasteboard.general.setString(response.inviteLink, forType: .string)
                         } catch {
                             appState.errorMessage = error.localizedDescription
                         }

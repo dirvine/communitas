@@ -287,7 +287,8 @@ impl X0xClient {
             .get(self.url(&format!("/agents/discovered/{agent_id}")))
             .send()
             .await?;
-        self.parse(resp).await
+        let wrapper: DiscoveredAgentWrapper = self.parse(resp).await?;
+        Ok(wrapper.agent)
     }
 
     /// Online agent ids from `GET /presence`.
@@ -408,16 +409,19 @@ impl X0xClient {
         self.post_ok("/contacts/trust", &req).await
     }
 
-    /// Update a contact's trust level and/or label.
+    /// Update a contact's trust level and/or identity type.
+    ///
+    /// `identity_type` should be one of `"anonymous"`, `"known"`, `"trusted"`,
+    /// or `"pinned"` when provided.
     pub async fn update_contact(
         &self,
         agent_id: &str,
         trust_level: Option<TrustLevel>,
-        label: Option<&str>,
+        identity_type: Option<&str>,
     ) -> Result<()> {
         let req = UpdateContactRequest {
             trust_level,
-            label: label.map(str::to_owned),
+            identity_type: identity_type.map(str::to_owned),
         };
         self.request_ok(
             self.client
@@ -432,8 +436,8 @@ impl X0xClient {
         self.delete_ok(&format!("/contacts/{agent_id}")).await
     }
 
-    /// Revoke a contact relationship with an optional reason.
-    pub async fn revoke_contact(&self, agent_id: &str, reason: Option<&str>) -> Result<()> {
+    /// Revoke a contact relationship. The `reason` field is required by the daemon.
+    pub async fn revoke_contact(&self, agent_id: &str, reason: &str) -> Result<()> {
         self.post_ok(
             &format!("/contacts/{agent_id}/revoke"),
             &serde_json::json!({ "reason": reason }),
@@ -869,18 +873,24 @@ impl X0xClient {
     // ── File transfer ───────────────────────────────────────────────────
 
     /// Initiate a file send to another agent.
+    ///
+    /// `sha256` is required by the daemon and must be the hex-encoded SHA-256
+    /// digest of the file content. `path` is an optional local filesystem path
+    /// for x0xd to read the file from directly.
     pub async fn send_file(
         &self,
         agent_id: &str,
         filename: &str,
         size: u64,
-        sha256: Option<&str>,
+        sha256: &str,
+        path: Option<&str>,
     ) -> Result<String> {
         let req = SendFileRequest {
             agent_id: agent_id.to_owned(),
             filename: filename.to_owned(),
             size,
-            sha256: sha256.map(str::to_owned),
+            sha256: sha256.to_owned(),
+            path: path.map(str::to_owned),
         };
         let resp = self
             .client
@@ -906,7 +916,8 @@ impl X0xClient {
             .get(self.url(&format!("/files/transfers/{transfer_id}")))
             .send()
             .await?;
-        self.parse(resp).await
+        let wrapper: FileTransferWrapper = self.parse(resp).await?;
+        Ok(wrapper.transfer)
     }
 
     /// Accept an incoming file transfer.

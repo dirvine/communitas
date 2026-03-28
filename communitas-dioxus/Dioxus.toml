@@ -70,12 +70,15 @@ active = true
 # Update manifest endpoints (GitHub Releases)
 # The app will check these URLs for update.json manifest
 endpoints = [
-    "https://github.com/maidsafe/communitas/releases/latest/download/update.json"
+    "https://github.com/saorsa-labs/communitas/releases/latest/download/update.json"
 ]
 
 # Public key for verifying update signatures
-# Generated with: tauri signer generate -w ~/.tauri/communitas.key
-# Set via TAURI_SIGNING_PUBLIC_KEY env var during build, or replace this placeholder
+# TODO: Generate Ed25519 keypair with `tauri signer generate` and populate:
+# - pubkey here (public key)
+# - TAURI_SIGNING_PRIVATE_KEY GitHub secret (private key)
+# - Sign artifacts in CI with `tauri signer sign`
+# Until then, auto-update checks for new versions but cannot verify signatures.
 pubkey = ""
 
 # Update dialog configuration

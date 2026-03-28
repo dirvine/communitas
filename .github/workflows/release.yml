@@ -297,20 +297,28 @@ jobs:
           REPO="${{ github.repository }}"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-          # Generate update.json for Tauri updater
+          # Generate update.json for Tauri/Dioxus updater
           cat > ./release/update.json << EOF
           {
             "version": "${VERSION}",
-            "notes": "Release ${VERSION}. See https://github.com/${REPO}/releases/tag/v${VERSION} for details.",
+            "notes": "Release ${VERSION}. See https://github.com/saorsa-labs/communitas/releases/tag/v${VERSION} for details.",
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "darwin-x86_64": {
                 "signature": "",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${DMG_NAME}"
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/${DMG_NAME}"
               },
               "darwin-aarch64": {
                 "signature": "",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${DMG_NAME}"
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/${DMG_NAME}"
+              },
+              "linux-x86_64": {
+                "signature": "",
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/Communitas-Linux-${VERSION}.tar.gz"
+              },
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/Communitas-Windows-${VERSION}.zip"
               }
             }
           }

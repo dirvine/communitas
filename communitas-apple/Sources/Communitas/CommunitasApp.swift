@@ -3,12 +3,14 @@ import SwiftUI
 @main
 struct CommunitasApp: App {
     @StateObject private var appState = AppState()
+    @StateObject private var updaterController = UpdaterController()
 
     var body: some Scene {
         WindowGroup {
             OnboardingView {
                 ContentView()
                     .environmentObject(appState)
+                    .environmentObject(updaterController)
                     .task {
                         NotificationService.shared.requestPermission()
                         await appState.refresh()
@@ -19,10 +21,17 @@ struct CommunitasApp: App {
                     }
             }
             .environmentObject(appState)
+            .environmentObject(updaterController)
         }
         .windowStyle(.titleBar)
         .defaultSize(width: 1100, height: 750)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    updaterController.checkForUpdates()
+                }
+            }
+
             CommandGroup(replacing: .newItem) {
                 Button("New Space") {
                     appState.showCreateSpace = true

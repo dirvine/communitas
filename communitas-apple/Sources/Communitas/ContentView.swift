@@ -479,6 +479,9 @@ struct ContentView: View {
 // MARK: - About View
 
 struct AboutView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var updaterController: UpdaterController
+
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "building.2.crop.circle")
@@ -507,6 +510,12 @@ struct AboutView: View {
                         .font(.body)
                 }
             }
+
+            Button("Check for Updates...") {
+                updaterController.checkForUpdates()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)

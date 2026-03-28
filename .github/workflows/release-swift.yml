@@ -104,6 +104,10 @@ jobs:
               <true/>
               <key>NSPrincipalClass</key>
               <string>NSApplication</string>
+              <key>SUFeedURL</key>
+              <string>https://github.com/${{ github.repository }}/releases/latest/download/appcast.xml</string>
+              <key>SUPublicEDKey</key>
+              <string></string>
           </dict>
           </plist>
           EOF
@@ -200,6 +204,36 @@ jobs:
 
           echo "DMG signed successfully"
 
+      - name: Generate appcast.xml
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DMG_NAME="${{ steps.bundle.outputs.dmg_name }}"
+          DMG_SIZE=$(stat -f%z "$RUNNER_TEMP/$DMG_NAME")
+          DMG_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$DMG_NAME"
+
+          cat > "$RUNNER_TEMP/appcast.xml" << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>Communitas Updates</title>
+              <link>https://github.com/${{ github.repository }}/releases</link>
+              <description>Communitas macOS app updates</description>
+              <language>en</language>
+              <item>
+                <title>Communitas ${VERSION}</title>
+                <pubDate>$(date -R)</pubDate>
+                <sparkle:version>${VERSION}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+                <enclosure url="${DMG_URL}" length="${DMG_SIZE}" type="application/octet-stream" />
+              </item>
+            </channel>
+          </rss>
+          EOF
+
+          echo "Generated appcast.xml:"
+          cat "$RUNNER_TEMP/appcast.xml"
+
       # ─────────────────────────────────────────────────────────────────────────
       # Notarization
       # ─────────────────────────────────────────────────────────────────────────
@@ -241,6 +275,13 @@ jobs:
           path: ${{ runner.temp }}/${{ steps.bundle.outputs.dmg_name }}
           retention-days: 90
 
+      - name: Upload appcast artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appcast.xml
+          path: ${{ runner.temp }}/appcast.xml
+          retention-days: 90
+
       - name: Cleanup keychain
         if: always()
         run: |
@@ -269,6 +310,12 @@ jobs:
           name: ${{ needs.build-swift.outputs.dmg_name }}
           path: ./release
 
+      - name: Download appcast
+        uses: actions/download-artifact@v4
+        with:
+          name: appcast.xml
+          path: ./release
+
       - name: Wait for GitHub Release to exist
         run: |
           TAG="${{ github.ref_name }}"
@@ -285,10 +332,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Swift DMG to release
+      - name: Upload Swift DMG and appcast to release
         run: |
           gh release upload "${{ github.ref_name }}" \
             ./release/${{ needs.build-swift.outputs.dmg_name }} \
+            ./release/appcast.xml \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

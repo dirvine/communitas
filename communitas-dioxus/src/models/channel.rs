@@ -30,6 +30,10 @@ pub struct ChatMessage {
     /// Whether this thread reply was also broadcast to the channel.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub broadcast: bool,
+    /// Local UI state: true when a delete event has been applied.
+    /// Not part of the wire payload.
+    #[serde(default, skip_serializing)]
+    pub is_deleted: bool,
     /// Local UI state, not part of the frozen x0x wire payload.
     #[serde(default, skip_serializing)]
     pub reply_count: u32,
@@ -77,6 +81,7 @@ mod tests {
             channel: "general".to_string(),
             thread_root: None,
             broadcast: false,
+            is_deleted: false,
             reply_count: 3,
             reactions: HashMap::from([(":wave:".to_string(), 1)]),
         };
@@ -102,6 +107,7 @@ mod tests {
             channel: "general".to_string(),
             thread_root: Some("root-1".to_string()),
             broadcast: true,
+            is_deleted: false,
             reply_count: 0,
             reactions: HashMap::new(),
         };

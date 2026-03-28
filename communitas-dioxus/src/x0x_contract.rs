@@ -507,6 +507,7 @@ mod tests {
             channel: "general".to_string(),
             thread_root: None,
             broadcast: false,
+            is_deleted: false,
             reply_count: 0,
             reactions: HashMap::new(),
         };
@@ -519,6 +520,7 @@ mod tests {
             channel: "general".to_string(),
             thread_root: Some("root-1".to_string()),
             broadcast: false,
+            is_deleted: false,
             reply_count: 0,
             reactions: HashMap::new(),
         };

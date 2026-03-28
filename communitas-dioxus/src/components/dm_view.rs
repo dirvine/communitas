@@ -191,6 +191,7 @@ pub fn DmView(
                     channel: String::new(), // DMs don't belong to a channel
                     thread_root: None,
                     broadcast: false,
+                    is_deleted: false,
                     reply_count: 0,
                     reactions: HashMap::new(),
                 };

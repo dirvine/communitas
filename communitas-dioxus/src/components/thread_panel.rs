@@ -179,6 +179,7 @@ pub fn ThreadPanel(
                     channel: msg_channel_name,
                     thread_root: Some(msg_parent_msg_id),
                     broadcast,
+                    is_deleted: false,
                     reply_count: 0,
                     reactions: HashMap::new(),
                 };

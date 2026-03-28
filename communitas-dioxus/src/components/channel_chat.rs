@@ -32,16 +32,44 @@ use tracing::{error, info, warn};
 // Extended wire payload (edit / delete / typing events)
 // ---------------------------------------------------------------------------
 
-/// Gossip envelope that wraps a `ChatMessage` plus optional control fields.
+/// Flat gossip envelope that is backward-compatible with old clients.
 ///
-/// Only `msg_type` and the relevant payload field are ever set at once.
-/// Plain chat messages use `msg_type = "chat"`.
+/// Old clients (which only know the plain `ChatMessage` schema) deserialize
+/// the base `ChatMessage` fields and silently ignore the new optional control
+/// fields (`msg_type`, `edit`, `delete`, `typing`).  New clients check
+/// `msg_type` first; when absent or `"chat"` the message is treated as a
+/// plain chat message.
+///
+/// **Wire format rules:**
+/// - Plain chat message: populate all `ChatMessage` fields; omit `msg_type`
+///   (or set to `"chat"`); omit `edit`, `delete`, `typing`.
+/// - Edit event: set `msg_type = "edit"`, populate `edit`; other ChatMessage
+///   fields carry dummy/empty values.
+/// - Delete event: set `msg_type = "delete"`, populate `delete`.
+/// - Typing event: set `msg_type = "typing"`, populate `typing`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct GossipEnvelope {
-    msg_type: String,
-    /// Present when `msg_type == "chat"`.
+    // ---- ChatMessage fields (required for backward-compat with old clients) ----
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    sender_name: String,
+    #[serde(default)]
+    sender_id: String,
+    #[serde(default)]
+    timestamp: u64,
+    #[serde(default)]
+    channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    thread_root: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    broadcast: bool,
+    // ---- Control fields (new; absent = plain chat message) ----
+    /// Message type discriminant. Absent or `"chat"` = plain chat message.
     #[serde(skip_serializing_if = "Option::is_none")]
-    chat: Option<ChatMessage>,
+    msg_type: Option<String>,
     /// Present when `msg_type == "edit"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     edit: Option<EditPayload>,
@@ -51,6 +79,97 @@ struct GossipEnvelope {
     /// Present when `msg_type == "typing"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     typing: Option<TypingPayload>,
+}
+
+impl GossipEnvelope {
+    /// Construct a plain chat-message envelope.
+    fn chat(msg: &ChatMessage) -> Self {
+        Self {
+            id: msg.id.clone(),
+            text: msg.text.clone(),
+            sender_name: msg.sender_name.clone(),
+            sender_id: msg.sender_id.clone(),
+            timestamp: msg.timestamp,
+            channel: msg.channel.clone(),
+            thread_root: msg.thread_root.clone(),
+            broadcast: msg.broadcast,
+            msg_type: None, // omitted on wire; old clients ignore
+            edit: None,
+            delete: None,
+            typing: None,
+        }
+    }
+
+    /// Construct an edit-event envelope.
+    fn edit_event(ep: EditPayload, channel: &str) -> Self {
+        Self {
+            id: String::new(),
+            text: String::new(),
+            sender_name: String::new(),
+            sender_id: ep.sender_id.clone(),
+            timestamp: 0,
+            channel: channel.to_string(),
+            thread_root: None,
+            broadcast: false,
+            msg_type: Some("edit".to_string()),
+            edit: Some(ep),
+            delete: None,
+            typing: None,
+        }
+    }
+
+    /// Construct a delete-event envelope.
+    fn delete_event(dp: DeletePayload, channel: &str) -> Self {
+        Self {
+            id: String::new(),
+            text: String::new(),
+            sender_name: String::new(),
+            sender_id: dp.sender_id.clone(),
+            timestamp: 0,
+            channel: channel.to_string(),
+            thread_root: None,
+            broadcast: false,
+            msg_type: Some("delete".to_string()),
+            edit: None,
+            delete: Some(dp),
+            typing: None,
+        }
+    }
+
+    /// Construct a typing-event envelope.
+    fn typing_event(tp: TypingPayload) -> Self {
+        Self {
+            id: String::new(),
+            text: String::new(),
+            sender_name: tp.sender_name.clone(),
+            sender_id: tp.sender_id.clone(),
+            timestamp: 0,
+            channel: String::new(),
+            thread_root: None,
+            broadcast: false,
+            msg_type: Some("typing".to_string()),
+            edit: None,
+            delete: None,
+            typing: Some(tp),
+        }
+    }
+
+    /// Extract the embedded chat message (only valid when `msg_type` is chat).
+    fn into_chat_message(self) -> ChatMessage {
+        ChatMessage {
+            id: self.id,
+            text: self.text,
+            sender_name: self.sender_name,
+            sender_id: self.sender_id,
+            timestamp: self.timestamp,
+            channel: self.channel,
+            thread_root: self.thread_root,
+            broadcast: self.broadcast,
+            is_deleted: false,
+            reply_count: 0,
+            reactions: std::collections::HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -139,6 +258,9 @@ pub fn ChannelChatView(
     let channel_name = channel.channel_name.clone();
 
     // ----- history load -----
+    // B2: Channel changes are handled by the parent (space_view.rs) which keys
+    // ChannelChatView on "{group_id}:{channel_name}", causing a full remount when
+    // the user switches channels. No need for a manual refetch trigger here.
     let history_group_id = group_id.clone();
     let history_channel_name = channel_name.clone();
     use_future(move || {
@@ -197,9 +319,10 @@ pub fn ChannelChatView(
     });
 
     // ----- auto-scroll when message count changes -----
-    let message_count = messages.read().len();
+    // Read the signal INSIDE the closure so Dioxus tracks it as a dependency
+    // and re-runs this effect every time new messages arrive.
     use_effect(move || {
-        let _ = message_count; // track
+        let _count = messages.read().len(); // creates the signal subscription
         let _ = document::eval(
             r#"
             var el = document.getElementById('chat-messages');
@@ -259,84 +382,104 @@ pub fn ChannelChatView(
                             }
                         };
 
-                        // Try the new envelope format first, fall back to plain ChatMessage.
-                        if let Ok(env) = serde_json::from_slice::<GossipEnvelope>(&decoded) {
-                            match env.msg_type.as_str() {
-                                "chat" => {
-                                    if let Some(msg) = env.chat {
-                                        let history_msg = msg.clone();
-                                        messages.with_mut(|msgs| {
-                                            if !msgs.iter().any(|m| m.id == history_msg.id) {
-                                                msgs.push(msg);
-                                                msgs.sort_by_key(|m| m.timestamp);
-                                            }
-                                        });
-                                        x0x_contract::append_channel_history(
-                                            &group_id,
-                                            &channel_name,
-                                            &history_msg,
-                                        )
-                                        .await;
+                        // Parse the flat GossipEnvelope. Because the envelope
+                        // embeds all ChatMessage fields at the top level, old
+                        // clients that only know the plain ChatMessage schema
+                        // will deserialize the base fields and ignore the new
+                        // control fields (msg_type, edit, delete, typing).
+                        match serde_json::from_slice::<GossipEnvelope>(&decoded) {
+                            Ok(env) => {
+                                let msg_type = env.msg_type.as_deref().unwrap_or("chat");
+                                match msg_type {
+                                    "chat" | "" => {
+                                        let msg = env.into_chat_message();
+                                        if !msg.id.is_empty() {
+                                            let history_msg = msg.clone();
+                                            messages.with_mut(|msgs| {
+                                                if !msgs.iter().any(|m| m.id == history_msg.id) {
+                                                    msgs.push(msg);
+                                                    msgs.sort_by_key(|m| m.timestamp);
+                                                }
+                                            });
+                                            x0x_contract::append_channel_history(
+                                                &group_id,
+                                                &channel_name,
+                                                &history_msg,
+                                            )
+                                            .await;
+                                        }
                                     }
-                                }
-                                "edit" => {
-                                    if let Some(ep) = env.edit {
-                                        messages.with_mut(|msgs| {
-                                            if let Some(m) =
-                                                msgs.iter_mut().find(|m| m.id == ep.message_id)
-                                            {
-                                                // Only apply if sender matches
-                                                if m.sender_id == ep.sender_id {
+                                    "edit" => {
+                                        // SECURITY NOTE: edit/delete authorization is UI-only.
+                                        // The gossip layer does not carry ML-DSA signatures on
+                                        // control messages, so `sender_id` matching here only
+                                        // prevents accidental cross-user edits — it does NOT
+                                        // cryptographically verify the sender. Full authorization
+                                        // requires ML-DSA integration at the gossip layer.
+                                        if let Some(ep) = env.edit {
+                                            messages.with_mut(|msgs| {
+                                                if let Some(m) =
+                                                    msgs.iter_mut().find(|m| m.id == ep.message_id)
+                                                    && m.sender_id == ep.sender_id
+                                                {
                                                     m.text = ep.new_text;
                                                 }
+                                            });
+                                        }
+                                    }
+                                    "delete" => {
+                                        // SECURITY NOTE: Same limitation as "edit" above —
+                                        // sender_id matching is UI-only, not cryptographic.
+                                        if let Some(dp) = env.delete {
+                                            messages.with_mut(|msgs| {
+                                                if let Some(m) =
+                                                    msgs.iter_mut().find(|m| m.id == dp.message_id)
+                                                    && m.sender_id == dp.sender_id
+                                                {
+                                                    // Use the is_deleted flag — no string matching.
+                                                    m.is_deleted = true;
+                                                }
+                                            });
+                                        }
+                                    }
+                                    "typing" => {
+                                        if let Some(tp) = env.typing {
+                                            // M5: Per-sender inbound rate limiting — skip if the
+                                            // same sender was updated less than 500 ms ago.
+                                            let now = now_secs();
+                                            let should_update = typing_users
+                                                .read()
+                                                .get(&tp.sender_id)
+                                                .map(|entry| {
+                                                    now.saturating_sub(entry.last_seen_secs) >= 1
+                                                })
+                                                .unwrap_or(true);
+                                            if should_update {
+                                                typing_users.with_mut(|map| {
+                                                    // M2: Purge entries older than 10 s on every insert.
+                                                    map.retain(|_, entry| {
+                                                        now.saturating_sub(entry.last_seen_secs)
+                                                            <= 10
+                                                    });
+                                                    map.insert(
+                                                        tp.sender_id.clone(),
+                                                        TypingEntry {
+                                                            display_name: tp.sender_name.clone(),
+                                                            last_seen_secs: now,
+                                                        },
+                                                    );
+                                                });
                                             }
-                                        });
+                                        }
+                                    }
+                                    _ => {
+                                        warn!(target: "ui.channel_chat", "Unknown msg_type: {msg_type}");
                                     }
                                 }
-                                "delete" => {
-                                    if let Some(dp) = env.delete {
-                                        messages.with_mut(|msgs| {
-                                            if let Some(m) =
-                                                msgs.iter_mut().find(|m| m.id == dp.message_id)
-                                                && m.sender_id == dp.sender_id
-                                            {
-                                                m.text = String::from("\u{1F5D1} Message deleted");
-                                            }
-                                        });
-                                    }
-                                }
-                                "typing" => {
-                                    if let Some(tp) = env.typing {
-                                        typing_users.with_mut(|map| {
-                                            map.insert(
-                                                tp.sender_id.clone(),
-                                                TypingEntry {
-                                                    display_name: tp.sender_name.clone(),
-                                                    last_seen_secs: now_secs(),
-                                                },
-                                            );
-                                        });
-                                    }
-                                }
-                                _ => {}
                             }
-                        } else if let Ok(msg) = serde_json::from_slice::<ChatMessage>(&decoded) {
-                            // Legacy plain message format
-                            let history_msg = msg.clone();
-                            messages.with_mut(|msgs| {
-                                if !msgs.iter().any(|m| m.id == history_msg.id) {
-                                    msgs.push(msg);
-                                    msgs.sort_by_key(|m| m.timestamp);
-                                }
-                            });
-                            x0x_contract::append_channel_history(
-                                &group_id,
-                                &channel_name,
-                                &history_msg,
-                            )
-                            .await;
-                        } else {
-                            warn!(target: "ui.channel_chat", "Failed to parse inbound message");
+                            Err(e) => {
+                                warn!(target: "ui.channel_chat", "Failed to parse inbound message: {e}");
+                            }
                         }
                     }
                     communitas_x0x_client::WsInbound::Error { message } => {
@@ -394,14 +537,16 @@ pub fn ChannelChatView(
             let reply_to_snapshot = reply_to();
 
             sending.set(true);
-            composer_text.set(String::new());
-            reply_to.set(None);
+            // B4: Do NOT clear composer here — only clear on confirmed send.
+            // mention_query is UI-only and safe to clear immediately.
             mention_query.set(None);
 
             spawn(async move {
                 let msg_channel_name = channel_name.clone();
                 let reply_to_id = reply_to_snapshot.as_ref().map(|r| r.id.clone());
-                let mut msg = ChatMessage {
+                // B5: Keep thread_root for the local copy so the sender sees
+                // the same inline-quote that receivers see.
+                let msg = ChatMessage {
                     id: uuid::Uuid::new_v4().to_string(),
                     text,
                     sender_name,
@@ -413,29 +558,28 @@ pub fn ChannelChatView(
                     channel: msg_channel_name,
                     thread_root: reply_to_id,
                     broadcast: false,
+                    is_deleted: false,
                     reply_count: 0,
                     reactions: HashMap::new(),
                 };
 
-                // For inline replies keep thread_root but don't treat as a thread panel reply.
-                // (thread_root is re-used here to carry reply context in channel scope.)
-                let envelope = GossipEnvelope {
-                    msg_type: "chat".to_string(),
-                    chat: Some(msg.clone()),
-                    edit: None,
-                    delete: None,
-                    typing: None,
-                };
+                // Use the flat envelope factory; thread_root is preserved on wire.
+                let envelope = GossipEnvelope::chat(&msg);
 
                 match serde_json::to_vec(&envelope) {
                     Ok(json_bytes) => {
                         let client = X0xClient::new();
                         if let Err(e) = client.publish(&topic, &json_bytes).await {
                             error!(target: "ui.channel_chat", "Failed to publish message: {e}");
+                            // B4: Send failed — restore composer text so the user doesn't lose it.
+                            composer_text.set(msg.text.clone());
+                            reply_to.set(reply_to_snapshot);
                         } else {
                             info!(target: "ui.channel_chat", "Message published to {topic}");
-                            // Clear thread_root so it's not confused with a thread panel reply
-                            msg.thread_root = None;
+                            // B4: Only clear after confirmed send.
+                            composer_text.set(String::new());
+                            reply_to.set(None);
+                            // B3: Apply locally only after network confirmation.
                             messages.with_mut(|msgs| {
                                 if !msgs.iter().any(|m| m.id == msg.id) {
                                     msgs.push(msg.clone());
@@ -448,6 +592,8 @@ pub fn ChannelChatView(
                     }
                     Err(e) => {
                         error!(target: "ui.channel_chat", "Failed to serialize message: {e}");
+                        composer_text.set(msg.text.clone());
+                        reply_to.set(reply_to_snapshot);
                     }
                 }
 
@@ -459,39 +605,37 @@ pub fn ChannelChatView(
     // ----- publish edit -----
     let publish_edit = {
         let topic = topic.clone();
+        let channel_name_for_edit = channel_name.clone();
         move |msg_id: String, new_text: String| {
             let topic = topic.clone();
+            let channel_name = channel_name_for_edit.clone();
             let agent_id = own_agent_id().unwrap_or_default();
-            let envelope = GossipEnvelope {
-                msg_type: "edit".to_string(),
-                chat: None,
-                edit: Some(EditPayload {
-                    message_id: msg_id.clone(),
-                    new_text: new_text.clone(),
-                    sender_id: agent_id.clone(),
-                }),
-                delete: None,
-                typing: None,
+            let ep = EditPayload {
+                message_id: msg_id.clone(),
+                new_text: new_text.clone(),
+                sender_id: agent_id.clone(),
             };
+            let envelope = GossipEnvelope::edit_event(ep, &channel_name);
             spawn(async move {
                 match serde_json::to_vec(&envelope) {
                     Ok(bytes) => {
                         let client = X0xClient::new();
                         if let Err(e) = client.publish(&topic, &bytes).await {
                             error!(target: "ui.channel_chat", "Failed to publish edit: {e}");
+                        } else {
+                            // B3: Apply locally only after network confirmation.
+                            messages.with_mut(|msgs| {
+                                if let Some(m) = msgs.iter_mut().find(|m| m.id == msg_id)
+                                    && m.sender_id == agent_id
+                                {
+                                    m.text = new_text;
+                                }
+                            });
                         }
                     }
                     Err(e) => {
                         error!(target: "ui.channel_chat", "Failed to serialize edit: {e}");
                     }
-                }
-            });
-            // Apply locally
-            messages.with_mut(|msgs| {
-                if let Some(m) = msgs.iter_mut().find(|m| m.id == msg_id)
-                    && m.sender_id == agent_id
-                {
-                    m.text = new_text;
                 }
             });
         }
@@ -500,38 +644,37 @@ pub fn ChannelChatView(
     // ----- publish delete -----
     let publish_delete = {
         let topic = topic.clone();
+        let channel_name_for_delete = channel_name.clone();
         move |msg_id: String| {
             let topic = topic.clone();
+            let channel_name = channel_name_for_delete.clone();
             let agent_id = own_agent_id().unwrap_or_default();
-            let envelope = GossipEnvelope {
-                msg_type: "delete".to_string(),
-                chat: None,
-                edit: None,
-                delete: Some(DeletePayload {
-                    message_id: msg_id.clone(),
-                    sender_id: agent_id.clone(),
-                }),
-                typing: None,
+            let dp = DeletePayload {
+                message_id: msg_id.clone(),
+                sender_id: agent_id.clone(),
             };
+            let envelope = GossipEnvelope::delete_event(dp, &channel_name);
             spawn(async move {
                 match serde_json::to_vec(&envelope) {
                     Ok(bytes) => {
                         let client = X0xClient::new();
                         if let Err(e) = client.publish(&topic, &bytes).await {
                             error!(target: "ui.channel_chat", "Failed to publish delete: {e}");
+                        } else {
+                            // B3: Apply locally only after network confirmation.
+                            // M3: Use is_deleted flag instead of string-prefix matching.
+                            messages.with_mut(|msgs| {
+                                if let Some(m) = msgs.iter_mut().find(|m| m.id == msg_id)
+                                    && m.sender_id == agent_id
+                                {
+                                    m.is_deleted = true;
+                                }
+                            });
                         }
                     }
                     Err(e) => {
                         error!(target: "ui.channel_chat", "Failed to serialize delete: {e}");
                     }
-                }
-            });
-            // Apply locally
-            messages.with_mut(|msgs| {
-                if let Some(m) = msgs.iter_mut().find(|m| m.id == msg_id)
-                    && m.sender_id == agent_id
-                {
-                    m.text = String::from("\u{1F5D1} Message deleted");
                 }
             });
         }
@@ -550,16 +693,11 @@ pub fn ChannelChatView(
             let agent_id = own_agent_id().unwrap_or_default();
             let sender_name =
                 own_sender_name().unwrap_or_else(|| x0x_contract::fallback_sender_name(&agent_id));
-            let envelope = GossipEnvelope {
-                msg_type: "typing".to_string(),
-                chat: None,
-                edit: None,
-                delete: None,
-                typing: Some(TypingPayload {
-                    sender_id: agent_id,
-                    sender_name,
-                }),
+            let tp = TypingPayload {
+                sender_id: agent_id,
+                sender_name,
             };
+            let envelope = GossipEnvelope::typing_event(tp);
             spawn(async move {
                 match serde_json::to_vec(&envelope) {
                     Ok(bytes) => {
@@ -577,7 +715,9 @@ pub fn ChannelChatView(
     };
 
     // ----- derive filtered messages (search) -----
-    let filtered_messages: Vec<ChatMessage> = {
+    // M1: Wrap in use_memo so the Vec is only recomputed when messages or the
+    // query actually changes, instead of being re-cloned on every render.
+    let filtered_messages = use_memo(move || {
         let q = search_query().to_lowercase();
         if q.is_empty() {
             messages()
@@ -587,7 +727,7 @@ pub fn ChannelChatView(
                 .filter(|m| m.text.to_lowercase().contains(q.as_str()))
                 .collect()
         }
-    };
+    });
 
     // ----- derive active typers (exclude self, purge stale > 3 s) -----
     let own_id = own_agent_id().unwrap_or_default();
@@ -605,6 +745,12 @@ pub fn ChannelChatView(
 
     let channel_display_name = channel.channel_name.clone();
 
+    // M6: Snapshot own_agent_id once per render to avoid calling the signal
+    // getter inside the hot message-list loop.
+    let my_agent_id = own_agent_id();
+    // M4: Snapshot messages for reply resolution in the render loop.
+    let all_messages_snap: Vec<ChatMessage> = messages.read().clone();
+
     rsx! {
         div {
             style: format!(
@@ -619,7 +765,7 @@ pub fn ChannelChatView(
             if let Some(pending_id) = delete_confirm_id() {
                 {
                     let id_for_confirm = pending_id.clone();
-                    let mut publish_delete = publish_delete.clone();
+                    let publish_delete = publish_delete.clone();
                     rsx! {
                         ConfirmDialog {
                             title: "Delete Message",
@@ -742,20 +888,34 @@ pub fn ChannelChatView(
                 aria_label: "Channel messages",
                 aria_live: "polite",
 
-                if filtered_messages.is_empty() {
+                if filtered_messages().is_empty() {
                     ChannelEmptyState { channel_name: channel_display_name.clone() }
                 } else {
-                    for msg in filtered_messages {
+                    for msg in filtered_messages() {
                         {
-                            let is_own = own_agent_id().as_deref() == Some(&msg.sender_id);
+                            let is_own = my_agent_id.as_deref() == Some(&msg.sender_id);
                             let is_agent = discovered_agent_ids.read().contains(&msg.sender_id);
                             let msg_for_reply = msg.clone();
                             let msg_for_thread = msg.clone();
                             let msg_id_for_edit = msg.id.clone();
                             let msg_id_for_delete = msg.id.clone();
                             let msg_text_for_edit = msg.text.clone();
-                            let mut publish_edit = publish_edit.clone();
+                            let publish_edit = publish_edit.clone();
                             let search_q = search_query();
+                            // M4: Resolve reply sender and text from the snapshot.
+                            let (reply_sender_name, reply_text_snippet) =
+                                if let Some(ref rid) = msg.thread_root {
+                                    if let Some(parent) = all_messages_snap.iter().find(|m| &m.id == rid) {
+                                        (
+                                            Some(parent.sender_name.clone()),
+                                            Some(parent.text.chars().take(80).collect::<String>()),
+                                        )
+                                    } else {
+                                        (None, None)
+                                    }
+                                } else {
+                                    (None, None)
+                                };
                             rsx! {
                                 ChannelMessage {
                                     key: "{msg.id}",
@@ -767,6 +927,8 @@ pub fn ChannelChatView(
                                     edit_draft: editing_msg().as_ref().and_then(|(id, t)| {
                                         if id == &msg.id { Some(t.clone()) } else { None }
                                     }).unwrap_or_default(),
+                                    reply_sender_name,
+                                    reply_text_snippet,
                                     on_open_thread: move |m: ChatMessage| on_open_thread.call(m),
                                     on_reply: move |_| reply_to.set(Some(msg_for_reply.clone())),
                                     on_start_edit: move |_| {
@@ -1087,6 +1249,13 @@ fn ChannelMessage(
     /// Current draft text while editing.
     #[props(default)]
     edit_draft: String,
+    /// M4: Resolved reply sender name (looked up by parent from messages list).
+    /// Falls back to the raw message ID when None.
+    #[props(default)]
+    reply_sender_name: Option<String>,
+    /// M4: Resolved reply text snippet (looked up by parent from messages list).
+    #[props(default)]
+    reply_text_snippet: Option<String>,
     on_open_thread: EventHandler<ChatMessage>,
     on_reply: EventHandler<()>,
     on_start_edit: EventHandler<()>,
@@ -1124,7 +1293,8 @@ fn ChannelMessage(
             })
     };
 
-    let is_deleted = message.text.starts_with("\u{1F5D1} Message deleted");
+    // M3: Use the is_deleted field instead of string-prefix matching.
+    let is_deleted = message.is_deleted;
 
     rsx! {
         div {
@@ -1238,9 +1408,19 @@ fn ChannelMessage(
                 }
 
                 // Inline reply context
+                // M4: Show resolved sender name + text snippet instead of raw UUID.
                 if let Some(ref reply_id) = message.thread_root {
                     {
                         let reply_id = reply_id.clone();
+                        // Use resolved info if available; fall back to the raw ID.
+                        let display_name = reply_sender_name
+                            .as_deref()
+                            .unwrap_or(reply_id.as_str())
+                            .to_string();
+                        let snippet = reply_text_snippet
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_string();
                         rsx! {
                             div {
                                 style: format!(
@@ -1267,7 +1447,19 @@ fn ChannelMessage(
                                         typography::WEIGHT_SEMIBOLD,
                                         palette::JADE_400
                                     ),
-                                    "\u{21A9} {reply_id}"
+                                    "\u{21A9} {display_name}"
+                                }
+
+                                if !snippet.is_empty() {
+                                    span {
+                                        style: format!(
+                                            "font-size: {}; color: {}; \
+                                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                                            typography::SIZE_XS,
+                                            semantic::TEXT_MUTED
+                                        ),
+                                        "{snippet}"
+                                    }
                                 }
                             }
                         }

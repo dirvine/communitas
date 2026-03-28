@@ -13,9 +13,9 @@ async-trait = { workspace = true }
 blake3 = { workspace = true }
 canvas-core = { workspace = true }
 chrono = { workspace = true }
-communitas-core = { version = "0.10.0", package = "communitas-core", path = "../communitas-core" }
-communitas-kanban = { version = "0.10.0", path = "../communitas-kanban" }
-communitas-ui-api = { version = "0.10.0", path = "../communitas-ui-api" }
+communitas-core = { version = "0.10.1", package = "communitas-core", path = "../communitas-core" }
+communitas-kanban = { version = "0.10.1", path = "../communitas-kanban" }
+communitas-ui-api = { version = "0.10.1", path = "../communitas-ui-api" }
 dirs = "5.0"
 hex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

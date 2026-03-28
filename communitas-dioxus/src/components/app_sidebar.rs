@@ -53,6 +53,9 @@ pub struct AppSidebarProps {
     /// Callback to open the create/join space modal.
     #[props(default)]
     pub on_create_space: Option<EventHandler<()>>,
+    /// Number of discovered agents on the network (for presence display).
+    #[props(default)]
+    pub discovered_agent_count: usize,
 }
 
 /// A group entry for the sidebar.
@@ -401,6 +404,7 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                             let is_expanded = expanded_space_id().as_deref() == Some(&group_id);
                             let current_path = props.current_path.clone();
                             let on_create_space = props.on_create_space;
+                            let agent_count = props.discovered_agent_count;
 
                             rsx! {
                                 SpaceAccordionItem {
@@ -412,6 +416,7 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
                                     channels: channels_for_group,
                                     channels_loaded,
                                     current_path: current_path.clone(),
+                                    agent_count,
                                     on_toggle: move |_| {
                                         if is_expanded {
                                             expanded_space_id.set(None);
@@ -622,6 +627,9 @@ struct SpaceAccordionItemProps {
     on_toggle: EventHandler<()>,
     on_navigate: EventHandler<String>,
     on_create_channel: EventHandler<()>,
+    /// Number of discovered agents on the network.
+    #[props(default)]
+    agent_count: usize,
 }
 
 #[component]
@@ -817,6 +825,31 @@ fn SpaceAccordionItem(props: SpaceAccordionItemProps) -> Element {
                         ),
                         onclick: move |_| props.on_create_channel.call(()),
                         "+ Add channel"
+                    }
+
+                    // Agent presence indicator
+                    if props.agent_count > 0 {
+                        div {
+                            style: format!(
+                                "display: flex; align-items: center; gap: {}; \
+                                 padding: {} {}; color: {};",
+                                spacing::XS,
+                                spacing::XS,
+                                spacing::SM,
+                                colors::TEXT_MUTED,
+                            ),
+                            span {
+                                style: format!("font-size: {};", typography::TEXT_XS),
+                                "\u{1F916}"
+                            }
+                            span {
+                                style: format!("font-size: {}; white-space: nowrap;", typography::TEXT_XS),
+                                {
+                                    let count = props.agent_count;
+                                    if count == 1 { "1 agent".to_string() } else { format!("{count} agents") }
+                                }
+                            }
+                        }
                     }
 
                     // App shortcut tabs (Fix #8: reuse active_item_style helper)

@@ -87,11 +87,15 @@ struct SwarmView: View {
 
     private var swarmHeader: some View {
         HStack {
-            Image(systemName: "ant")
-                .foregroundStyle(.secondary)
-            Text("Swarm")
+            Image(systemName: "cpu.fill")
+                .foregroundStyle(Color.accentColor)
+            Text("Agent Swarm")
                 .font(.headline)
+                .fontWeight(.semibold)
             Spacer()
+            Text("Mission Control")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -135,24 +139,60 @@ struct SwarmView: View {
 
     private var agentRoster: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Active Agents", systemImage: "person.3")
+            Label("Active Agents", systemImage: "cpu")
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            let agents = uniqueAgents()
-            if agents.isEmpty {
+            let swarmAgents = uniqueAgents()
+            let networkAgents = appState.discoveredAgents
+
+            if swarmAgents.isEmpty && networkAgents.isEmpty {
                 Text("No active agents yet.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                FlowLayout(spacing: 6) {
-                    ForEach(agents, id: \.self) { name in
-                        Text(name)
-                            .font(.caption)
+                // Show swarm-observed agents first
+                if !swarmAgents.isEmpty {
+                    Text("In Swarm")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    FlowLayout(spacing: 6) {
+                        ForEach(swarmAgents, id: \.self) { name in
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text(name)
+                                    .font(.caption)
+                            }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
                             .background(Color.accentColor.opacity(0.12), in: Capsule())
                             .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                }
+
+                // Show all discovered agents on the network
+                if !networkAgents.isEmpty {
+                    Text("On Network")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, swarmAgents.isEmpty ? 0 : 4)
+                    FlowLayout(spacing: 6) {
+                        ForEach(networkAgents) { agent in
+                            HStack(spacing: 4) {
+                                Image(systemName: "cpu")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(.blue)
+                                Text(agent.displayName ?? String(agent.agentId.prefix(8)))
+                                    .font(.caption)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.10), in: Capsule())
+                            .foregroundStyle(.blue)
+                        }
                     }
                 }
             }

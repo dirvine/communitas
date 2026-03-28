@@ -219,6 +219,12 @@ struct ContentView: View {
             .padding(.leading, 20)
             .padding(.vertical, 1)
 
+            // Active agents in this space
+            if !appState.discoveredAgents.isEmpty {
+                agentPresenceRow(group: group)
+                    .padding(.leading, 16)
+            }
+
             // App shortcuts (non-chat tabs)
             ForEach([SpaceTab.board, .files, .swarm, .feed, .wiki, .web], id: \.self) { tab in
                 appShortcutRow(tab: tab, group: group)
@@ -286,6 +292,26 @@ struct ContentView: View {
                 ? Color.accentColor.opacity(0.12)
                 : Color.clear
         )
+    }
+
+    /// Shows a compact agent presence indicator inside an expanded space.
+    private func agentPresenceRow(group: GroupSummary) -> some View {
+        let count = appState.discoveredAgents.count
+        let label = count == 1 ? "1 agent" : "\(count) agents"
+
+        return HStack(spacing: 6) {
+            Image(systemName: "cpu")
+                .font(.caption)
+                .foregroundStyle(.blue)
+                .frame(width: 14)
+
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+        .padding(.vertical, 1)
     }
 
     private func appShortcutRow(tab: SpaceTab, group: GroupSummary) -> some View {

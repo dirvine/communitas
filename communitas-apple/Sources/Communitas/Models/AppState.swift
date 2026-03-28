@@ -90,6 +90,14 @@ final class AppState: ObservableObject {
     /// Set of agent IDs currently online (from the /presence endpoint).
     @Published var onlineAgents: Set<String> = []
 
+    /// Discovered agents on the network (from /agents/discovered).
+    @Published var discoveredAgents: [DiscoveredAgent] = []
+
+    /// Agent IDs of discovered agents (for fast membership checks).
+    var discoveredAgentIds: Set<String> {
+        Set(discoveredAgents.map(\.agentId))
+    }
+
     /// Last time the user interacted with the app (for auto-away tracking).
     var lastInteractionTime: Date = Date()
 
@@ -222,12 +230,23 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Fetch discovered agents from the daemon and update `discoveredAgents`.
+    func refreshDiscoveredAgents() async {
+        guard daemonState == .running else { return }
+        do {
+            discoveredAgents = try await client.discoveredAgents()
+        } catch {
+            // Best-effort — silently ignore failures
+        }
+    }
+
     /// Start polling presence every 60 seconds. Safe to call multiple times.
     func startPresencePolling() {
         presencePollingTask?.cancel()
         presencePollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refreshPresence()
+                await self?.refreshDiscoveredAgents()
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
             }
         }

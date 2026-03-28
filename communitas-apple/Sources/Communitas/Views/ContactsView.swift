@@ -5,18 +5,18 @@ struct ContactsView: View {
     @EnvironmentObject var appState: AppState
     @State private var showAddSheet = false
     @State private var selectedContact: Contact?
+    @State private var discoveredAgents: [DiscoveredAgent] = []
+    @State private var isLoadingAgents = false
 
     var body: some View {
         Group {
             if appState.daemonState != .running {
                 notConnectedPlaceholder
-            } else if appState.contacts.isEmpty {
-                emptyState
             } else {
-                contactList
+                combinedList
             }
         }
-        .navigationTitle("Contacts")
+        .navigationTitle("People")
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
@@ -28,7 +28,10 @@ struct ContactsView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Button {
-                    Task { await appState.refresh() }
+                    Task {
+                        await appState.refresh()
+                        await loadDiscoveredAgents()
+                    }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
@@ -38,56 +41,166 @@ struct ContactsView: View {
             AddContactSheet()
                 .environmentObject(appState)
         }
+        .task {
+            await loadDiscoveredAgents()
+        }
     }
 
-    private var contactList: some View {
-        List(appState.contacts, selection: $selectedContact) { contact in
-            HStack {
-                // Presence dot
-                PresenceDot(isOnline: appState.onlineAgents.contains(contact.agentId))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(contact.label ?? truncatedId(contact.agentId))
-                        .font(.headline)
-                    Text(truncatedId(contact.agentId))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+    /// Combined list showing contacts and discovered agents.
+    private var combinedList: some View {
+        List {
+            // Contacts section
+            Section {
+                if appState.contacts.isEmpty {
+                    HStack {
+                        Image(systemName: "person.2.slash")
+                            .foregroundStyle(.secondary)
+                        Text("No contacts yet. Add a contact to start messaging.")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                    }
+                    .padding(.vertical, 4)
+                } else {
+                    ForEach(appState.contacts) { contact in
+                        contactRow(contact)
+                    }
                 }
-                Spacer()
-                trustBadge(contact.trustLevel)
+            } header: {
+                Text("Contacts")
             }
-            .padding(.vertical, 4)
-            .tag(contact)
-            .contextMenu {
-                Button("Copy Agent ID") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(contact.agentId, forType: .string)
+
+            // Discovered Agents section
+            Section {
+                if isLoadingAgents {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Scanning network...")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                    }
+                    .padding(.vertical, 4)
+                } else if discoveredAgents.isEmpty {
+                    HStack {
+                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                            .foregroundStyle(.secondary)
+                        Text("No agents discovered on the network")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                    }
+                    .padding(.vertical, 4)
+                } else {
+                    ForEach(discoveredAgents) { agent in
+                        agentRow(agent)
+                    }
                 }
-                Divider()
-                Button("Remove", role: .destructive) {
-                    Task {
-                        try? await appState.client.removeContact(agentId: contact.agentId)
-                        await appState.refresh()
+            } header: {
+                HStack {
+                    Text("Discovered Agents")
+                    if !discoveredAgents.isEmpty {
+                        Text("(\(discoveredAgents.count))")
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "person.2.slash")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("No Contacts")
-                .font(.title2)
-            Text("Add a contact to start messaging.")
-                .foregroundStyle(.secondary)
-            Button("Add Contact") { showAddSheet = true }
-                .buttonStyle(.borderedProminent)
+    private func contactRow(_ contact: Contact) -> some View {
+        HStack {
+            // Presence dot
+            PresenceDot(isOnline: appState.onlineAgents.contains(contact.agentId))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(contact.label ?? truncatedId(contact.agentId))
+                    .font(.headline)
+                Text(truncatedId(contact.agentId))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            trustBadge(contact.trustLevel)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 4)
+        .contextMenu {
+            Button("Copy Agent ID") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(contact.agentId, forType: .string)
+            }
+            Divider()
+            Button("Remove", role: .destructive) {
+                Task {
+                    try? await appState.client.removeContact(agentId: contact.agentId)
+                    await appState.refresh()
+                }
+            }
+        }
+    }
+
+    private func agentRow(_ agent: DiscoveredAgent) -> some View {
+        HStack(spacing: 10) {
+            // Robot icon
+            Image(systemName: "cpu")
+                .font(.system(size: 18))
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(agent.displayName ?? truncatedId(agent.agentId))
+                        .font(.headline)
+                    // AI / Agent label badge
+                    Text("Agent")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.12))
+                        .foregroundStyle(Color.blue)
+                        .clipShape(Capsule())
+                }
+                Text(truncatedId(agent.agentId))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fontDesign(.monospaced)
+                if let lastSeen = agent.lastSeen {
+                    Text("Last seen \(relativeTime(lastSeen))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .contextMenu {
+            Button("Copy Agent ID") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(agent.agentId, forType: .string)
+            }
+        }
+    }
+
+    private func loadDiscoveredAgents() async {
+        guard appState.daemonState == .running else { return }
+        isLoadingAgents = true
+        defer { isLoadingAgents = false }
+        do {
+            discoveredAgents = try await appState.client.discoveredAgents()
+        } catch {
+            // Best-effort — silently ignore failures
+            discoveredAgents = []
+        }
+    }
+
+    private func relativeTime(_ unixSecs: UInt64) -> String {
+        let now = UInt64(Date().timeIntervalSince1970)
+        let diff = now > unixSecs ? now - unixSecs : 0
+        if diff < 60 { return "just now" }
+        if diff < 3600 { return "\(diff / 60)m ago" }
+        if diff < 86400 { return "\(diff / 3600)h ago" }
+        return "\(diff / 86400)d ago"
     }
 
     private var notConnectedPlaceholder: some View {

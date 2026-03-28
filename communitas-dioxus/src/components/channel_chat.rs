@@ -10,7 +10,7 @@ use crate::x0x_contract;
 use base64::Engine as _;
 use communitas_x0x_client::{X0xClient, X0xWebSocket};
 use dioxus::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 
@@ -31,6 +31,7 @@ pub fn ChannelChatView(
     let mut composer_text = use_signal(String::new);
     let mut sending = use_signal(|| false);
     let mut ws_connected = use_signal(|| false);
+    let mut discovered_agent_ids = use_signal(HashSet::<String>::new);
 
     let topic = channel.topic.clone();
     let group_id = channel.group_id.clone();
@@ -45,6 +46,15 @@ pub fn ChannelChatView(
             let history =
                 x0x_contract::load_channel_history(&history_group_id, &history_channel_name).await;
             messages.set(history);
+        }
+    });
+
+    // Fetch discovered agents for AI badge display
+    use_future(move || async move {
+        let client = X0xClient::new();
+        if let Ok(agents) = client.discovered_agents().await {
+            let ids: HashSet<String> = agents.into_iter().map(|a| a.agent_id).collect();
+            discovered_agent_ids.set(ids);
         }
     });
 
@@ -282,6 +292,7 @@ pub fn ChannelChatView(
                             key: "{msg.id}",
                             message: msg.clone(),
                             is_own: own_agent_id().as_deref() == Some(&msg.sender_id),
+                            is_agent: discovered_agent_ids.read().contains(&msg.sender_id),
                             on_open_thread: move |m: ChatMessage| on_open_thread.call(m),
                         }
                     }
@@ -411,6 +422,9 @@ fn ChannelHeader(channel_name: String, description: String, connected: bool) -> 
 fn ChannelMessage(
     message: ChatMessage,
     is_own: bool,
+    /// True when the sender is a discovered agent on the network.
+    #[props(default)]
+    is_agent: bool,
     on_open_thread: EventHandler<ChatMessage>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
@@ -498,6 +512,24 @@ fn ChannelMessage(
                             if is_own { palette::JADE_400 } else { semantic::TEXT_PRIMARY }
                         ),
                         "{message.sender_name}"
+                    }
+
+                    // AI agent badge
+                    if is_agent {
+                        span {
+                            style: format!(
+                                "font-size: {}; font-weight: {}; \
+                                 color: {}; background: rgba(0,150,255,0.12); \
+                                 padding: 1px {}; border-radius: {}; \
+                                 white-space: nowrap; flex-shrink: 0;",
+                                typography::SIZE_XXS,
+                                typography::WEIGHT_SEMIBOLD,
+                                palette::SKY_500,
+                                spacing::XS,
+                                radius::FULL,
+                            ),
+                            "\u{1F916} AI"
+                        }
                     }
 
                     span {

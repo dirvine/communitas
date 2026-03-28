@@ -277,6 +277,7 @@ fn AppShell(children: Element) -> Element {
     let mut identity_label = use_signal(|| "Local x0x".to_string());
     let mut identity_secondary = use_signal(|| None::<String>);
     let mut connected = use_signal(|| false);
+    let mut discovered_agent_count_sidebar = use_signal(|| 0usize);
 
     // Poll groups, contacts, agent
     use_coroutine(move |_: UnboundedReceiver<()>| async move {
@@ -339,6 +340,10 @@ fn AppShell(children: Element) -> Element {
                 contacts.set(entries);
             }
 
+            if let Ok(agents) = client.discovered_agents().await {
+                discovered_agent_count_sidebar.set(agents.len());
+            }
+
             tokio::time::sleep(tokio::time::Duration::from_secs(8)).await;
         }
     });
@@ -373,6 +378,7 @@ fn AppShell(children: Element) -> Element {
                     connected: connected(),
                     identity_label: Some(identity_label()),
                     identity_secondary: identity_secondary(),
+                    discovered_agent_count: discovered_agent_count_sidebar(),
                     on_identity_click: move |_| {
                         navigator.push(Route::MoreRoute {});
                     },

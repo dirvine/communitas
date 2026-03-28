@@ -1,8 +1,9 @@
 //! People/contacts management view.
 //!
 //! Shows contacts with trust levels, agent card import, and search.
+//! Also displays a "Discovered Agents" section populated from `GET /agents/discovered`.
 
-use communitas_x0x_client::{Contact, TrustLevel, X0xClient};
+use communitas_x0x_client::{Contact, DiscoveredAgent, TrustLevel, X0xClient};
 use dioxus::prelude::*;
 use tracing::{info, warn};
 
@@ -10,6 +11,9 @@ use crate::tokens::{colors, radius, spacing, typography};
 
 /// How often to refresh the contacts list.
 const REFRESH_INTERVAL_SECS: u64 = 10;
+
+/// How often to refresh the discovered agents list.
+const AGENT_REFRESH_SECS: u64 = 15;
 
 /// Truncate an agent ID for display.
 fn short_id(id: &str) -> String {
@@ -49,6 +53,24 @@ fn trust_label(level: TrustLevel) -> &'static str {
     }
 }
 
+/// Relative time display from a unix-epoch seconds timestamp.
+fn relative_time(last_seen_secs: u64) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let diff = now.saturating_sub(last_seen_secs);
+    if diff < 60 {
+        "just now".to_string()
+    } else if diff < 3600 {
+        format!("{}m ago", diff / 60)
+    } else if diff < 86400 {
+        format!("{}h ago", diff / 3600)
+    } else {
+        format!("{}d ago", diff / 86400)
+    }
+}
+
 /// People view component.
 #[component]
 pub fn PeopleView() -> Element {
@@ -59,6 +81,10 @@ pub fn PeopleView() -> Element {
     let mut import_busy = use_signal(|| false);
     let mut import_error = use_signal(|| None::<String>);
     let mut refresh_key = use_signal(|| 0u64);
+
+    // Discovered agents state
+    let mut discovered_agents = use_signal(Vec::<DiscoveredAgent>::new);
+    let mut agents_loading = use_signal(|| true);
 
     // Fetch contacts
     use_coroutine(move |_: UnboundedReceiver<()>| async move {
@@ -82,8 +108,27 @@ pub fn PeopleView() -> Element {
         }
     });
 
+    // Fetch discovered agents
+    use_coroutine(move |_: UnboundedReceiver<()>| async move {
+        let client = X0xClient::new();
+        loop {
+            match client.discovered_agents().await {
+                Ok(agents) => {
+                    discovered_agents.set(agents);
+                }
+                Err(e) => {
+                    warn!(target: "ui.people", "failed to list discovered agents: {e}");
+                }
+            }
+            agents_loading.set(false);
+            tokio::time::sleep(tokio::time::Duration::from_secs(AGENT_REFRESH_SECS)).await;
+        }
+    });
+
     let current_contacts = contacts.read().clone();
+    let current_agents = discovered_agents.read().clone();
     let is_loading = *loading.read();
+    let is_agents_loading = *agents_loading.read();
     let current_error = error.read().clone();
 
     let page_style = format!(
@@ -247,6 +292,18 @@ pub fn PeopleView() -> Element {
                 }
             }
 
+            // Contacts section header
+            div {
+                style: format!(
+                    "font-size: {}; font-weight: 700; color: {}; \
+                     text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: -{};",
+                    typography::TEXT_XS,
+                    colors::TEXT_MUTED,
+                    spacing::SM,
+                ),
+                "Contacts"
+            }
+
             // Contacts list
             if !is_loading && current_contacts.is_empty() {
                 div {
@@ -363,6 +420,134 @@ pub fn PeopleView() -> Element {
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Discovered Agents section ──────────────────────────────
+            div {
+                style: format!(
+                    "font-size: {}; font-weight: 700; color: {}; \
+                     text-transform: uppercase; letter-spacing: 0.06em; margin-top: {};",
+                    typography::TEXT_XS,
+                    colors::TEXT_MUTED,
+                    spacing::SM,
+                ),
+                "\u{1F916} Discovered Agents"
+            }
+
+            if is_agents_loading {
+                div {
+                    style: format!("color: {}; font-size: {};", colors::TEXT_MUTED, typography::TEXT_SM),
+                    "Scanning network for agents..."
+                }
+            } else if current_agents.is_empty() {
+                div {
+                    style: format!(
+                        "{card_style} display: flex; align-items: center; gap: {}; color: {};",
+                        spacing::MD,
+                        colors::TEXT_MUTED,
+                    ),
+                    span {
+                        style: format!("font-size: {};", typography::TEXT_XL),
+                        "\u{1F4E1}"
+                    }
+                    span {
+                        style: format!("font-size: {};", typography::TEXT_SM),
+                        "No agents discovered on the network"
+                    }
+                }
+            } else {
+                for agent in &current_agents {
+                    {
+                        let agent_id = agent.agent_id.clone();
+                        let display = agent.user_id.clone()
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| short_id(&agent_id));
+                        let last_seen_text = agent.last_seen
+                            .map(relative_time)
+                            .unwrap_or_else(|| "never".to_string());
+
+                        rsx! {
+                            div {
+                                key: "{agent_id}",
+                                style: format!(
+                                    "{card_style} display: flex; align-items: center; gap: {};",
+                                    spacing::MD,
+                                ),
+
+                                // Robot icon
+                                span {
+                                    style: format!(
+                                        "font-size: {}; flex-shrink: 0;",
+                                        typography::TEXT_LG,
+                                    ),
+                                    "\u{1F916}"
+                                }
+
+                                // Agent info
+                                div {
+                                    style: "flex: 1; min-width: 0;",
+
+                                    div {
+                                        style: format!(
+                                            "display: flex; align-items: center; gap: {}; \
+                                             margin-bottom: {};",
+                                            spacing::XS,
+                                            "2px",
+                                        ),
+                                        span {
+                                            style: format!(
+                                                "font-size: {}; font-weight: 600; color: {}; \
+                                                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                                                typography::TEXT_SM,
+                                                colors::TEXT_PRIMARY,
+                                            ),
+                                            "{display}"
+                                        }
+                                        // Agent badge
+                                        span {
+                                            style: format!(
+                                                "font-size: {}; font-weight: 500; \
+                                                 color: {}; background: rgba(0,150,255,0.12); \
+                                                 padding: 1px {}; border-radius: 20px; \
+                                                 white-space: nowrap; flex-shrink: 0;",
+                                                typography::TEXT_XS,
+                                                colors::PRIMARY,
+                                                spacing::XS,
+                                            ),
+                                            "Agent"
+                                        }
+                                    }
+
+                                    div {
+                                        style: format!(
+                                            "font-family: {}; font-size: {}; color: {}; cursor: pointer; \
+                                             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                                            typography::FONT_MONO,
+                                            typography::TEXT_XS,
+                                            colors::TEXT_MUTED,
+                                        ),
+                                        title: "Click to copy",
+                                        onclick: {
+                                            let id = agent_id.clone();
+                                            move |_| copy_to_clipboard(&id)
+                                        },
+                                        "{short_id(&agent_id)}"
+                                    }
+                                }
+
+                                // Last seen
+                                div {
+                                    style: format!(
+                                        "font-size: {}; color: {}; white-space: nowrap;",
+                                        typography::TEXT_XS,
+                                        colors::TEXT_MUTED,
+                                    ),
+                                    "{last_seen_text}"
                                 }
                             }
                         }

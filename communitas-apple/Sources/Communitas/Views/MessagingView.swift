@@ -513,6 +513,18 @@ struct MessageRow: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
 
+                    // AI agent badge — shown when sender is a discovered agent
+                    if appState.discoveredAgentIds.contains(message.senderId) {
+                        Label("AI", systemImage: "cpu")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.12))
+                            .foregroundStyle(Color.blue)
+                            .clipShape(Capsule())
+                    }
+
                     if isOwnMessage {
                         Text("(you)")
                             .font(.caption2)

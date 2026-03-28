@@ -19,6 +19,7 @@ use crate::components::markdown::MarkdownContent;
 use crate::components::mention::{MentionAutocomplete, MentionCandidate, filter_candidates};
 use crate::design_tokens::{motion, palette, radius, semantic, spacing, typography};
 use crate::models::channel::ChatMessage;
+use crate::styles_v2;
 use crate::x0x_contract;
 use base64::Engine as _;
 use chrono::{DateTime, Local};
@@ -27,6 +28,24 @@ use dioxus::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const MSG_TYPE_CHAT: &str = "chat";
+const MSG_TYPE_EDIT: &str = "edit";
+const MSG_TYPE_DELETE: &str = "delete";
+const MSG_TYPE_TYPING: &str = "typing";
+const CHAT_MESSAGES_ID: &str = "chat-messages";
+
+const TYPING_SEND_THROTTLE_SECS: u64 = 2;
+const TYPING_DISPLAY_WINDOW_SECS: u64 = 3;
+const TYPING_EXPIRY_SECS: u64 = 10;
+const TYPING_INBOUND_RATE_LIMIT_SECS: u64 = 1;
+
+/// Maximum number of messages kept in memory per channel.
+const MAX_MESSAGES: usize = 500;
 
 // ---------------------------------------------------------------------------
 // Extended wire payload (edit / delete / typing events)
@@ -111,7 +130,7 @@ impl GossipEnvelope {
             channel: channel.to_string(),
             thread_root: None,
             broadcast: false,
-            msg_type: Some("edit".to_string()),
+            msg_type: Some(MSG_TYPE_EDIT.to_string()),
             edit: Some(ep),
             delete: None,
             typing: None,
@@ -129,7 +148,7 @@ impl GossipEnvelope {
             channel: channel.to_string(),
             thread_root: None,
             broadcast: false,
-            msg_type: Some("delete".to_string()),
+            msg_type: Some(MSG_TYPE_DELETE.to_string()),
             edit: None,
             delete: Some(dp),
             typing: None,
@@ -147,7 +166,7 @@ impl GossipEnvelope {
             channel: String::new(),
             thread_root: None,
             broadcast: false,
-            msg_type: Some("typing".to_string()),
+            msg_type: Some(MSG_TYPE_TYPING.to_string()),
             edit: None,
             delete: None,
             typing: Some(tp),
@@ -233,6 +252,9 @@ pub fn ChannelChatView(
     let mut ws_connected = use_signal(|| false);
     let mut discovered_agent_ids = use_signal(HashSet::<String>::new);
 
+    // Shared HTTP client — created once at mount, reused across all closures.
+    let shared_client = use_signal(X0xClient::new);
+
     // new state
     // Per-sender typing indicators; keyed by sender_id.
     let mut typing_users = use_signal(HashMap::<String, TypingEntry>::new);
@@ -275,7 +297,7 @@ pub fn ChannelChatView(
 
     // ----- discovered agents -----
     use_future(move || async move {
-        let client = X0xClient::new();
+        let client = shared_client.read().clone();
         if let Ok(agents) = client.discovered_agents().await {
             let ids: HashSet<String> = agents.into_iter().map(|a| a.agent_id).collect();
             discovered_agent_ids.set(ids);
@@ -284,7 +306,7 @@ pub fn ChannelChatView(
 
     // ----- contacts for @mention -----
     use_future(move || async move {
-        let client = X0xClient::new();
+        let client = shared_client.read().clone();
         if let Ok(contacts) = client.list_contacts().await {
             let candidates = contacts
                 .into_iter()
@@ -323,12 +345,12 @@ pub fn ChannelChatView(
     // and re-runs this effect every time new messages arrive.
     use_effect(move || {
         let _count = messages.read().len(); // creates the signal subscription
-        let _ = document::eval(
+        let _ = document::eval(&format!(
             r#"
-            var el = document.getElementById('chat-messages');
-            if (el) { el.scrollTop = el.scrollHeight; }
-            "#,
-        );
+            var el = document.getElementById('{CHAT_MESSAGES_ID}');
+            if (el) {{ el.scrollTop = el.scrollHeight; }}
+            "#
+        ));
     });
 
     // ----- typing indicator expiry (tick every 2 s via a cheap effect) -----
@@ -389,16 +411,21 @@ pub fn ChannelChatView(
                         // control fields (msg_type, edit, delete, typing).
                         match serde_json::from_slice::<GossipEnvelope>(&decoded) {
                             Ok(env) => {
-                                let msg_type = env.msg_type.as_deref().unwrap_or("chat");
+                                let msg_type = env.msg_type.as_deref().unwrap_or(MSG_TYPE_CHAT);
                                 match msg_type {
-                                    "chat" | "" => {
+                                    MSG_TYPE_CHAT | "" => {
                                         let msg = env.into_chat_message();
                                         if !msg.id.is_empty() {
                                             let history_msg = msg.clone();
                                             messages.with_mut(|msgs| {
                                                 if !msgs.iter().any(|m| m.id == history_msg.id) {
-                                                    msgs.push(msg);
-                                                    msgs.sort_by_key(|m| m.timestamp);
+                                                    let pos = msgs.partition_point(|m| {
+                                                        m.timestamp <= msg.timestamp
+                                                    });
+                                                    msgs.insert(pos, msg);
+                                                    if msgs.len() > MAX_MESSAGES {
+                                                        msgs.drain(..msgs.len() - MAX_MESSAGES);
+                                                    }
                                                 }
                                             });
                                             x0x_contract::append_channel_history(
@@ -409,7 +436,7 @@ pub fn ChannelChatView(
                                             .await;
                                         }
                                     }
-                                    "edit" => {
+                                    MSG_TYPE_EDIT => {
                                         // SECURITY NOTE: edit/delete authorization is UI-only.
                                         // The gossip layer does not carry ML-DSA signatures on
                                         // control messages, so `sender_id` matching here only
@@ -427,7 +454,7 @@ pub fn ChannelChatView(
                                             });
                                         }
                                     }
-                                    "delete" => {
+                                    MSG_TYPE_DELETE => {
                                         // SECURITY NOTE: Same limitation as "edit" above —
                                         // sender_id matching is UI-only, not cryptographic.
                                         if let Some(dp) = env.delete {
@@ -442,24 +469,25 @@ pub fn ChannelChatView(
                                             });
                                         }
                                     }
-                                    "typing" => {
+                                    MSG_TYPE_TYPING => {
                                         if let Some(tp) = env.typing {
-                                            // M5: Per-sender inbound rate limiting — skip if the
-                                            // same sender was updated less than 500 ms ago.
+                                            // Per-sender inbound rate limiting — skip if the
+                                            // same sender was updated less than 1 s ago.
                                             let now = now_secs();
                                             let should_update = typing_users
                                                 .read()
                                                 .get(&tp.sender_id)
                                                 .map(|entry| {
-                                                    now.saturating_sub(entry.last_seen_secs) >= 1
+                                                    now.saturating_sub(entry.last_seen_secs)
+                                                        >= TYPING_INBOUND_RATE_LIMIT_SECS
                                                 })
                                                 .unwrap_or(true);
                                             if should_update {
                                                 typing_users.with_mut(|map| {
-                                                    // M2: Purge entries older than 10 s on every insert.
+                                                    // Purge entries older than TYPING_EXPIRY_SECS on every insert.
                                                     map.retain(|_, entry| {
                                                         now.saturating_sub(entry.last_seen_secs)
-                                                            <= 10
+                                                            <= TYPING_EXPIRY_SECS
                                                     });
                                                     map.insert(
                                                         tp.sender_id.clone(),
@@ -497,7 +525,7 @@ pub fn ChannelChatView(
     let mut own_agent_id = use_signal(|| Option::<String>::None);
     let mut own_sender_name = use_signal(|| Option::<String>::None);
     use_future(move || async move {
-        let client = X0xClient::new();
+        let client = shared_client.read().clone();
         if let Ok(agent) = client.agent().await {
             let fallback_name = agent
                 .user_id
@@ -568,7 +596,7 @@ pub fn ChannelChatView(
 
                 match serde_json::to_vec(&envelope) {
                     Ok(json_bytes) => {
-                        let client = X0xClient::new();
+                        let client = shared_client.read().clone();
                         if let Err(e) = client.publish(&topic, &json_bytes).await {
                             error!(target: "ui.channel_chat", "Failed to publish message: {e}");
                             // B4: Send failed — restore composer text so the user doesn't lose it.
@@ -582,8 +610,12 @@ pub fn ChannelChatView(
                             // B3: Apply locally only after network confirmation.
                             messages.with_mut(|msgs| {
                                 if !msgs.iter().any(|m| m.id == msg.id) {
-                                    msgs.push(msg.clone());
-                                    msgs.sort_by_key(|entry| entry.timestamp);
+                                    let pos =
+                                        msgs.partition_point(|m| m.timestamp <= msg.timestamp);
+                                    msgs.insert(pos, msg.clone());
+                                    if msgs.len() > MAX_MESSAGES {
+                                        msgs.drain(..msgs.len() - MAX_MESSAGES);
+                                    }
                                 }
                             });
                             x0x_contract::append_channel_history(&group_id, &channel_name, &msg)
@@ -619,7 +651,7 @@ pub fn ChannelChatView(
             spawn(async move {
                 match serde_json::to_vec(&envelope) {
                     Ok(bytes) => {
-                        let client = X0xClient::new();
+                        let client = shared_client.read().clone();
                         if let Err(e) = client.publish(&topic, &bytes).await {
                             error!(target: "ui.channel_chat", "Failed to publish edit: {e}");
                         } else {
@@ -657,7 +689,7 @@ pub fn ChannelChatView(
             spawn(async move {
                 match serde_json::to_vec(&envelope) {
                     Ok(bytes) => {
-                        let client = X0xClient::new();
+                        let client = shared_client.read().clone();
                         if let Err(e) = client.publish(&topic, &bytes).await {
                             error!(target: "ui.channel_chat", "Failed to publish delete: {e}");
                         } else {
@@ -685,7 +717,7 @@ pub fn ChannelChatView(
         let topic = topic.clone();
         move || {
             let now = now_secs();
-            if now.saturating_sub(last_typing_sent()) < 2 {
+            if now.saturating_sub(last_typing_sent()) < TYPING_SEND_THROTTLE_SECS {
                 return;
             }
             last_typing_sent.set(now);
@@ -701,7 +733,7 @@ pub fn ChannelChatView(
             spawn(async move {
                 match serde_json::to_vec(&envelope) {
                     Ok(bytes) => {
-                        let client = X0xClient::new();
+                        let client = shared_client.read().clone();
                         if let Err(e) = client.publish(&topic, &bytes).await {
                             error!(target: "ui.channel_chat", "Failed to publish typing: {e}");
                         }
@@ -729,27 +761,36 @@ pub fn ChannelChatView(
         }
     });
 
-    // ----- derive active typers (exclude self, purge stale > 3 s) -----
-    let own_id = own_agent_id().unwrap_or_default();
-    let active_typers: Vec<String> = {
+    // ----- derive active typers (exclude self, purge stale > TYPING_DISPLAY_WINDOW_SECS) -----
+    let active_typers = use_memo(move || {
+        let own_id = own_agent_id().unwrap_or_default();
         let now = now_secs();
         typing_users
             .read()
             .iter()
             .filter(|(id, entry)| {
-                id.as_str() != own_id.as_str() && now.saturating_sub(entry.last_seen_secs) <= 3
+                id.as_str() != own_id.as_str()
+                    && now.saturating_sub(entry.last_seen_secs) <= TYPING_DISPLAY_WINDOW_SECS
             })
             .map(|(_, entry)| entry.display_name.clone())
-            .collect()
-    };
+            .collect::<Vec<String>>()
+    });
 
     let channel_display_name = channel.channel_name.clone();
 
-    // M6: Snapshot own_agent_id once per render to avoid calling the signal
-    // getter inside the hot message-list loop.
+    // Snapshot signals once per render — avoids repeated signal reads inside the hot loop.
     let my_agent_id = own_agent_id();
+    let discovered_agents_snap: HashSet<String> = discovered_agent_ids.read().clone();
+    let editing_msg_snap = editing_msg();
+    let search_q_snap = search_query();
+    let filtered_messages_snap = filtered_messages();
     // M4: Snapshot messages for reply resolution in the render loop.
     let all_messages_snap: Vec<ChatMessage> = messages.read().clone();
+    // Build O(1) reply lookup instead of O(N) scan per message.
+    let reply_index: HashMap<&str, &ChatMessage> = all_messages_snap
+        .iter()
+        .map(|m| (m.id.as_str(), m))
+        .collect();
 
     rsx! {
         div {
@@ -841,10 +882,10 @@ pub fn ChannelChatView(
 
                                 p {
                                     style: format!(
-                                        "margin: 0; font-size: {}; color: {}; \
-                                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                                        "margin: 0; font-size: {}; color: {}; {}",
                                         typography::SIZE_XS,
-                                        semantic::TEXT_MUTED
+                                        semantic::TEXT_MUTED,
+                                        styles_v2::text::truncate()
                                     ),
                                     "{preview_text}"
                                 }
@@ -869,7 +910,7 @@ pub fn ChannelChatView(
 
             // Message list
             div {
-                id: "chat-messages",
+                id: CHAT_MESSAGES_ID,
                 style: format!(
                     "flex: 1; \
                      overflow-y: auto; \
@@ -888,24 +929,22 @@ pub fn ChannelChatView(
                 aria_label: "Channel messages",
                 aria_live: "polite",
 
-                if filtered_messages().is_empty() {
+                if filtered_messages_snap.is_empty() {
                     ChannelEmptyState { channel_name: channel_display_name.clone() }
                 } else {
-                    for msg in filtered_messages() {
+                    for msg in filtered_messages_snap.clone() {
                         {
                             let is_own = my_agent_id.as_deref() == Some(&msg.sender_id);
-                            let is_agent = discovered_agent_ids.read().contains(&msg.sender_id);
+                            let is_agent = discovered_agents_snap.contains(&msg.sender_id);
                             let msg_for_reply = msg.clone();
-                            let msg_for_thread = msg.clone();
                             let msg_id_for_edit = msg.id.clone();
                             let msg_id_for_delete = msg.id.clone();
                             let msg_text_for_edit = msg.text.clone();
                             let publish_edit = publish_edit.clone();
-                            let search_q = search_query();
-                            // M4: Resolve reply sender and text from the snapshot.
+                            // M4: Resolve reply sender and text via O(1) HashMap lookup.
                             let (reply_sender_name, reply_text_snippet) =
                                 if let Some(ref rid) = msg.thread_root {
-                                    if let Some(parent) = all_messages_snap.iter().find(|m| &m.id == rid) {
+                                    if let Some(parent) = reply_index.get(rid.as_str()) {
                                         (
                                             Some(parent.sender_name.clone()),
                                             Some(parent.text.chars().take(80).collect::<String>()),
@@ -916,17 +955,20 @@ pub fn ChannelChatView(
                                 } else {
                                     (None, None)
                                 };
+                            let msg_id_ref = msg.id.clone();
+                            let editing = editing_msg_snap.as_ref().map(|(id, _)| id.clone()) == Some(msg_id_ref.clone());
+                            let edit_draft = editing_msg_snap.as_ref().and_then(|(id, t)| {
+                                if id == &msg_id_ref { Some(t.clone()) } else { None }
+                            }).unwrap_or_default();
                             rsx! {
                                 ChannelMessage {
                                     key: "{msg.id}",
                                     message: msg.clone(),
                                     is_own,
                                     is_agent,
-                                    search_highlight: search_q,
-                                    editing: editing_msg().as_ref().map(|(id, _)| id.clone()) == Some(msg.id.clone()),
-                                    edit_draft: editing_msg().as_ref().and_then(|(id, t)| {
-                                        if id == &msg.id { Some(t.clone()) } else { None }
-                                    }).unwrap_or_default(),
+                                    search_highlight: search_q_snap.clone(),
+                                    editing,
+                                    edit_draft,
                                     reply_sender_name,
                                     reply_text_snippet,
                                     on_open_thread: move |m: ChatMessage| on_open_thread.call(m),
@@ -949,7 +991,6 @@ pub fn ChannelChatView(
                                     },
                                     on_cancel_edit: move |_| editing_msg.set(None),
                                     on_delete: move |_| delete_confirm_id.set(Some(msg_id_for_delete.clone())),
-                                    on_open_thread_btn: move |_| on_open_thread.call(msg_for_thread.clone()),
                                 }
                             }
                         }
@@ -958,8 +999,8 @@ pub fn ChannelChatView(
             }
 
             // Typing indicator
-            if !active_typers.is_empty() {
-                TypingBar { typers: active_typers }
+            if !active_typers().is_empty() {
+                TypingBar { typers: active_typers() }
             }
 
             // @mention autocomplete (above composer)
@@ -1071,7 +1112,6 @@ fn ChannelHeader(
                     spacing::XL,
                 ),
 
-                // Channel name with hash
                 div {
                     style: "display: flex; align-items: center; gap: 4px; flex: 1;",
 
@@ -1263,7 +1303,6 @@ fn ChannelMessage(
     on_save_edit: EventHandler<()>,
     on_cancel_edit: EventHandler<()>,
     on_delete: EventHandler<()>,
-    on_open_thread_btn: EventHandler<()>,
 ) -> Element {
     let mut hovered = use_signal(|| false);
 
@@ -1315,7 +1354,6 @@ fn ChannelMessage(
             onmouseenter: move |_| hovered.set(true),
             onmouseleave: move |_| hovered.set(false),
 
-            // Avatar
             div {
                 style: format!(
                     "width: 36px; \
@@ -1338,11 +1376,9 @@ fn ChannelMessage(
                 "{initials}"
             }
 
-            // Content
             div {
                 style: "flex: 1; min-width: 0;",
 
-                // Sender name + timestamp
                 div {
                     style: format!(
                         "display: flex; \
@@ -1390,7 +1426,6 @@ fn ChannelMessage(
                         "{ts_display}"
                     }
 
-                    // Broadcast indicator
                     if message.broadcast {
                         span {
                             style: format!(
@@ -1407,7 +1442,6 @@ fn ChannelMessage(
                     }
                 }
 
-                // Inline reply context
                 // M4: Show resolved sender name + text snippet instead of raw UUID.
                 if let Some(ref reply_id) = message.thread_root {
                     {
@@ -1453,10 +1487,10 @@ fn ChannelMessage(
                                 if !snippet.is_empty() {
                                     span {
                                         style: format!(
-                                            "font-size: {}; color: {}; \
-                                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                                            "font-size: {}; color: {}; {}",
                                             typography::SIZE_XS,
-                                            semantic::TEXT_MUTED
+                                            semantic::TEXT_MUTED,
+                                            styles_v2::text::truncate()
                                         ),
                                         "{snippet}"
                                     }
@@ -1466,7 +1500,6 @@ fn ChannelMessage(
                     }
                 }
 
-                // Message body — edit mode OR markdown display
                 if editing {
                     div {
                         style: format!("display: flex; flex-direction: column; gap: {};", spacing::XS),
@@ -1558,7 +1591,6 @@ fn ChannelMessage(
                     }
                 }
 
-                // Reactions
                 if !message.reactions.is_empty() {
                     div {
                         style: format!(
@@ -1587,7 +1619,6 @@ fn ChannelMessage(
                     }
                 }
 
-                // Thread indicator
                 if message.reply_count > 0 {
                     {
                         let reply_label = if message.reply_count == 1 {
@@ -1615,7 +1646,10 @@ fn ChannelMessage(
                                     typography::FONT_BODY,
                                     motion::transition("background, border-color")
                                 ),
-                                onclick: move |_| on_open_thread_btn.call(()),
+                                onclick: {
+                                    let msg = message.clone();
+                                    move |_| on_open_thread.call(msg.clone())
+                                },
 
                                 span {
                                     style: format!("color: {};", semantic::PRIMARY),
@@ -1628,7 +1662,6 @@ fn ChannelMessage(
                 }
             }
 
-            // Hover actions
             if hovered() && !editing {
                 div {
                     style: format!(
@@ -1636,14 +1669,12 @@ fn ChannelMessage(
                         spacing::XXS
                     ),
 
-                    // Reply (inline quote)
                     MessageAction {
                         icon: "\u{21A9}",
                         tooltip: "Reply in chat",
                         onclick: move |_| on_reply.call(()),
                     }
 
-                    // Open thread
                     MessageAction {
                         icon: "\u{1F4AC}",
                         tooltip: "Reply in thread",
@@ -1653,7 +1684,6 @@ fn ChannelMessage(
                         },
                     }
 
-                    // Edit (own messages only)
                     if is_own && !is_deleted {
                         MessageAction {
                             icon: "\u{270F}",
@@ -1662,7 +1692,6 @@ fn ChannelMessage(
                         }
                     }
 
-                    // Delete (own messages only)
                     if is_own && !is_deleted {
                         MessageAction {
                             icon: "\u{1F5D1}",
@@ -1829,7 +1858,6 @@ fn ChannelComposer(
                     },
                 }
 
-                // Send button
                 button {
                     style: format!(
                         "width: 32px; height: 32px; \

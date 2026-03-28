@@ -10,7 +10,7 @@ struct FilesView: View {
     @State private var errorMessage: String?
     @State private var selectedAgentId = ""
     @State private var showFilePicker = false
-    @State private var pollTimer: Timer?
+    @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,8 +37,8 @@ struct FilesView: View {
             startPolling()
         }
         .onDisappear {
-            pollTimer?.invalidate()
-            pollTimer = nil
+            pollTask?.cancel()
+            pollTask = nil
         }
         .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.data]) { result in
             if case .success(let url) = result {
@@ -265,9 +265,11 @@ struct FilesView: View {
     }
 
     private func startPolling() {
-        pollTimer?.invalidate()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
-            Task { @MainActor in
+        pollTask?.cancel()
+        pollTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else { break }
                 await refreshTransfers()
             }
         }

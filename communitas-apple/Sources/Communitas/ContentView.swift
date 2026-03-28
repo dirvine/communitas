@@ -472,10 +472,14 @@ struct AboutView: View {
                 .frame(width: 200)
 
             VStack(spacing: 8) {
-                Link("saorsa-labs.com", destination: URL(string: "https://saorsa-labs.com") ?? URL(string: "https://example.com")!)
-                    .font(.body)
-                Link("GitHub", destination: URL(string: "https://github.com/saorsa-labs") ?? URL(string: "https://example.com")!)
-                    .font(.body)
+                if let websiteURL = URL(string: "https://saorsa-labs.com") {
+                    Link("saorsa-labs.com", destination: websiteURL)
+                        .font(.body)
+                }
+                if let githubURL = URL(string: "https://github.com/saorsa-labs") {
+                    Link("GitHub", destination: githubURL)
+                        .font(.body)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

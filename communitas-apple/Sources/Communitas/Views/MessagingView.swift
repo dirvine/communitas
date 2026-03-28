@@ -1059,7 +1059,7 @@ struct SearchResultRow: View {
 
 struct TypingDotsView: View {
     @State private var animationPhase = 0
-    @State private var timer: Timer?
+    @State private var animationTask: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 3) {
@@ -1071,13 +1071,21 @@ struct TypingDotsView: View {
             }
         }
         .onAppear { startAnimation() }
-        .onDisappear { timer?.invalidate() }
+        .onDisappear {
+            animationTask?.cancel()
+            animationTask = nil
+        }
     }
 
     private func startAnimation() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in
-            withAnimation(.easeInOut(duration: 0.3)) {
-                animationPhase = (animationPhase + 1) % 3
+        animationTask?.cancel()
+        animationTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard !Task.isCancelled else { break }
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    animationPhase = (animationPhase + 1) % 3
+                }
             }
         }
     }

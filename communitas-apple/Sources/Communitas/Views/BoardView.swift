@@ -12,7 +12,7 @@ struct BoardView: View {
     @State private var errorMessage: String?
     @State private var newTaskTitle = ""
     @State private var addingToColumn: String?
-    @State private var pollTimer: Timer?
+    @State private var pollTask: Task<Void, Never>?
 
     private let columns = ["todo", "in_progress", "done"]
 
@@ -35,8 +35,8 @@ struct BoardView: View {
             startPolling()
         }
         .onDisappear {
-            pollTimer?.invalidate()
-            pollTimer = nil
+            pollTask?.cancel()
+            pollTask = nil
         }
     }
 
@@ -285,9 +285,11 @@ struct BoardView: View {
     }
 
     private func startPolling() {
-        pollTimer?.invalidate()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
-            Task { @MainActor in
+        pollTask?.cancel()
+        pollTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else { break }
                 await refreshTasks()
             }
         }

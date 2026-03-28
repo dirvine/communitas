@@ -1,3 +1,4 @@
+import CryptoKit
 import SwiftUI
 import X0xClient
 
@@ -16,6 +17,8 @@ struct MessagingView: View {
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var searchResults: [ChannelChatMessage] = []
     @State private var scrollToMessageId: String?
+    @State private var isDroppingFile = false
+    @State private var fileDropMessage: String?
 
     var body: some View {
         Group {
@@ -85,6 +88,94 @@ struct MessagingView: View {
                 searchResults = []
                 searchDebounceTask?.cancel()
             }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDroppingFile) { providers in
+            handleFileDrop(providers: providers)
+            return true
+        }
+        .overlay {
+            if isDroppingFile {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
+                    .background(Color.accentColor.opacity(0.08))
+                    .overlay {
+                        VStack(spacing: 8) {
+                            Image(systemName: "arrow.down.doc")
+                                .font(.system(size: 32))
+                                .foregroundStyle(Color.accentColor)
+                            Text("Drop file to send")
+                                .font(.headline)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .padding(4)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let msg = fileDropMessage {
+                Text(msg)
+                    .font(.caption)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 80)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .onAppear {
+                        Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            withAnimation { fileDropMessage = nil }
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: - File Drop
+
+    private func handleFileDrop(providers: [NSItemProvider]) {
+        for provider in providers {
+            provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                Task { @MainActor in
+                    await sendDroppedFile(url: url)
+                }
+            }
+        }
+    }
+
+    private func sendDroppedFile(url: URL) async {
+        guard let group = appState.selectedGroup else { return }
+
+        // Get members to send to (first contact that isn't us)
+        let groupInfo = try? await appState.client.groupInfo(groupId: group.groupId)
+        let myAgentId = appState.agentIdentity?.agentId ?? ""
+        guard let recipient = groupInfo?.members?.first(where: { $0.agentId != myAgentId })?.agentId else {
+            withAnimation { fileDropMessage = "No recipients in this space" }
+            return
+        }
+
+        do {
+            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+            let fileSize = attrs[.size] as? UInt64 ?? 0
+            let filename = url.lastPathComponent
+
+            // Compute SHA-256 using CryptoKit
+            let fileData = try Data(contentsOf: url)
+            let digest = SHA256.hash(data: fileData)
+                .compactMap { String(format: "%02x", $0) }
+                .joined()
+
+            let transferId = try await appState.client.sendFile(
+                agentId: recipient,
+                filename: filename,
+                size: fileSize,
+                sha256: digest,
+                path: url.path
+            )
+            withAnimation { fileDropMessage = "Sending \(filename)... (ID: \(String(transferId.prefix(8))))" }
+        } catch {
+            withAnimation { fileDropMessage = "Failed: \(error.localizedDescription)" }
         }
     }
 
@@ -661,6 +752,16 @@ struct MessageRow: View {
                         isPinned ? "Unpin Message" : "Pin Message",
                         systemImage: isPinned ? "pin.slash" : "pin"
                     )
+                }
+                Divider()
+            }
+
+            if !message.isDeleted {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message.text, forType: .string)
+                } label: {
+                    Label("Copy Text", systemImage: "doc.on.doc")
                 }
                 Divider()
             }

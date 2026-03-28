@@ -128,7 +128,34 @@ struct ContactsView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(contact.agentId, forType: .string)
             }
+
             Divider()
+
+            Menu("Set Trust Level") {
+                ForEach(TrustLevel.allCases, id: \.self) { level in
+                    Button {
+                        Task {
+                            try? await appState.client.setTrust(agentId: contact.agentId, level: level)
+                            await appState.refresh()
+                        }
+                    } label: {
+                        HStack {
+                            Text(level.rawValue.capitalized)
+                            if contact.trustLevel == level {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Button("View Machines") {
+                appState.selectedInspectorItem = .agent(contact)
+                appState.showInspector = true
+            }
+
+            Divider()
+
             Button("Remove", role: .destructive) {
                 Task {
                     try? await appState.client.removeContact(agentId: contact.agentId)

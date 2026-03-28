@@ -125,9 +125,52 @@ public final class X0xClient: Sendable {
         try await get("/status")
     }
 
+    /// Gracefully shut down the daemon. `POST /shutdown`
+    public func shutdown() async throws {
+        let _: Empty = try await post("/shutdown", body: Empty())
+    }
+
     /// Get the agent identity. `GET /agent`
     public func agent() async throws -> AgentIdentity {
         try await get("/agent")
+    }
+
+    /// Get the user identity binding, if configured. `GET /agent/user-id`
+    public func agentUserId() async throws -> String? {
+        let resp: UserIdStatus = try await get("/agent/user-id")
+        return resp.userId
+    }
+
+    /// Generate a shareable agent card. `GET /agent/card`
+    /// - Parameters:
+    ///   - displayName: Display name to include in the card.
+    ///   - includeGroups: Whether to include group invites in the card.
+    public func agentCard(displayName: String? = nil, includeGroups: Bool? = nil) async throws -> AgentCardResponse {
+        var queryItems: [URLQueryItem] = []
+        if let displayName {
+            queryItems.append(URLQueryItem(name: "display_name", value: displayName))
+        }
+        if let includeGroups {
+            queryItems.append(URLQueryItem(name: "include_groups", value: includeGroups ? "true" : "false"))
+        }
+        return try await get("/agent/card", queryItems: queryItems)
+    }
+
+    /// Import an agent card to contacts. `POST /agent/card/import`
+    public func importAgentCard(card: String, trustLevel: TrustLevel? = nil) async throws -> ImportCardResponse {
+        let body = ImportCardRequest(card: card, trustLevel: trustLevel)
+        return try await post("/agent/card/import", body: body)
+    }
+
+    /// Re-announce identity to the network with default flags. `POST /announce`
+    public func announce() async throws {
+        let _: Empty = try await post("/announce", body: Empty())
+    }
+
+    /// Re-announce identity with explicit consent flags. `POST /announce`
+    public func announceWithOptions(includeUserIdentity: Bool, humanConsent: Bool) async throws {
+        let body = AnnounceRequest(includeUserIdentity: includeUserIdentity, humanConsent: humanConsent)
+        let _: Empty = try await post("/announce", body: body)
     }
 
     // MARK: - Pub/Sub (Gossip Messaging)
@@ -145,12 +188,23 @@ public final class X0xClient: Sendable {
         return resp.subscriptionId
     }
 
+    /// Unsubscribe from a topic by subscription ID. `DELETE /subscribe/:id`
+    public func unsubscribe(subscriptionId: String) async throws {
+        let _: Empty = try await delete("/subscribe/\(subscriptionId)")
+    }
+
     // MARK: - Direct Messaging
 
     /// Send a direct message to an agent. `POST /direct/send`
     public func sendDirect(agentId: String, payload: String) async throws {
         let body = DirectMessageRequest(agentId: agentId, payload: payload)
         let _: Empty = try await post("/direct/send", body: body)
+    }
+
+    /// List active direct connections. `GET /direct/connections`
+    public func directConnections() async throws -> [DirectConnection] {
+        let resp: DirectConnectionList = try await get("/direct/connections")
+        return resp.connections
     }
 
     // MARK: - Contacts
@@ -168,9 +222,64 @@ public final class X0xClient: Sendable {
         let _: Empty = try await post("/contacts", body: body)
     }
 
+    /// Quick trust-level update. `POST /contacts/trust`
+    public func setTrust(agentId: String, level: TrustLevel) async throws {
+        let body = SetTrustRequest(agentId: agentId, level: level)
+        let _: Empty = try await post("/contacts/trust", body: body)
+    }
+
+    /// Update a contact's trust level and/or identity type. `PATCH /contacts/:agent_id`
+    public func updateContact(agentId: String, trustLevel: TrustLevel? = nil, identityType: String? = nil) async throws {
+        let body = UpdateContactRequest(trustLevel: trustLevel, identityType: identityType)
+        let _: Empty = try await patch("/contacts/\(agentId)", body: body)
+    }
+
     /// Remove a contact. `DELETE /contacts/:agent_id`
     public func removeContact(agentId: String) async throws {
         let _: Empty = try await delete("/contacts/\(agentId)")
+    }
+
+    /// Revoke a contact relationship. `POST /contacts/:agent_id/revoke`
+    public func revokeContact(agentId: String, reason: String) async throws {
+        let body = ["reason": reason]
+        let _: Empty = try await post("/contacts/\(agentId)/revoke", body: body)
+    }
+
+    /// List revocations for a contact. `GET /contacts/:agent_id/revocations`
+    public func revocations(agentId: String) async throws -> [Revocation] {
+        let resp: RevocationList = try await get("/contacts/\(agentId)/revocations")
+        return resp.revocations
+    }
+
+    // MARK: - Machine Management
+
+    /// Add a machine record to a contact. `POST /contacts/:agent_id/machines`
+    public func addMachine(agentId: String, machineId: String, label: String? = nil, pinned: Bool? = nil) async throws {
+        let body = AddMachineRequest(machineId: machineId, label: label, pinned: pinned)
+        let _: Empty = try await post("/contacts/\(agentId)/machines", body: body)
+    }
+
+    /// Remove a machine record from a contact. `DELETE /contacts/:agent_id/machines/:machine_id`
+    public func removeMachine(agentId: String, machineId: String) async throws {
+        let _: Empty = try await delete("/contacts/\(agentId)/machines/\(machineId)")
+    }
+
+    /// Pin a contact to a specific machine. `POST /contacts/:agent_id/machines/:machine_id/pin`
+    public func pinMachine(agentId: String, machineId: String) async throws {
+        let _: Empty = try await post("/contacts/\(agentId)/machines/\(machineId)/pin", body: Empty())
+    }
+
+    /// Remove a machine pin from a contact. `DELETE /contacts/:agent_id/machines/:machine_id/pin`
+    public func unpinMachine(agentId: String, machineId: String) async throws {
+        let _: Empty = try await delete("/contacts/\(agentId)/machines/\(machineId)/pin")
+    }
+
+    // MARK: - Trust Evaluation
+
+    /// Evaluate trust for an agent/machine pair. `POST /trust/evaluate`
+    public func evaluateTrust(agentId: String, machineId: String) async throws -> TrustEvaluation {
+        let body = EvaluateTrustRequest(agentId: agentId, machineId: machineId)
+        return try await post("/trust/evaluate", body: body)
     }
 
     // MARK: - Groups (Named Groups)
@@ -237,11 +346,22 @@ public final class X0xClient: Sendable {
         return resp.agents
     }
 
+    /// Get details for a specific discovered agent. `GET /agents/discovered/:agent_id`
+    public func discoveredAgent(agentId: String) async throws -> DiscoveredAgent {
+        let resp: DiscoveredAgentWrapper = try await get("/agents/discovered/\(agentId)")
+        return resp.toDiscoveredAgent()
+    }
+
     /// Fetch online presence. `GET /presence`
     /// Returns wrapped: `{"ok":true,"agents":["agentId1","agentId2"]}`
     public func presence() async throws -> [String] {
         let resp: PresenceResponse = try await get("/presence")
         return resp.agents
+    }
+
+    /// Get bootstrap peer cache status. `GET /network/bootstrap-cache`
+    public func bootstrapCache() async throws -> BootstrapCacheStatus {
+        try await get("/network/bootstrap-cache")
     }
 
     /// List machines associated with a contact. `GET /contacts/:agent_id/machines`
@@ -259,8 +379,9 @@ public final class X0xClient: Sendable {
     ///   - filename: Original filename.
     ///   - size: File size in bytes.
     ///   - sha256: SHA-256 hash of the file (required by daemon).
-    public func sendFile(agentId: String, filename: String, size: UInt64, sha256: String) async throws -> String {
-        let body = SendFileRequest(agentId: agentId, filename: filename, size: size, sha256: sha256)
+    ///   - path: Optional local file path for the daemon to read from.
+    public func sendFile(agentId: String, filename: String, size: UInt64, sha256: String, path: String? = nil) async throws -> String {
+        let body = SendFileRequest(agentId: agentId, filename: filename, size: size, sha256: sha256, path: path)
         let resp: SendFileResponse = try await post("/files/send", body: body)
         return resp.transferId
     }
@@ -272,17 +393,46 @@ public final class X0xClient: Sendable {
         return resp.transfers
     }
 
+    /// Get status of a specific file transfer. `GET /files/transfers/:id`
+    public func transferStatus(transferId: String) async throws -> FileTransfer {
+        let resp: FileTransferWrapper = try await get("/files/transfers/\(transferId)")
+        return FileTransfer(
+            transferId: resp.transferId ?? transferId,
+            direction: resp.direction ?? .sending,
+            remoteAgentId: resp.remoteAgentId ?? "",
+            filename: resp.filename ?? "",
+            totalSize: resp.totalSize ?? 0,
+            bytesTransferred: resp.bytesTransferred ?? 0,
+            status: resp.status ?? .pending,
+            sha256: resp.sha256,
+            error: resp.error,
+            startedAt: resp.startedAt
+        )
+    }
+
     /// Accept an incoming file transfer. `POST /files/accept/:id`
     public func acceptFile(transferId: String) async throws {
         let _: Empty = try await post("/files/accept/\(transferId)", body: Empty())
     }
 
     /// Reject an incoming file transfer. `POST /files/reject/:id`
-    public func rejectFile(transferId: String) async throws {
-        let _: Empty = try await post("/files/reject/\(transferId)", body: Empty())
+    /// - Parameter reason: Optional reason for rejection.
+    public func rejectFile(transferId: String, reason: String? = nil) async throws {
+        if let reason {
+            let body = RejectFileRequest(reason: reason)
+            let _: Empty = try await post("/files/reject/\(transferId)", body: body)
+        } else {
+            let _: Empty = try await post("/files/reject/\(transferId)", body: Empty())
+        }
     }
 
     // MARK: - Task Lists
+
+    /// List all task lists. `GET /task-lists`
+    public func listTaskLists() async throws -> [TaskListSummary] {
+        let resp: TaskListIndex = try await get("/task-lists")
+        return resp.taskLists
+    }
 
     /// Create a new task list. `POST /task-lists`
     public func createTaskList(name: String, topic: String) async throws -> String {
@@ -341,9 +491,8 @@ public final class X0xClient: Sendable {
     }
 
     /// Join a store. `POST /stores/:id/join`
-    public func joinStore(storeId: String, topic: String) async throws {
-        let body = ["topic": topic]
-        let _: Empty = try await post("/stores/\(storeId)/join", body: body)
+    public func joinStore(storeId: String) async throws {
+        let _: Empty = try await post("/stores/\(storeId)/join", body: Empty())
     }
 
     /// List keys in a store. `GET /stores/:id/keys`
@@ -382,10 +531,104 @@ public final class X0xClient: Sendable {
         let _: Empty = try await delete("/stores/\(storeId)/\(key)")
     }
 
+    // MARK: - MLS Groups (Encrypted)
+
+    /// Create an MLS encrypted group. `POST /mls/groups`
+    /// - Parameter groupId: Optional hex group ID. Random if omitted.
+    public func createMlsGroup(groupId: String? = nil) async throws -> MlsGroup {
+        let body = CreateMlsGroupRequest(groupId: groupId)
+        return try await post("/mls/groups", body: body)
+    }
+
+    /// List all MLS groups. `GET /mls/groups`
+    public func listMlsGroups() async throws -> [MlsGroup] {
+        let resp: MlsGroupList = try await get("/mls/groups")
+        return resp.groups
+    }
+
+    /// Get details for an MLS group. `GET /mls/groups/:id`
+    public func getMlsGroup(groupId: String) async throws -> MlsGroup {
+        try await get("/mls/groups/\(groupId)")
+    }
+
+    /// Add a member to an MLS group. `POST /mls/groups/:id/members`
+    public func addMlsMember(groupId: String, agentId: String) async throws -> AddMlsMemberResponse {
+        let body = AddMlsMemberRequest(agentId: agentId)
+        return try await post("/mls/groups/\(groupId)/members", body: body)
+    }
+
+    /// Remove a member from an MLS group. `DELETE /mls/groups/:id/members/:agent_id`
+    public func removeMlsMember(groupId: String, agentId: String) async throws {
+        let _: Empty = try await delete("/mls/groups/\(groupId)/members/\(agentId)")
+    }
+
+    /// Encrypt a payload with an MLS group's current key. `POST /mls/groups/:id/encrypt`
+    /// - Parameters:
+    ///   - groupId: The MLS group ID.
+    ///   - payload: Raw data to encrypt.
+    /// - Returns: Encrypted ciphertext (base64) and the epoch used.
+    public func encrypt(groupId: String, payload: Data) async throws -> EncryptResponse {
+        let body = EncryptRequest(payload: payload.base64EncodedString())
+        return try await post("/mls/groups/\(groupId)/encrypt", body: body)
+    }
+
+    /// Decrypt ciphertext from an MLS group. `POST /mls/groups/:id/decrypt`
+    /// - Parameters:
+    ///   - groupId: The MLS group ID.
+    ///   - ciphertext: Base64-encoded ciphertext.
+    ///   - epoch: The epoch the ciphertext was encrypted at.
+    /// - Returns: Decrypted raw data.
+    public func decrypt(groupId: String, ciphertext: String, epoch: UInt64) async throws -> Data {
+        let body = DecryptRequest(ciphertext: ciphertext, epoch: epoch)
+        let resp: DecryptResponse = try await post("/mls/groups/\(groupId)/decrypt", body: body)
+        guard let data = Data(base64Encoded: resp.payload) else {
+            throw X0xError.decodingError(underlying: DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: [], debugDescription: "Invalid base64 in decrypted payload")
+            ))
+        }
+        return data
+    }
+
+    /// Create a welcome message for a prospective MLS group member. `POST /mls/groups/:id/welcome`
+    public func createMlsWelcome(groupId: String, agentId: String) async throws -> WelcomeResponse {
+        let body = CreateWelcomeRequest(agentId: agentId)
+        return try await post("/mls/groups/\(groupId)/welcome", body: body)
+    }
+
+    // MARK: - Upgrade
+
+    /// Check for daemon updates. `GET /upgrade`
+    public func checkUpgrade() async throws -> UpgradeStatus {
+        try await get("/upgrade")
+    }
+
+    // MARK: - WebSocket Sessions
+
+    /// List active WebSocket sessions. `GET /ws/sessions`
+    public func wsSessions() async throws -> WsSessionList {
+        try await get("/ws/sessions")
+    }
+
     // MARK: - Private Helpers
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw X0xError.invalidURL(path: path)
+        }
+
+        let (data, response) = try await performRequest(URLRequest(url: url))
+        return try decodeFlatResponse(data: data, response: response)
+    }
+
+    private func get<T: Decodable>(_ path: String, queryItems: [URLQueryItem]) async throws -> T {
+        guard var components = URLComponents(string: path) else {
+            throw X0xError.invalidURL(path: path)
+        }
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
+        }
+        guard let relative = components.string,
+              let url = URL(string: relative, relativeTo: baseURL) else {
             throw X0xError.invalidURL(path: path)
         }
 

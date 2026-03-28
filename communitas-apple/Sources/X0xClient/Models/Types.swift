@@ -348,6 +348,15 @@ public struct DiscoveredAgent: Codable, Sendable, Identifiable {
         case announcedAt = "announced_at"
         case lastSeen = "last_seen"
     }
+
+    public init(agentId: String, machineId: String, userId: String?, addresses: [String], announcedAt: UInt64?, lastSeen: UInt64?) {
+        self.agentId = agentId
+        self.machineId = machineId
+        self.userId = userId
+        self.addresses = addresses
+        self.announcedAt = announcedAt
+        self.lastSeen = lastSeen
+    }
 }
 
 /// Response from `GET /presence` - wrapped: `{"ok":true,"agents":["hex1","hex2"]}`.
@@ -381,6 +390,391 @@ public struct SetGroupDisplayNameRequest: Codable, Sendable {
 
     public init(displayName: String) {
         self.name = displayName
+    }
+}
+
+// MARK: - Identity & Agent Card
+
+/// Response from `GET /agent/user-id`.
+/// ```json
+/// {"ok":true,"user_id":"hex64_or_null"}
+/// ```
+public struct UserIdStatus: Codable, Sendable {
+    public let ok: Bool?
+    public let userId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case userId = "user_id"
+    }
+}
+
+/// A group entry inside an agent card.
+public struct CardGroup: Codable, Sendable {
+    public let name: String
+    public let inviteLink: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case inviteLink = "invite_link"
+    }
+}
+
+/// A store entry inside an agent card.
+public struct CardStore: Codable, Sendable {
+    public let name: String
+    public let topic: String
+}
+
+/// An agent card containing shareable identity and membership info.
+public struct AgentCard: Codable, Sendable {
+    public let displayName: String
+    public let agentId: String
+    public let machineId: String
+    public let userId: String?
+    public let externalAddresses: [String]?
+    public let groups: [CardGroup]?
+    public let stores: [CardStore]?
+    public let createdAt: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
+        case agentId = "agent_id"
+        case machineId = "machine_id"
+        case userId = "user_id"
+        case externalAddresses = "external_addresses"
+        case groups, stores
+        case createdAt = "created_at"
+    }
+}
+
+/// Response from `GET /agent/card`.
+/// ```json
+/// {"ok":true,"card":{...},"link":"x0x://agent/..."}
+/// ```
+public struct AgentCardResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let card: AgentCard
+    public let link: String
+}
+
+/// Request body for `POST /agent/card/import`.
+public struct ImportCardRequest: Codable, Sendable {
+    public let card: String
+    public let trustLevel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case card
+        case trustLevel = "trust_level"
+    }
+
+    public init(card: String, trustLevel: TrustLevel?) {
+        self.card = card
+        self.trustLevel = trustLevel?.rawValue
+    }
+}
+
+/// Response from `POST /agent/card/import`.
+public struct ImportCardResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let agentId: String?
+    public let displayName: String?
+    public let trustLevel: String?
+    public let groups: Int?
+    public let stores: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case agentId = "agent_id"
+        case displayName = "display_name"
+        case trustLevel = "trust_level"
+        case groups, stores
+    }
+}
+
+/// Request body for `POST /announce`.
+public struct AnnounceRequest: Codable, Sendable {
+    public let includeUserIdentity: Bool
+    public let humanConsent: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case includeUserIdentity = "include_user_identity"
+        case humanConsent = "human_consent"
+    }
+
+    public init(includeUserIdentity: Bool, humanConsent: Bool) {
+        self.includeUserIdentity = includeUserIdentity
+        self.humanConsent = humanConsent
+    }
+}
+
+// MARK: - Direct Connection
+
+/// A direct (QUIC) connection to another agent.
+/// Returned by `GET /direct/connections`.
+public struct DirectConnection: Codable, Sendable, Identifiable {
+    public var id: String { agentId }
+    public let agentId: String
+    public let machineId: String?
+    public let connectedAt: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case machineId = "machine_id"
+        case connectedAt = "connected_at"
+    }
+}
+
+/// Wrapper for `GET /direct/connections` response.
+public struct DirectConnectionList: Codable, Sendable {
+    public let ok: Bool?
+    public let connections: [DirectConnection]
+}
+
+// MARK: - Contact Management (Extended)
+
+/// Request body for `POST /contacts/trust`.
+public struct SetTrustRequest: Codable, Sendable {
+    public let agentId: String
+    public let level: String
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case level
+    }
+
+    public init(agentId: String, level: TrustLevel) {
+        self.agentId = agentId
+        self.level = level.rawValue
+    }
+}
+
+/// Request body for `PATCH /contacts/:agent_id`.
+public struct UpdateContactRequest: Codable, Sendable {
+    public let trustLevel: String?
+    public let identityType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case trustLevel = "trust_level"
+        case identityType = "identity_type"
+    }
+
+    public init(trustLevel: TrustLevel?, identityType: String?) {
+        self.trustLevel = trustLevel?.rawValue
+        self.identityType = identityType
+    }
+}
+
+/// A revocation record from `GET /contacts/:agent_id/revocations`.
+public struct Revocation: Codable, Sendable {
+    public let agentId: String?
+    public let reason: String?
+    public let timestamp: UInt64?
+    public let revokerId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case reason, timestamp
+        case revokerId = "revoker_id"
+    }
+}
+
+/// Wrapper for `GET /contacts/:agent_id/revocations` response.
+public struct RevocationList: Codable, Sendable {
+    public let ok: Bool?
+    public let revocations: [Revocation]
+}
+
+/// Request body for `POST /contacts/:agent_id/machines`.
+public struct AddMachineRequest: Codable, Sendable {
+    public let machineId: String
+    public let label: String?
+    public let pinned: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case machineId = "machine_id"
+        case label, pinned
+    }
+
+    public init(machineId: String, label: String?, pinned: Bool?) {
+        self.machineId = machineId
+        self.label = label
+        self.pinned = pinned
+    }
+}
+
+// MARK: - Trust Evaluation
+
+/// Request body for `POST /trust/evaluate`.
+public struct EvaluateTrustRequest: Codable, Sendable {
+    public let agentId: String
+    public let machineId: String
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case machineId = "machine_id"
+    }
+
+    public init(agentId: String, machineId: String) {
+        self.agentId = agentId
+        self.machineId = machineId
+    }
+}
+
+/// Response from `POST /trust/evaluate`.
+public struct TrustEvaluation: Codable, Sendable {
+    public let ok: Bool?
+    public let decision: String
+}
+
+// MARK: - Bootstrap Cache
+
+/// Response from `GET /network/bootstrap-cache`.
+public struct BootstrapCacheStatus: Codable, Sendable {
+    public let ok: Bool?
+    public let connectedPeers: [String]?
+    public let connectionCount: UInt32?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case connectedPeers = "connected_peers"
+        case connectionCount = "connection_count"
+    }
+}
+
+// MARK: - File Transfer (Extended)
+
+/// Request body for `POST /files/reject/:id` with optional reason.
+public struct RejectFileRequest: Codable, Sendable {
+    public let reason: String?
+
+    public init(reason: String?) {
+        self.reason = reason
+    }
+}
+
+/// Wrapper for `GET /files/transfers/:id` response (single transfer).
+public struct FileTransferWrapper: Codable, Sendable {
+    public let ok: Bool?
+    public let transferId: String?
+    public let direction: TransferDirection?
+    public let remoteAgentId: String?
+    public let filename: String?
+    public let totalSize: UInt64?
+    public let bytesTransferred: UInt64?
+    public let status: TransferStatus?
+    public let sha256: String?
+    public let error: String?
+    public let startedAt: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case transferId = "transfer_id"
+        case direction
+        case remoteAgentId = "remote_agent_id"
+        case filename
+        case totalSize = "total_size"
+        case bytesTransferred = "bytes_transferred"
+        case status, sha256, error
+        case startedAt = "started_at"
+    }
+}
+
+// MARK: - WebSocket Sessions
+
+/// A WebSocket session info entry.
+public struct WsSessionInfo: Codable, Sendable {
+    public let sessionId: String
+    public let subscribedTopics: [String]
+    public let receivesDirect: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case subscribedTopics = "subscribed_topics"
+        case receivesDirect = "receives_direct"
+    }
+}
+
+/// Response from `GET /ws/sessions`.
+public struct WsSessionList: Codable, Sendable {
+    public let ok: Bool?
+    public let sessions: [WsSessionInfo]
+    public let sharedSubscriptions: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, sessions
+        case sharedSubscriptions = "shared_subscriptions"
+    }
+}
+
+// MARK: - Task Lists (Extended)
+
+/// A task list summary from `GET /task-lists`.
+public struct TaskListSummary: Codable, Sendable, Identifiable {
+    public let id: String
+    public let topic: String?
+}
+
+/// Wrapper for `GET /task-lists` response.
+public struct TaskListIndex: Codable, Sendable {
+    public let ok: Bool?
+    public let taskLists: [TaskListSummary]
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case taskLists = "task_lists"
+    }
+}
+
+// MARK: - Upgrade
+
+/// Response from `GET /upgrade`.
+public struct UpgradeStatus: Codable, Sendable {
+    public let ok: Bool?
+    public let updateAvailable: Bool?
+    public let version: String?
+    public let currentVersion: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case updateAvailable = "update_available"
+        case version
+        case currentVersion = "current_version"
+    }
+}
+
+// MARK: - Discovered Agent (Single)
+
+/// Wrapper for `GET /agents/discovered/:agent_id` response (flattened).
+public struct DiscoveredAgentWrapper: Codable, Sendable {
+    public let ok: Bool?
+    public let agentId: String
+    public let machineId: String
+    public let userId: String?
+    public let addresses: [String]
+    public let announcedAt: UInt64?
+    public let lastSeen: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case agentId = "agent_id"
+        case machineId = "machine_id"
+        case userId = "user_id"
+        case addresses
+        case announcedAt = "announced_at"
+        case lastSeen = "last_seen"
+    }
+
+    /// Convert to a `DiscoveredAgent` value.
+    public func toDiscoveredAgent() -> DiscoveredAgent {
+        DiscoveredAgent(
+            agentId: agentId,
+            machineId: machineId,
+            userId: userId,
+            addresses: addresses,
+            announcedAt: announcedAt,
+            lastSeen: lastSeen
+        )
     }
 }
 

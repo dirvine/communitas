@@ -81,6 +81,9 @@ final class AppState: ObservableObject {
     /// Whether to show the Create Space sheet.
     @Published var showCreateSpace = false
 
+    /// Whether the quick switcher (Cmd+K) is visible.
+    @Published var showQuickSwitcher = false
+
     /// Whether the inspector panel is visible.
     @Published var showInspector = false
 

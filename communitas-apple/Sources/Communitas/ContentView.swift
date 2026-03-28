@@ -35,6 +35,22 @@ struct ContentView: View {
                 .keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
+        .overlay {
+            if appState.showQuickSwitcher {
+                ZStack {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            appState.showQuickSwitcher = false
+                        }
+                    QuickSwitcherView()
+                        .environmentObject(appState)
+                        .padding(.bottom, 100)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: appState.showQuickSwitcher)
         .sheet(isPresented: $appState.showCreateSpace) {
             CreateSpaceSheet()
                 .environmentObject(appState)
@@ -195,6 +211,36 @@ struct ContentView: View {
             .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                Task {
+                    if let resp = try? await appState.client.invite(groupId: group.groupId) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(resp.inviteLink, forType: .string)
+                    }
+                }
+            } label: {
+                Label("Copy Invite Link", systemImage: "link")
+            }
+
+            Button {
+                appState.selectedInspectorItem = .space(group)
+                appState.showInspector = true
+            } label: {
+                Label("Space Settings", systemImage: "gear")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                Task {
+                    try? await appState.client.leaveGroup(groupId: group.groupId)
+                    await appState.refresh()
+                }
+            } label: {
+                Label("Leave Space", systemImage: "rectangle.portrait.and.arrow.right")
+            }
+        }
 
         // Expanded content: channels + app shortcuts
         if isExpanded {
@@ -287,6 +333,14 @@ struct ContentView: View {
             .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString("#\(channelName)", forType: .string)
+            } label: {
+                Label("Copy Channel Name", systemImage: "doc.on.doc")
+            }
+        }
         .listRowBackground(
             isSelected
                 ? Color.accentColor.opacity(0.12)

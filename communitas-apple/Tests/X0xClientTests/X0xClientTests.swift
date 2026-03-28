@@ -292,4 +292,259 @@ struct X0xClientTests {
             #expect(!error.errorDescription!.isEmpty)
         }
     }
+
+    // MARK: - New Model Type Tests (API Parity)
+
+    @Test("AgentCard decodes from JSON")
+    func agentCardDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "card": {
+                "display_name": "Alice",
+                "agent_id": "hex64aaa",
+                "machine_id": "hex64bbb",
+                "user_id": null,
+                "external_addresses": ["203.0.113.5:12000"],
+                "groups": [{"name": "Team", "invite_link": "x0x://invite/abc"}],
+                "stores": [{"name": "Data", "topic": "store-topic"}],
+                "created_at": 1700000000
+            },
+            "link": "x0x://agent/base64data"
+        }
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(AgentCardResponse.self, from: data)
+        #expect(resp.card.displayName == "Alice")
+        #expect(resp.card.agentId == "hex64aaa")
+        #expect(resp.card.groups?.count == 1)
+        #expect(resp.card.groups?[0].inviteLink == "x0x://invite/abc")
+        #expect(resp.card.stores?.count == 1)
+        #expect(resp.link == "x0x://agent/base64data")
+    }
+
+    @Test("ImportCardResponse decodes from JSON")
+    func importCardResponseDecoding() throws {
+        let json = """
+        {"ok": true, "agent_id": "hex64", "display_name": "Bob", "trust_level": "known", "groups": 2, "stores": 1}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(ImportCardResponse.self, from: data)
+        #expect(resp.agentId == "hex64")
+        #expect(resp.displayName == "Bob")
+        #expect(resp.groups == 2)
+        #expect(resp.stores == 1)
+    }
+
+    @Test("AnnounceRequest encodes correctly")
+    func announceRequestEncoding() throws {
+        let request = AnnounceRequest(includeUserIdentity: true, humanConsent: false)
+        let data = try JSONEncoder().encode(request)
+        let dict = try JSONDecoder().decode([String: Bool].self, from: data)
+        #expect(dict["include_user_identity"] == true)
+        #expect(dict["human_consent"] == false)
+    }
+
+    @Test("DirectConnection decodes from JSON")
+    func directConnectionDecoding() throws {
+        let json = """
+        {"ok": true, "connections": [{"agent_id": "abc", "machine_id": "def", "connected_at": 1700000000}]}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(DirectConnectionList.self, from: data)
+        #expect(resp.connections.count == 1)
+        #expect(resp.connections[0].agentId == "abc")
+        #expect(resp.connections[0].connectedAt == 1700000000)
+    }
+
+    @Test("MlsGroup decodes from JSON")
+    func mlsGroupDecoding() throws {
+        let json = """
+        {"ok": true, "group_id": "grp1", "epoch": 5, "members": ["agent-a", "agent-b"], "member_count": 2}
+        """
+        let data = Data(json.utf8)
+        let group = try JSONDecoder().decode(MlsGroup.self, from: data)
+        #expect(group.groupId == "grp1")
+        #expect(group.epoch == 5)
+        #expect(group.members?.count == 2)
+        #expect(group.memberCount == 2)
+    }
+
+    @Test("MlsGroupList decodes from JSON")
+    func mlsGroupListDecoding() throws {
+        let json = """
+        {"ok": true, "groups": [{"group_id": "g1", "epoch": 1, "member_count": 3}]}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(MlsGroupList.self, from: data)
+        #expect(resp.groups.count == 1)
+        #expect(resp.groups[0].groupId == "g1")
+    }
+
+    @Test("AddMlsMemberResponse decodes from JSON")
+    func addMlsMemberResponseDecoding() throws {
+        let json = """
+        {"ok": true, "epoch": 3, "members": ["a", "b", "c"]}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(AddMlsMemberResponse.self, from: data)
+        #expect(resp.epoch == 3)
+        #expect(resp.members?.count == 3)
+    }
+
+    @Test("WelcomeResponse decodes from JSON")
+    func welcomeResponseDecoding() throws {
+        let json = """
+        {"ok": true, "welcome": "aGVsbG8=", "group_id": "grp1", "epoch": 2}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(WelcomeResponse.self, from: data)
+        #expect(resp.welcome == "aGVsbG8=")
+        #expect(resp.groupId == "grp1")
+        #expect(resp.epoch == 2)
+    }
+
+    @Test("EncryptResponse decodes from JSON")
+    func encryptResponseDecoding() throws {
+        let json = """
+        {"ok": true, "ciphertext": "Y2lwaGVydGV4dA==", "epoch": 7}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(EncryptResponse.self, from: data)
+        #expect(resp.ciphertext == "Y2lwaGVydGV4dA==")
+        #expect(resp.epoch == 7)
+    }
+
+    @Test("TrustEvaluation decodes from JSON")
+    func trustEvaluationDecoding() throws {
+        let json = """
+        {"ok": true, "decision": "Allow"}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(TrustEvaluation.self, from: data)
+        #expect(resp.decision == "Allow")
+    }
+
+    @Test("BootstrapCacheStatus decodes from JSON")
+    func bootstrapCacheDecoding() throws {
+        let json = """
+        {"ok": true, "connected_peers": ["peer-1", "peer-2"], "connection_count": 2}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(BootstrapCacheStatus.self, from: data)
+        #expect(resp.connectedPeers?.count == 2)
+        #expect(resp.connectionCount == 2)
+    }
+
+    @Test("TaskListIndex decodes from JSON")
+    func taskListIndexDecoding() throws {
+        let json = """
+        {"ok": true, "task_lists": [{"id": "list-1", "topic": "sync-topic"}]}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(TaskListIndex.self, from: data)
+        #expect(resp.taskLists.count == 1)
+        #expect(resp.taskLists[0].id == "list-1")
+        #expect(resp.taskLists[0].topic == "sync-topic")
+    }
+
+    @Test("WsSessionList decodes from JSON")
+    func wsSessionListDecoding() throws {
+        let json = """
+        {"ok": true, "sessions": [{"session_id": "uuid-1", "subscribed_topics": ["chat"], "receives_direct": true}], "shared_subscriptions": {"chat": 2}}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(WsSessionList.self, from: data)
+        #expect(resp.sessions.count == 1)
+        #expect(resp.sessions[0].sessionId == "uuid-1")
+        #expect(resp.sessions[0].receivesDirect == true)
+        #expect(resp.sharedSubscriptions?["chat"] == 2)
+    }
+
+    @Test("Revocation decodes from JSON")
+    func revocationDecoding() throws {
+        let json = """
+        {"ok": true, "revocations": [{"agent_id": "abc", "reason": "compromised", "timestamp": 1700000000, "revoker_id": "def"}]}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(RevocationList.self, from: data)
+        #expect(resp.revocations.count == 1)
+        #expect(resp.revocations[0].reason == "compromised")
+        #expect(resp.revocations[0].revokerId == "def")
+    }
+
+    @Test("UpgradeStatus decodes from JSON")
+    func upgradeStatusDecoding() throws {
+        let json = """
+        {"ok": true, "update_available": true, "version": "0.12.0", "current_version": "0.11.1"}
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(UpgradeStatus.self, from: data)
+        #expect(resp.updateAvailable == true)
+        #expect(resp.version == "0.12.0")
+        #expect(resp.currentVersion == "0.11.1")
+    }
+
+    @Test("DiscoveredAgentWrapper decodes and converts")
+    func discoveredAgentWrapperDecoding() throws {
+        let json = """
+        {"ok": true, "agent_id": "hex64", "machine_id": "mhex64", "user_id": null, "addresses": ["1.2.3.4:12000"], "announced_at": 1700000000, "last_seen": 1700000100}
+        """
+        let data = Data(json.utf8)
+        let wrapper = try JSONDecoder().decode(DiscoveredAgentWrapper.self, from: data)
+        let agent = wrapper.toDiscoveredAgent()
+        #expect(agent.agentId == "hex64")
+        #expect(agent.machineId == "mhex64")
+        #expect(agent.addresses.count == 1)
+        #expect(agent.lastSeen == 1700000100)
+    }
+
+    @Test("UpdateContactRequest encodes correctly")
+    func updateContactRequestEncoding() throws {
+        let request = UpdateContactRequest(trustLevel: .trusted, identityType: "pinned")
+        let data = try JSONEncoder().encode(request)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        #expect(jsonStr.contains("\"trust_level\":\"trusted\""))
+        #expect(jsonStr.contains("\"identity_type\":\"pinned\""))
+    }
+
+    @Test("EvaluateTrustRequest encodes correctly")
+    func evaluateTrustRequestEncoding() throws {
+        let request = EvaluateTrustRequest(agentId: "abc", machineId: "def")
+        let data = try JSONEncoder().encode(request)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        #expect(jsonStr.contains("\"agent_id\":\"abc\""))
+        #expect(jsonStr.contains("\"machine_id\":\"def\""))
+    }
+
+    @Test("SendFileRequest encodes with optional path")
+    func sendFileRequestWithPath() throws {
+        let request = SendFileRequest(agentId: "agent1", filename: "doc.pdf", size: 1024, sha256: "abc", path: "/tmp/doc.pdf")
+        let data = try JSONEncoder().encode(request)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        #expect(jsonStr.contains("\"path\":\"\\/tmp\\/doc.pdf\""))
+    }
+
+    @Test("CreateMlsGroupRequest encodes with optional group_id")
+    func createMlsGroupRequestEncoding() throws {
+        let withId = CreateMlsGroupRequest(groupId: "custom-id")
+        let data1 = try JSONEncoder().encode(withId)
+        let jsonStr1 = String(data: data1, encoding: .utf8)!
+        #expect(jsonStr1.contains("\"group_id\":\"custom-id\""))
+
+        let withoutId = CreateMlsGroupRequest(groupId: nil)
+        let data2 = try JSONEncoder().encode(withoutId)
+        let jsonStr2 = String(data: data2, encoding: .utf8)!
+        // Swift's JSONEncoder skips nil optionals by default, so group_id is absent
+        #expect(!jsonStr2.contains("\"group_id\""))
+    }
+
+    @Test("DecryptRequest encodes correctly")
+    func decryptRequestEncoding() throws {
+        let request = DecryptRequest(ciphertext: "Y2lwaGVy", epoch: 5)
+        let data = try JSONEncoder().encode(request)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        #expect(jsonStr.contains("\"ciphertext\":\"Y2lwaGVy\""))
+        #expect(jsonStr.contains("\"epoch\":5"))
+    }
 }

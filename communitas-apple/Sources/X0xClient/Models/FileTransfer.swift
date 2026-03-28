@@ -32,6 +32,19 @@ public struct FileTransfer: Codable, Sendable, Identifiable {
     public let error: String?
     public let startedAt: UInt64?
 
+    public init(transferId: String, direction: TransferDirection, remoteAgentId: String, filename: String, totalSize: UInt64, bytesTransferred: UInt64, status: TransferStatus, sha256: String?, error: String?, startedAt: UInt64?) {
+        self.transferId = transferId
+        self.direction = direction
+        self.remoteAgentId = remoteAgentId
+        self.filename = filename
+        self.totalSize = totalSize
+        self.bytesTransferred = bytesTransferred
+        self.status = status
+        self.sha256 = sha256
+        self.error = error
+        self.startedAt = startedAt
+    }
+
     /// Computed transfer progress (0.0–1.0).
     public var progress: Double {
         guard totalSize > 0 else { return 0 }
@@ -65,17 +78,19 @@ public struct SendFileRequest: Codable, Sendable {
     public let filename: String
     public let size: UInt64
     public let sha256: String
+    public let path: String?
 
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
-        case filename, size, sha256
+        case filename, size, sha256, path
     }
 
-    public init(agentId: String, filename: String, size: UInt64, sha256: String) {
+    public init(agentId: String, filename: String, size: UInt64, sha256: String, path: String? = nil) {
         self.agentId = agentId
         self.filename = filename
         self.size = size
         self.sha256 = sha256
+        self.path = path
     }
 }
 

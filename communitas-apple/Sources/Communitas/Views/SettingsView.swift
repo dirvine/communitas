@@ -23,10 +23,19 @@ struct SettingsView: View {
             Section("Profile") {
                 TextField("Display Name", text: $displayName)
                     .help("Your name as shown to other peers.")
-                    .onChange(of: displayName) {
-                        appState.displayName = displayName.isEmpty
+                    .onSubmit {
+                        let name = displayName.trimmingCharacters(in: .whitespaces)
+                        appState.displayName = name.isEmpty
                             ? String((appState.agentIdentity?.agentId ?? "unknown").prefix(8))
-                            : displayName
+                            : name
+                        Task {
+                            // Propagate to daemon so peers see the updated name
+                            let cardName = name.isEmpty ? nil : name
+                            _ = try? await appState.client.agentCard(
+                                displayName: cardName,
+                                includeGroups: false
+                            )
+                        }
                     }
             }
 

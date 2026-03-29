@@ -345,25 +345,41 @@ struct MessagingView: View {
     private func messageList(manager: ChannelManager) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(manager.messages) { message in
-                        MessageRow(
-                            message: message,
-                            allMessages: manager.messages,
-                            isOwnMessage: message.senderId == (appState.agentIdentity?.agentId ?? ""),
-                            currentAgentId: appState.agentIdentity?.agentId ?? "",
-                            manager: manager,
-                            onThreadTap: {
-                                selectedThreadMessage = message
-                            },
-                            onReply: {
-                                replyingTo = message
-                            }
-                        )
-                        .id(message.id)
+                if manager.messages.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.tertiary)
+                        Text("No messages yet")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text("Start the conversation!")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 80)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(manager.messages) { message in
+                            MessageRow(
+                                message: message,
+                                allMessages: manager.messages,
+                                isOwnMessage: message.senderId == (appState.agentIdentity?.agentId ?? ""),
+                                currentAgentId: appState.agentIdentity?.agentId ?? "",
+                                manager: manager,
+                                onThreadTap: {
+                                    selectedThreadMessage = message
+                                },
+                                onReply: {
+                                    replyingTo = message
+                                }
+                            )
+                            .id(message.id)
+                        }
+                    }
+                    .padding(.vertical, 8)
                 }
-                .padding(.vertical, 8)
             }
             .onChange(of: manager.messages.count) {
                 if let last = manager.messages.last {

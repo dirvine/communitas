@@ -36,6 +36,9 @@ struct ChannelSidebarView: View {
                     .environmentObject(appState)
             }
         }
+        .onDisappear {
+            showCreateChannel = false
+        }
         .task {
             // Auto-expand all groups initially
             for group in appState.groups {

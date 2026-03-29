@@ -591,6 +591,7 @@ struct AboutView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.regular)
+            .disabled(!updaterController.canCheckForUpdates)
 
             Button {
                 appState.selectedSystemPage = .constitution

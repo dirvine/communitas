@@ -24,7 +24,6 @@ struct ConstitutionView: View {
                 errorView
             }
         }
-        .background(DeepSpace.bg)
         .navigationTitle("Constitution")
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -50,15 +49,15 @@ struct ConstitutionView: View {
                 HStack(spacing: 8) {
                     Label("v\(info.version)", systemImage: "doc.text")
                         .font(.caption)
-                        .foregroundStyle(DeepSpace.textMuted)
+                        .foregroundStyle(.secondary)
                     Text("•")
-                        .foregroundStyle(DeepSpace.textMuted)
+                        .foregroundStyle(.secondary)
                     Text(info.status)
                         .font(.caption)
-                        .foregroundStyle(DeepSpace.cyan)
+                        .foregroundStyle(.tint)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(DeepSpace.cyan.opacity(0.15))
+                        .background(.tint.opacity(0.12))
                         .clipShape(Capsule())
                 }
                 .padding(.bottom, 4)
@@ -67,7 +66,6 @@ struct ConstitutionView: View {
                 Text(markdownAttributedString(info.content))
                     .textSelection(.enabled)
                     .font(.body)
-                    .foregroundStyle(DeepSpace.textPrimary)
                     .lineSpacing(4)
             }
             .padding(32)
@@ -80,19 +78,18 @@ struct ConstitutionView: View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 40))
-                .foregroundStyle(DeepSpace.textMuted)
+                .foregroundStyle(.secondary)
             Text("Could not load constitution")
                 .font(.headline)
-                .foregroundStyle(DeepSpace.textPrimary)
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(DeepSpace.textMuted)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
             Text("The constitution is embedded in the x0x daemon.\nMake sure x0xd is running.")
                 .font(.caption)
-                .foregroundStyle(DeepSpace.textMuted)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Retry") {
                 Task { await fetchConstitution() }
@@ -122,13 +119,10 @@ struct ConstitutionView: View {
     /// Convert raw markdown to an `AttributedString` for SwiftUI `Text`.
     private func markdownAttributedString(_ markdown: String) -> AttributedString {
         do {
-            var attributed = try AttributedString(
+            return try AttributedString(
                 markdown: markdown,
                 options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
             )
-            // Ensure the text uses the app's theme colour
-            attributed.foregroundColor = Color(hex: 0xE4E6F0)
-            return attributed
         } catch {
             return AttributedString(markdown)
         }

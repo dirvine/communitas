@@ -5,9 +5,16 @@
 //! assume undocumented direct `x0xd` process management semantics.
 
 use std::process::Command;
+use std::time::Duration;
 
 use crate::client::X0xClient;
 use crate::error::{Result, X0xError};
+
+/// Maximum time to wait for `x0x start` / `x0x stop` / `x0x autostart` (seconds).
+const SUBPROCESS_TIMEOUT_SECS: u64 = 30;
+
+/// Maximum time to wait for the installer (`curl -sfL https://x0x.md | sh`) (seconds).
+const INSTALL_TIMEOUT_SECS: u64 = 120;
 
 /// The current state of the x0xd daemon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,13 +83,18 @@ impl DaemonManager {
     /// Install x0x using the official installer script.
     ///
     /// Runs: `curl -sfL https://x0x.md | sh`
+    ///
+    /// Times out after [`INSTALL_TIMEOUT_SECS`] seconds.
     pub async fn install() -> Result<()> {
         tracing::info!("installing x0x via curl -sfL https://x0x.md | sh");
-        let output = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg("curl -sfL https://x0x.md | sh")
-            .output()
-            .await?;
+        let output = run_with_timeout(
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg("curl -sfL https://x0x.md | sh"),
+            Duration::from_secs(INSTALL_TIMEOUT_SECS),
+            "install",
+        )
+        .await?;
 
         if output.status.success() {
             tracing::info!("x0x installed successfully");
@@ -96,12 +108,16 @@ impl DaemonManager {
     /// Configure x0x to start automatically on boot.
     ///
     /// Runs: `x0x autostart`
+    ///
+    /// Times out after [`SUBPROCESS_TIMEOUT_SECS`] seconds.
     pub async fn autostart() -> Result<()> {
         tracing::info!("configuring x0x autostart");
-        let output = tokio::process::Command::new("x0x")
-            .arg("autostart")
-            .output()
-            .await?;
+        let output = run_with_timeout(
+            tokio::process::Command::new("x0x").arg("autostart"),
+            Duration::from_secs(SUBPROCESS_TIMEOUT_SECS),
+            "autostart",
+        )
+        .await?;
 
         if output.status.success() {
             Ok(())
@@ -114,12 +130,16 @@ impl DaemonManager {
     /// Start the x0x daemon.
     ///
     /// Runs: `x0x start`
+    ///
+    /// Times out after [`SUBPROCESS_TIMEOUT_SECS`] seconds.
     pub async fn start() -> Result<()> {
         tracing::info!("starting x0x daemon");
-        let output = tokio::process::Command::new("x0x")
-            .arg("start")
-            .output()
-            .await?;
+        let output = run_with_timeout(
+            tokio::process::Command::new("x0x").arg("start"),
+            Duration::from_secs(SUBPROCESS_TIMEOUT_SECS),
+            "start",
+        )
+        .await?;
 
         if output.status.success() {
             Ok(())
@@ -132,12 +152,16 @@ impl DaemonManager {
     /// Stop the x0x daemon.
     ///
     /// Runs: `x0x stop`
+    ///
+    /// Times out after [`SUBPROCESS_TIMEOUT_SECS`] seconds.
     pub async fn stop() -> Result<()> {
         tracing::info!("stopping x0x daemon");
-        let output = tokio::process::Command::new("x0x")
-            .arg("stop")
-            .output()
-            .await?;
+        let output = run_with_timeout(
+            tokio::process::Command::new("x0x").arg("stop"),
+            Duration::from_secs(SUBPROCESS_TIMEOUT_SECS),
+            "stop",
+        )
+        .await?;
 
         if output.status.success() {
             Ok(())
@@ -195,5 +219,26 @@ impl DaemonManager {
 impl Default for DaemonManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Run a subprocess with a timeout. Kills the child if the deadline elapses.
+async fn run_with_timeout(
+    cmd: &mut tokio::process::Command,
+    timeout: Duration,
+    label: &str,
+) -> Result<std::process::Output> {
+    let child = cmd.kill_on_drop(true).spawn()?;
+
+    match tokio::time::timeout(timeout, child.wait_with_output()).await {
+        Ok(result) => Ok(result?),
+        Err(_) => {
+            // Timeout expired — the child is killed by `kill_on_drop(true)`.
+            tracing::warn!("x0x {label} timed out after {}s", timeout.as_secs());
+            Err(X0xError::Daemon(format!(
+                "{label} timed out after {}s",
+                timeout.as_secs()
+            )))
+        }
     }
 }

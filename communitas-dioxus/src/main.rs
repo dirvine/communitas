@@ -95,6 +95,8 @@ enum Route {
     Network {},
     #[route("/settings")]
     Settings {},
+    #[route("/constitution")]
+    Constitution {},
     #[route("/about")]
     About {},
     // Legacy routes kept for backward compatibility with pages.rs
@@ -356,6 +358,7 @@ fn AppShell(children: Element) -> Element {
         Route::People {} => "/people".to_string(),
         Route::Network {} => "/network".to_string(),
         Route::Settings {} => "/settings".to_string(),
+        Route::Constitution {} => "/constitution".to_string(),
         Route::About {} => "/about".to_string(),
         Route::MoreRoute {} => "/more".to_string(),
         // Legacy routes all map to "/"
@@ -388,6 +391,7 @@ fn AppShell(children: Element) -> Element {
                             "/people" => Route::People {},
                             "/network" => Route::Network {},
                             "/settings" => Route::Settings {},
+                            "/constitution" => Route::Constitution {},
                             "/about" => Route::About {},
                             other => {
                                 if let Some(rest) = other.strip_prefix("/space/") {
@@ -650,8 +654,18 @@ fn Settings() -> Element {
 }
 
 #[component]
+fn Constitution() -> Element {
+    rsx! {
+        AppShell {
+            components::ConstitutionView {}
+        }
+    }
+}
+
+#[component]
 fn About() -> Element {
     use tokens::typography;
+    let navigator = use_navigator();
     rsx! {
         AppShell {
             div {
@@ -678,6 +692,20 @@ fn About() -> Element {
                         colors::TEXT_MUTED,
                     ),
                     {format!("v{}", env!("CARGO_PKG_VERSION"))}
+                }
+                button {
+                    style: format!(
+                        "margin-top: 0.5rem; padding: 0.5rem 1.25rem; \
+                         background: transparent; color: {}; border: 1px solid {}; \
+                         border-radius: 6px; cursor: pointer; font-size: 0.8125rem; \
+                         transition: background 0.15s;",
+                        colors::PRIMARY,
+                        colors::PRIMARY,
+                    ),
+                    onclick: move |_| {
+                        navigator.push(Route::Constitution {});
+                    },
+                    "\u{1F4DC} x0x Constitution"
                 }
             }
         }

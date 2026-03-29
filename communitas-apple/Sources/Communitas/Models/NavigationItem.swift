@@ -4,6 +4,7 @@ import Foundation
 enum SystemPage: String, CaseIterable, Identifiable, Hashable {
     case people = "People"
     case network = "Network"
+    case constitution = "Constitution"
     case settings = "Settings"
     case about = "About"
 
@@ -13,6 +14,7 @@ enum SystemPage: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .people: return "person.2"
         case .network: return "network"
+        case .constitution: return "scroll"
         case .settings: return "gear"
         case .about: return "info.circle"
         }

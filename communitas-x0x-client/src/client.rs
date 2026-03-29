@@ -946,6 +946,43 @@ impl X0xClient {
         self.parse(resp).await
     }
 
+    // ── Constitution ───────────────────────────────────────────────────────
+
+    /// Fetch the raw markdown text of the x0x constitution.
+    ///
+    /// Calls `GET /constitution` which returns `text/markdown` and requires no
+    /// authentication.
+    pub async fn constitution(&self) -> Result<String> {
+        let resp = self
+            .client
+            .get(self.url("/constitution"))
+            .send()
+            .await
+            .map_err(|_| X0xError::NotReachable(self.base_url.clone()))?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(X0xError::Daemon(format!("HTTP {status}: {body}")))
+        }
+    }
+
+    /// Fetch the x0x constitution with version metadata.
+    ///
+    /// Calls `GET /constitution/json` which returns a JSON payload containing
+    /// `version`, `status`, and the full markdown `content`. No authentication
+    /// required.
+    pub async fn constitution_json(&self) -> Result<ConstitutionInfo> {
+        let resp = self
+            .client
+            .get(self.url("/constitution/json"))
+            .send()
+            .await
+            .map_err(|_| X0xError::NotReachable(self.base_url.clone()))?;
+        self.parse(resp).await
+    }
+
     /// Inspect active WebSocket sessions and their shared subscriptions.
     pub async fn ws_sessions(&self) -> Result<WsSessionList> {
         let resp = self.client.get(self.url("/ws/sessions")).send().await?;

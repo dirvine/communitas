@@ -728,6 +728,13 @@ public struct TaskListIndex: Codable, Sendable {
 
 // MARK: - Upgrade
 
+/// Response from `GET /constitution/json`.
+public struct ConstitutionInfo: Codable, Sendable {
+    public let version: String
+    public let status: String
+    public let content: String
+}
+
 /// Response from `GET /upgrade`.
 public struct UpgradeStatus: Codable, Sendable {
     public let ok: Bool?

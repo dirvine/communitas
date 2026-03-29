@@ -595,6 +595,15 @@ public final class X0xClient: Sendable {
         return try await post("/mls/groups/\(groupId)/welcome", body: body)
     }
 
+    // MARK: - Constitution
+
+    /// Fetch the x0x constitution with version metadata. `GET /constitution/json`
+    ///
+    /// This endpoint is auth-exempt — no Bearer token required.
+    public func constitutionJSON() async throws -> ConstitutionInfo {
+        try await get("/constitution/json")
+    }
+
     // MARK: - Upgrade
 
     /// Check for daemon updates. `GET /upgrade`

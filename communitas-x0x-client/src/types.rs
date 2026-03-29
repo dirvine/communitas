@@ -823,6 +823,21 @@ pub struct WsSessionInfo {
     pub subscribed_topics: Vec<String>,
 }
 
+// ── Constitution ────────────────────────────────────────────────────────────
+
+/// Structured response from `GET /constitution/json`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConstitutionInfo {
+    /// Semantic version of the constitution document.
+    pub version: String,
+    /// Drafting status (e.g. "Draft", "Ratified").
+    pub status: String,
+    /// Full markdown text of the constitution.
+    pub content: String,
+}
+
+// ── WebSocket sessions ──────────────────────────────────────────────────────
+
 /// Response wrapper from `GET /ws/sessions`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct WsSessionList {

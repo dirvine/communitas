@@ -528,6 +528,8 @@ struct ContentView: View {
             ContactsView()
         case .network:
             NetworkView()
+        case .constitution:
+            ConstitutionView()
         case .settings:
             SettingsView()
         case .about:
@@ -586,6 +588,14 @@ struct AboutView: View {
 
             Button("Check for Updates...") {
                 updaterController.checkForUpdates()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+
+            Button {
+                appState.selectedSystemPage = .constitution
+            } label: {
+                Label("x0x Constitution", systemImage: "scroll")
             }
             .buttonStyle(.bordered)
             .controlSize(.regular)

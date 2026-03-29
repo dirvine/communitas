@@ -15,6 +15,7 @@ pub mod channel_chat;
 pub mod channel_sidebar;
 mod composer;
 pub mod confirm_dialog;
+pub mod constitution_view;
 pub mod create_channel_modal;
 pub mod create_space_modal;
 pub mod daemon_status;
@@ -179,6 +180,7 @@ pub use thread_panel::ThreadPanel;
 
 // Re-export new Deep Space components
 pub use app_sidebar::{AppSidebar, ContactEntry, GroupEntry};
+pub use constitution_view::ConstitutionView;
 pub use dashboard::Dashboard;
 pub use dm_view::DmView;
 pub use feed_view::FeedView;

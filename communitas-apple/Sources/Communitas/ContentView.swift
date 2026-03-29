@@ -19,6 +19,9 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
         } detail: {
             detailView
+                // Force SwiftUI to re-create the detail view when navigation state changes.
+                // Without this, the @ViewBuilder conditional can get stuck on a stale branch.
+                .id(detailViewIdentity)
                 .inspector(isPresented: $appState.showInspector) {
                     DetailPanelView()
                         .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
@@ -293,14 +296,15 @@ struct ContentView: View {
         let channelName = channel.name
 
         return Button {
+            // Set navigation state synchronously so SwiftUI updates the detail view
+            // immediately. The async channel subscription happens in the background.
+            appState.selectedSpaceTab = .chat
+            appState.selectedSystemPage = nil
+            appState.selectedDMContact = nil
+            appState.channelManagers[groupId]?.unreadCounts[channelName] = 0
             Task { [weak appState] in
                 guard let appState else { return }
                 await appState.selectGroupAndChannel(group: group, channel: channelName)
-                appState.selectedSpaceTab = .chat
-                appState.selectedSystemPage = nil
-                appState.selectedDMContact = nil
-                // Look up manager fresh — avoids capturing a potentially stale reference.
-                appState.channelManagers[groupId]?.unreadCounts[channelName] = 0
             }
         } label: {
             HStack(spacing: 6) {
@@ -487,6 +491,21 @@ struct ContentView: View {
     }
 
     // MARK: - Detail View
+
+    /// A composite identity string that changes whenever the navigation target changes.
+    /// Used as `.id()` on the detail view to force SwiftUI to re-create the view
+    /// when switching between system pages, DMs, and spaces.
+    private var detailViewIdentity: String {
+        if let page = appState.selectedSystemPage {
+            return "system-\(page.rawValue)"
+        } else if let contact = appState.selectedDMContact {
+            return "dm-\(contact.agentId)"
+        } else if let group = appState.selectedGroup {
+            return "space-\(group.groupId)-\(appState.selectedChannel ?? "")"
+        } else {
+            return "placeholder"
+        }
+    }
 
     @ViewBuilder
     private var detailView: some View {

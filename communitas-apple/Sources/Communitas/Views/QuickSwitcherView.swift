@@ -138,11 +138,11 @@ struct QuickSwitcherView: View {
                 icon: "circle.fill",
                 iconColor: colorForId(group.groupId)
             ) {
+                appState.selectedSpaceTab = .chat
+                appState.selectedSystemPage = nil
+                appState.selectedDMContact = nil
                 Task {
                     await appState.selectGroupAndChannel(group: group, channel: "general")
-                    appState.selectedSpaceTab = .chat
-                    appState.selectedSystemPage = nil
-                    appState.selectedDMContact = nil
                 }
             })
 
@@ -156,11 +156,11 @@ struct QuickSwitcherView: View {
                     icon: "number",
                     iconColor: .secondary
                 ) {
+                    appState.selectedSpaceTab = .chat
+                    appState.selectedSystemPage = nil
+                    appState.selectedDMContact = nil
                     Task {
                         await appState.selectGroupAndChannel(group: group, channel: channel.name)
-                        appState.selectedSpaceTab = .chat
-                        appState.selectedSystemPage = nil
-                        appState.selectedDMContact = nil
                     }
                 })
             }

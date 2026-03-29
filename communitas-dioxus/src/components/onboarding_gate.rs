@@ -32,8 +32,8 @@ use tracing::warn;
 use crate::tokens::{colors, radius, spacing, typography};
 
 /// How long to poll for the daemon to become healthy after starting/installing
-/// (in seconds).
-const HEALTH_TIMEOUT_SECS: u64 = 15;
+/// (in seconds). Generous timeout to account for first-run key generation.
+const HEALTH_TIMEOUT_SECS: u64 = 30;
 
 /// Terminate the application cleanly.
 ///
@@ -204,11 +204,16 @@ pub fn OnboardingGate(children: Element) -> Element {
 
 /// Poll the x0xd health endpoint until it responds successfully or the
 /// `timeout_secs` deadline elapses. Returns `true` if healthy.
+///
+/// Re-discovers the daemon config on every poll iteration to handle the case
+/// where x0xd hasn't finished writing `api.port` / `api-token` yet.
 async fn poll_until_healthy(timeout_secs: u64) -> bool {
     use communitas_x0x_client::X0xClient;
-    let client = X0xClient::new();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
     loop {
+        // Re-discover on every iteration — the daemon may have just started
+        // and written its config files since the last attempt.
+        let client = X0xClient::new();
         if client.health().await.is_ok() {
             return true;
         }

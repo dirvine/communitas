@@ -95,14 +95,34 @@ jobs:
           CONTENTS="$APP_DIR/Contents"
           MACOS_DIR="$CONTENTS/MacOS"
           RESOURCES_DIR="$CONTENTS/Resources"
+          FRAMEWORKS_DIR="$CONTENTS/Frameworks"
 
           mkdir -p "$MACOS_DIR"
           mkdir -p "$RESOURCES_DIR"
+          mkdir -p "$FRAMEWORKS_DIR"
 
           # Copy universal binary
           BINARY=communitas-apple/.build/apple/Products/Release/Communitas
           cp "$BINARY" "$MACOS_DIR/Communitas"
           chmod +x "$MACOS_DIR/Communitas"
+
+          # Copy Sparkle.framework into the bundle
+          # SPM builds Sparkle into the artifacts directory; find and copy it
+          SPARKLE_FW=$(find communitas-apple/.build -name "Sparkle.framework" -type d | head -1)
+          if [ -n "$SPARKLE_FW" ]; then
+            cp -R "$SPARKLE_FW" "$FRAMEWORKS_DIR/"
+            echo "Bundled Sparkle.framework from: $SPARKLE_FW"
+          else
+            # Fallback: use the downloaded Sparkle from the signing step
+            if [ -d "/tmp/sparkle/Sparkle.framework" ]; then
+              cp -R /tmp/sparkle/Sparkle.framework "$FRAMEWORKS_DIR/"
+              echo "Bundled Sparkle.framework from /tmp/sparkle download"
+            else
+              echo "ERROR: Sparkle.framework not found!"
+              exit 1
+            fi
+          fi
+          ls -la "$FRAMEWORKS_DIR/"
 
           # Create Info.plist
           cat > "$CONTENTS/Info.plist" << EOF
@@ -137,6 +157,12 @@ jobs:
           </dict>
           </plist>
           EOF
+
+          # Ensure the binary can find Sparkle at @rpath
+          # SPM sets @rpath to the build directory; we need it to point into the .app bundle
+          install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/Communitas" 2>/dev/null || true
+          echo "Rpaths configured:"
+          otool -l "$MACOS_DIR/Communitas" | grep -A2 LC_RPATH || true
 
           echo "app_path=$APP_DIR" >> $GITHUB_OUTPUT
           echo "dmg_name=Communitas-macOS-${VERSION}.dmg" >> $GITHUB_OUTPUT

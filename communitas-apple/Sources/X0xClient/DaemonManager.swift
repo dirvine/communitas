@@ -99,4 +99,51 @@ public final class DaemonManager: Sendable {
             try await start()
         }
     }
+
+    /// Configure x0x to start automatically on boot/login.
+    ///
+    /// Runs: `x0x autostart`
+    public func ensureAutostart() async throws {
+        guard let path = binaryPath() else {
+            throw X0xError.daemonNotInstalled
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["autostart"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus != 0 {
+                throw X0xError.daemonStartFailed(reason: "autostart exited with code \(process.terminationStatus)")
+            }
+        } catch let error as X0xError {
+            throw error
+        } catch {
+            throw X0xError.daemonStartFailed(reason: "autostart failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Stop the daemon process using `x0x stop`.
+    public func stop() async throws {
+        guard let path = binaryPath() else {
+            throw X0xError.daemonNotInstalled
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["stop"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            throw X0xError.daemonStartFailed(reason: "stop failed: \(error.localizedDescription)")
+        }
+    }
 }

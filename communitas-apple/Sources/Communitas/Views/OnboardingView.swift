@@ -53,13 +53,35 @@ final class OnboardingViewModel: ObservableObject {
             // If binary is already available, use DaemonManager.start()
             if daemon.isInstalled() {
                 try await daemon.start()
-                state = .ready
+                // Enable autostart so x0xd launches on login
+                try? await daemon.ensureAutostart()
+                // Poll until healthy with config re-discovery
+                if await pollUntilHealthy(timeoutSecs: 30) {
+                    state = .ready
+                } else {
+                    state = .failed("x0x started but did not become healthy within 30 seconds. Try restarting Communitas.")
+                }
             } else {
                 state = .failed("x0x binary not found after installation. Please try again.")
             }
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// Poll the daemon health endpoint, re-discovering config each time.
+    private func pollUntilHealthy(timeoutSecs: Int) async -> Bool {
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutSecs))
+        while Date() < deadline {
+            // Re-discover config on each poll (daemon may have just written api.port)
+            if let client = X0xClient.fromDiscovery() {
+                if let _ = try? await client.health() {
+                    return true
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return false
     }
 
     func retryCheck() async {

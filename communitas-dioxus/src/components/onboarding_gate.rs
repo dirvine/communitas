@@ -105,6 +105,10 @@ pub fn OnboardingGate(children: Element) -> Element {
                                     gate.set(GateState::Starting);
                                     match DaemonManager::start().await {
                                         Ok(()) => {
+                                            // Enable autostart so x0xd launches on login
+                                            if let Err(e) = DaemonManager::autostart().await {
+                                                warn!(target: "ui.onboarding", "autostart setup failed (non-fatal): {e}");
+                                            }
                                             if poll_until_healthy(HEALTH_TIMEOUT_SECS).await {
                                                 gate.set(GateState::Ready);
                                             } else {
@@ -139,11 +143,15 @@ pub fn OnboardingGate(children: Element) -> Element {
                         spawn(async move {
                             match DaemonManager::start().await {
                                 Ok(()) => {
+                                    // Enable autostart so x0xd launches on login
+                                    if let Err(e) = DaemonManager::autostart().await {
+                                        warn!(target: "ui.onboarding", "autostart setup failed (non-fatal): {e}");
+                                    }
                                     if poll_until_healthy(HEALTH_TIMEOUT_SECS).await {
                                         gate.set(GateState::Ready);
                                     } else {
                                         gate.set(GateState::Failed(
-                                            "x0x did not become healthy within 15 seconds. Try restarting Communitas.".to_string(),
+                                            "x0x did not become healthy within 30 seconds. Try restarting Communitas.".to_string(),
                                         ));
                                     }
                                 }

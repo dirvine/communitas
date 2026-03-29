@@ -34,6 +34,23 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libpipewire-0.3-dev \
+            libasound2-dev \
+            libdbus-1-dev \
+            libxdo-dev \
+            pkg-config
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+
       - name: Cache Cargo
         uses: actions/cache@v4
         with:

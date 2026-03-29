@@ -25,8 +25,8 @@ jobs:
             const repo = context.repo.repo;
 
             async function waitForRelease() {
-              const maxMs = 30 * 60 * 1000; // 30 minutes
-              const interval = 15000;
+              const maxMs = 45 * 60 * 1000; // 45 minutes (release signing + notarization can take ~30 min)
+              const interval = 30000;
               let waited = 0;
               while (waited <= maxMs) {
                 try {

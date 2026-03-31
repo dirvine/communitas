@@ -38,6 +38,11 @@ final class UpdaterController: ObservableObject {
         self.controller = standardController
         self.updater = standardController.updater
 
+        // Disable automatic background checks — only check when user clicks
+        // "Check for Updates..." in the menu. Prevents annoying "no updates"
+        // dialog on launch before appcast.xml is published.
+        updater.automaticallyChecksForUpdates = false
+
         // Start the updater after configuring the delegate
         do {
             try updater.start()

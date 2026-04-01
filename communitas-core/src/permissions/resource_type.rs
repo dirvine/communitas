@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Resource type definitions for granular permissions.
 
 use serde::{Deserialize, Serialize};

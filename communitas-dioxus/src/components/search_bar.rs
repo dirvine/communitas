@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Message search component for finding messages across conversations.
 
 use crate::tokens::colors;

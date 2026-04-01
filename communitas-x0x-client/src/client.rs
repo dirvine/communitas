@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Exact typed client for the x0xd REST API.
 //!
 //! Methods in this file mirror daemon routes and payloads on `127.0.0.1:12700`.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Error types for the Kanban system.
 //!
 //! This module provides [`KanbanError`] for all error conditions

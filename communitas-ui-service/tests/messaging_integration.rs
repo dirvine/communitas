@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Integration tests for the messaging service using real CommunitasApp.
 //!
 //! These tests verify the full messaging flow including send, edit, delete,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Canvas UI components for collaborative drawing and visual surfaces.
 
 mod canvas_view;

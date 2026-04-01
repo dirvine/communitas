@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 #![allow(clippy::print_stdout)] // CLI tool outputs JSON to stdout
 
 use anyhow::{Context, Result};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Shared Rust service layer consumed by all Communitas UI surfaces (Dioxus + MCP).
 
 pub mod audit;

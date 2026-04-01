@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! @mention autocomplete dropdown for the message composer.
 //!
 //! Shows a filtered list of contacts when the user types `@` in the composer.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Style builder utilities for the enhanced design system.
 //!
 //! Provides composable style functions for Dioxus components.

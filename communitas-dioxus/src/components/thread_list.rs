@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Thread list sidebar component for messaging UI.
 
 use crate::tokens::colors;

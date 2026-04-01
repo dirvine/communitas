@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Entity detail view with tabs for different surfaces.
 //!
 //! Tabs: Board (Kanban), Chat, Drive, Documents, Details

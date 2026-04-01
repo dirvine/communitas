@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Modal for creating a channel in the canonical x0x channel store.
 
 use crate::design_tokens::{motion, radius, semantic, shadow, spacing, typography};

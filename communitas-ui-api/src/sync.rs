@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Sync state types for offline-first UX indicators.
 //!
 //! This module provides types for tracking and displaying synchronization

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Rate limiting module to prevent DoS attacks and abuse
 //!
 //! This module provides:

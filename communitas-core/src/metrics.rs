@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Metrics collection and reporting for Communitas.
 //!
 //! This module provides both in-memory metrics for local monitoring and

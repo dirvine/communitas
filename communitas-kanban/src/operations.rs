@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! CRDT operations for the Kanban system.
 //!
 //! This module provides low-level CRDT operations for:

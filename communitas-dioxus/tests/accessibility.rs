@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Accessibility tests for Communitas Dioxus components.
 //!
 //! These tests verify WCAG 2.1 AA compliance across the application:

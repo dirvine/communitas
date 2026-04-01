@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Central application error type for backend commands and services
 
 use thiserror::Error;

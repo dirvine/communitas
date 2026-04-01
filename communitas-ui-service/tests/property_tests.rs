@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Property-based tests for the Communitas UI services.
 //!
 //! These tests use proptest to verify invariants hold across random inputs.

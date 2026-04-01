@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use communitas_x0x_client::{TrustLevel, X0xClient};
 
 #[tokio::test]

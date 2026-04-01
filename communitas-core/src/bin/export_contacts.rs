@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Export contact list with presence as JSON for MCP parity testing.
 //!
 //! Outputs a JSON snapshot of contacts with presence info that matches

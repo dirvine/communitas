@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 /// Errors returned by the x0x client.
 #[derive(Debug, thiserror::Error)]
 pub enum X0xError {

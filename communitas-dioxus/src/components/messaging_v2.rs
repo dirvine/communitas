@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Enhanced messaging components with Digital Forest Sanctuary theme.
 //!
 //! Features:

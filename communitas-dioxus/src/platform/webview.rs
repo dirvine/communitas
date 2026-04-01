@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Platform-specific WebView availability detection.
 //!
 //! This module provides functions to check whether the required WebView runtime

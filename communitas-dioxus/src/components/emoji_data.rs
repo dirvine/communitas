@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Emoji data module providing hardcoded emoji entries organized by category.
 //!
 //! This module exposes a static list of ~200 common emojis, quick-reaction shortcuts,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Channel chat view component for real-time messaging.
 //!
 //! Displays messages for a selected channel, supports sending messages,

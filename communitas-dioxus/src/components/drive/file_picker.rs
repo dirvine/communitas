@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! File picker component using native platform dialogs.
 //!
 //! Provides cross-platform file selection dialogs with:

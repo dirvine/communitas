@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Request and response types for the x0xd REST API.
 //!
 //! All types mirror the JSON shapes returned by x0xd on `127.0.0.1:12700`.

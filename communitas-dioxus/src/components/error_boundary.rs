@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Error boundary components for graceful error handling.
 //!
 //! These components provide consistent, accessible error displays across the application.

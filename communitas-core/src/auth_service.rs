@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Shared Authentication Service
 //!
 //! This module provides a unified authentication service that can be used by all frontends

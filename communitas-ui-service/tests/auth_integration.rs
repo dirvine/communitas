@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Integration tests for identity recovery flows.
 //!
 //! These tests verify the full recovery lifecycle including:

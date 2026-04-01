@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Kanban card component with drag-and-drop support.
 
 use communitas_ui_api::SyncState;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Stress tests for the Communitas UI services.
 //!
 //! These tests are marked `#[ignore]` and should be run in CI nightly builds

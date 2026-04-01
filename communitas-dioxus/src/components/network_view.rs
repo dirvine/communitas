@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Network diagnostics view.
 //!
 //! Shows network status, peer list, NAT info, external addresses.

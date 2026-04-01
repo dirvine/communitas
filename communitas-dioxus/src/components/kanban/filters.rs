@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Filter panel for Kanban board swimlane and card filtering.
 
 use chrono::Timelike;

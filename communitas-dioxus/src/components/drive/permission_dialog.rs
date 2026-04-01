@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Permission dialog components for drive operations.
 //!
 //! This module provides dialogs for:

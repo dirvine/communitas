@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Sidebar components for the main application shell.
 //!
 //! This module contains reusable components for the sidebar navigation,

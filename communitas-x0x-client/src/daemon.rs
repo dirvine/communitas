@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! CLI-faithful lifecycle helpers for the local x0x daemon.
 //!
 //! This module wraps documented `x0x` CLI behavior for checking, installing,

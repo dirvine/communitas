@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Analytics dashboard UI components for Kanban boards.
 //!
 //! Provides visual charts and metrics for board performance tracking.

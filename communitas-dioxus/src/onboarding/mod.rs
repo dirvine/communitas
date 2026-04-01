@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Onboarding experience module for new users.
 //!
 //! Provides the data model and tour content for guiding new users

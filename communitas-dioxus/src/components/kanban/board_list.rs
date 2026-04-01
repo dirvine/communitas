@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Board list page showing all Kanban boards.
 
 use communitas_ui_api::kanban::BoardSummary;

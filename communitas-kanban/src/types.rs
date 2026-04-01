@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Core types for the Kanban system.
 //!
 //! This module defines all the primary data structures used in the Kanban system:

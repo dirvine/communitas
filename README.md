@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/saorsalabs/communitas)](https://github.com/saorsalabs/communitas/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/saorsalabs/communitas/ci.yml)](https://github.com/saorsalabs/communitas/actions)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 
 > **A partition-tolerant, post-quantum secure, peer-to-peer collaboration network that works when the internet doesn't.**
 
@@ -312,7 +312,7 @@ connect_to_peer(&connection_words).await?;
 
 ## License
 
-**AGPL-3.0** for open collaboration. Commercial licensing available via [Saorsa Labs](mailto:saorsalabs@gmail.com).
+Dual-licensed under **MIT** or **Apache-2.0** at your option. Commercial licensing also available via [Saorsa Labs](mailto:saorsalabs@gmail.com).
 
 ---
 

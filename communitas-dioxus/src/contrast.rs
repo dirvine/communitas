@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! WCAG contrast ratio utilities for accessibility compliance.
 //!
 //! This module provides functions to calculate and validate color contrast

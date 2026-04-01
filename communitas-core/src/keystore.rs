@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Simple encrypted keystore wrapper using platform keychain via `keyring`.
 // Stores ML-DSA keys and current device/identity metadata.
 

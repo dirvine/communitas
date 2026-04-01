@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;

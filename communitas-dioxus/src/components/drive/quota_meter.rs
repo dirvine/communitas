@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Quota meter component showing disk usage.
 
 use communitas_ui_api::QuotaInfo;

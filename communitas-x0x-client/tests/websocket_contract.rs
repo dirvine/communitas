@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use base64::Engine as _;
 use communitas_x0x_client::{WsInbound, X0xClient, X0xWebSocket};
 use std::time::{SystemTime, UNIX_EPOCH};

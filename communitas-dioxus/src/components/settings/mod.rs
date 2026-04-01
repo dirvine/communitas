@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Settings-related UI components.
 //!
 //! Contains components for application settings, preferences,

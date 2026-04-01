@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Reusable skeleton loader components for consistent loading states.
 //!
 //! These components provide accessible, animated placeholders while content loads.

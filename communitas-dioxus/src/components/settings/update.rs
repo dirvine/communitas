@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Update UI components for displaying and managing application updates.
 //!
 //! Provides components for showing update status, available updates, and

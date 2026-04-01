@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Kanban column component with cards and drop zone.
 
 use communitas_ui_api::kanban::ColumnView;

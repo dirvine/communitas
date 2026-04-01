@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Website publishing view per space using x0x KvStore.
 //!
 //! Each space gets a dedicated KvStore (`x0x-web-{group_prefix}`) holding:

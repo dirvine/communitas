@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Responsive layout components for consistent UI structure.
 //!
 //! This module provides reusable layout components that help create

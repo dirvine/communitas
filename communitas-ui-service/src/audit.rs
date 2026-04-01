@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Audit log service for UI layer.
 //!
 //! Wraps the core AuditLog to provide a simple interface for MCP and Dioxus

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! End-to-end tests for messaging workflows.
 //!
 //! Tests cover:

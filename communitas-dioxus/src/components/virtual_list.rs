@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Virtual list component for efficient rendering of large lists.
 //!
 //! Only renders visible items plus an overscan buffer, dramatically improving

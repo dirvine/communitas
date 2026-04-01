@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Component style presets using design tokens.
 //!
 //! Provides ready-to-use style strings for common UI patterns.

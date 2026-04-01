@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Canvas DTOs for collaborative drawing surfaces.
 
 use serde::{Deserialize, Serialize};

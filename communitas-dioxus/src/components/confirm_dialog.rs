@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Confirmation dialog for destructive actions.
 
 use crate::design_tokens::{palette, radius, semantic, spacing, typography};

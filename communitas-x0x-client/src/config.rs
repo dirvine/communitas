@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Platform-specific x0x daemon configuration discovery.
 //!
 //! x0xd writes two files into its data directory:

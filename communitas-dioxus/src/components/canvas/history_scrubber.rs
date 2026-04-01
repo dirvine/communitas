@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! History scrubber component for canvas undo/redo timeline.
 
 use communitas_ui_api::{HistoryActionType, HistoryEntry};

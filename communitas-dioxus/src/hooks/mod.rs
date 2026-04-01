@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Reusable hooks for Communitas Dioxus application.
 //!
 //! This module provides custom hooks for common UI patterns.

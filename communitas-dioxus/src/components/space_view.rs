@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Space view with tab bar (Chat, Board, Files, Swarm, Feed).
 //!
 //! Each space is a group. The Chat tab shows channel sidebar + channel chat.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Persistent Audit Log for Security Events
 //!
 //! Provides encrypted, append-only logging of security-relevant events including:

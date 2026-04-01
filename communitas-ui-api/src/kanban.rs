@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Kanban DTOs for board, column, card, and related views.
 //!
 //! These types are designed for UI rendering and MCP tool responses.

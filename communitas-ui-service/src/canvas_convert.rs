@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Type conversions between core canvas types and UI canvas types.
 //!
 //! This module provides conversion functions for translating between the internal

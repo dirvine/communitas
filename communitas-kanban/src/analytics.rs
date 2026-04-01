@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Analytics and metrics for Kanban boards.
 //!
 //! This module provides data structures and calculations for tracking board

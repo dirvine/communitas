@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Channel sidebar component for space-based messaging.
 //!
 //! Displays spaces (x0x groups) with their GUI-compatible channel metadata.

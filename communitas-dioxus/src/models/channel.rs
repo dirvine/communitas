@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Channel and thread messaging data types.
 //!
 //! These types map to the JSON wire format used in gossip payloads

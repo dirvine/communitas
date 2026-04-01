@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! End-to-end offline sync tests for the Communitas UI services.
 //!
 //! These tests verify graceful handling of offline scenarios including:

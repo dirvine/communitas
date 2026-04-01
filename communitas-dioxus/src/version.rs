@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Version management system for Communitas Dioxus application.
 //!
 //! Provides compile-time version information, build metadata, and version comparison utilities.

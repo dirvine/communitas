@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Deep Space sidebar navigation component.
 //!
 //! Matches the x0x GUI sidebar layout exactly:

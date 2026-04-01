@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! # communitas-kanban
 //!
 //! A CRDT-based Kanban system for Communitas.

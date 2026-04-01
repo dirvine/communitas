@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Onboarding tour types and data structures.
 //!
 //! Defines the data model for the new-user onboarding experience,

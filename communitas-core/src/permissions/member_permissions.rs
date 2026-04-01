@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Member permissions structure combining role defaults with overrides.
 
 use std::collections::HashMap;

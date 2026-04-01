@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Swarm task delegation view for spaces.
 //!
 //! Displays a task submission form, a live event feed, and an agent roster.

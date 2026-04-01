@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Shared utility functions for UI services.
 
 use std::time::{SystemTime, UNIX_EPOCH};

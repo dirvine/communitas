@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Constitution view — displays the x0x constitution fetched from the daemon.
 //!
 //! The x0x constitution defines the foundational principles, rights,

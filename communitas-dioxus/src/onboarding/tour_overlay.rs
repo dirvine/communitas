@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Tour overlay component for the onboarding experience.
 //!
 //! Provides a spotlight overlay that highlights UI elements with a tooltip

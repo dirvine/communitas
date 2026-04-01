@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Card state machine for workflow transitions.
 //!
 //! This module defines the [`CardState`] enum and valid state transitions.

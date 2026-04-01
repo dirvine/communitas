@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Export thread list as JSON for MCP parity testing.
 //!
 //! Outputs a JSON snapshot of conversation threads that matches the format

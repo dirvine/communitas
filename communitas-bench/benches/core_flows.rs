@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Core flow benchmarks for messaging, drive, kanban, and canvas services.
 //!
 //! Note: Benchmarks use `expect()` for error handling clarity, similar to tests.

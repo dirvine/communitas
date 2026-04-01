@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Remote cursors overlay for showing collaborators on the canvas.
 
 use communitas_ui_api::RemoteCursor;

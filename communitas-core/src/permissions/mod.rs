@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Granular permission system for entity resources.
 //!
 //! This module provides per-member, per-resource access control with three levels:

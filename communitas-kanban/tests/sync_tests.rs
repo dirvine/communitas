@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Sync tests for the Kanban CRDT system.
 //!
 //! These tests verify that concurrent edits merge correctly and data

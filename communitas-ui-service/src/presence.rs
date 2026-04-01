@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Presence service for tracking contact online status with reactive subscriptions.
 
 use std::collections::HashMap;

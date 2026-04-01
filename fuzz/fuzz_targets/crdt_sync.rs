@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Fuzz target for CRDT synchronization in communitas-core
 #![no_main]
 

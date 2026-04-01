@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Invite service for managing collaboration invites.
 //!
 //! This service handles the creation, acceptance, rejection, and revocation

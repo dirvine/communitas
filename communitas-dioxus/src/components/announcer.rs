@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Screen reader announcement system for accessibility.
 //!
 //! This module provides a centralized system for announcing updates to screen readers

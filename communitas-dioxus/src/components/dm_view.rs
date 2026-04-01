@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Direct messaging view component for point-to-point communication.
 //!
 //! Displays a conversation with a single peer agent, supports sending and

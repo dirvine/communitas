@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! OpenTelemetry integration for production observability.
 //!
 //! This module provides OTLP (OpenTelemetry Protocol) export of metrics and traces

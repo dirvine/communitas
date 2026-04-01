@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! x0xd daemon status bar component.
 //!
 //! Periodically polls the x0xd daemon health endpoint and displays

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Copyright (c) 2025 Saorsa Labs Limited
 //
 // This file is part of the Communitas P2P collaboration platform.

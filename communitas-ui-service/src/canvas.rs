@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Canvas service for collaborative drawing and visual surfaces.
 //!
 //! Wraps canvas-core Scene and provides reactive state updates via watch channels.

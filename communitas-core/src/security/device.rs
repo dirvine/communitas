@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Device Fingerprinting for Security Tracking
 //!
 //! Provides stable device identification for:

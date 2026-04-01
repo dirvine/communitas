@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Kanban service for board and card operations with reactive subscriptions.
 
 use std::sync::{Arc, Weak};

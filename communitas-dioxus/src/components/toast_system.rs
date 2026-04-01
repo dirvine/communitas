@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Toast notification system with CSS entrance and exit animations.
 //!
 //! Provides a toast system with multiple variants and auto-dismiss.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Focus management utilities for modals and dialogs.
 //!
 //! This module provides hooks for managing keyboard focus in accessible

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Enhanced design tokens for the "Digital Forest Sanctuary" theme.
 //!
 //! A warm, organic aesthetic with bioluminescent jade accents.

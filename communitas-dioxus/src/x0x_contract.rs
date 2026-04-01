@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! App-owned x0x interop helpers for Dioxus.
 //!
 //! This module freezes the GUI-compatible channel/topic/store conventions that

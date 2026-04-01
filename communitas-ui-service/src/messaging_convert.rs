@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Type conversions between core messaging types and UI messaging types.
 //!
 //! This module provides conversion functions for translating between the internal

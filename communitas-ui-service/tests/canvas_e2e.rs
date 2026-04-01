@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! End-to-end tests for canvas collaboration workflows.
 //!
 //! These tests verify complete canvas workflows through the CanvasService layer,

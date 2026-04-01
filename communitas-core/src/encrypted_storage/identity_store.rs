@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Identity key storage within a vault.
 //!
 //! Stores public/secret ML-DSA keys on disk with restrictive permissions.

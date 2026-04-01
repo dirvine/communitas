@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Drive DTOs for virtual disk, directory, file, and transfer views.
 //!
 //! These types are designed for UI rendering and MCP tool responses.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Settings view -- display name, agent card, daemon info.
 
 use communitas_x0x_client::X0xClient;

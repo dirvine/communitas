@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Benchmark crate for Communitas.
 //!
 //! This library exists to expose dependencies to benchmark targets.

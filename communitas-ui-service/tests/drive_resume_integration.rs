@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Integration tests for the drive resume flow.
 //!
 //! These tests verify the complete resume functionality including:

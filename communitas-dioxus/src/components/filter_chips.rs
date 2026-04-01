@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Filter chip components for quick filtering of lists and collections.
 //!
 //! Displays a horizontal row of clickable filter chips with optional count badges.

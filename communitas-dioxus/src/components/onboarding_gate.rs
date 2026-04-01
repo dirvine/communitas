@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! First-run onboarding gate for the Communitas desktop app.
 //!
 //! This component wraps the entire app and blocks the UI until the x0xd

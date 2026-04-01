@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Invite model for cross-organization collaboration.
 //!
 //! This module defines the invite structure and status tracking for

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Preview panel for showing file details and content preview.
 //!
 //! Features:

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Storage module for Communitas core
 //!
 //! This module provides storage-related functionality including

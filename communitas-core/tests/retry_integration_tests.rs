@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Copyright (c) 2025 Saorsa Labs Limited
 //
 // Integration tests for exponential backoff retry logic

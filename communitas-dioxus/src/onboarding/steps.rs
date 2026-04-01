@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Tour step content components for the onboarding experience.
 //!
 //! Provides individual step components with consistent structure and

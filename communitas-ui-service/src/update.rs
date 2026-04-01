@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Update service for managing application auto-updates.
 //!
 //! Provides types and a service trait for checking, downloading, and

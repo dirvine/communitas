@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Pagination components for list navigation and infinite scroll.
 //!
 //! Provides two variants:

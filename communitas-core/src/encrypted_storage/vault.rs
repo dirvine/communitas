@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Local Vault Implementation
 //!
 //! Each vault represents a single four-word identity's local storage.

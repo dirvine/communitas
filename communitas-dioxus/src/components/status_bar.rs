@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Bottom status bar showing daemon connectivity, peer count, and agent identity.
 
 use communitas_x0x_client::{DaemonManager, DaemonState, X0xClient};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Emoji picker and quick-reaction components.
 //!
 //! Provides two components:

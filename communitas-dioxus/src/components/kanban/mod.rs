@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Kanban board UI components for Communitas.
 //!
 //! This module provides a complete Kanban board implementation with:

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Drive browser component with three-panel layout.
 
 use communitas_ui_api::{DirectoryEntry, DiskType, QuotaInfo};

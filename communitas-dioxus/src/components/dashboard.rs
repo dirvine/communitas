@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Dashboard view -- landing page showing system stats and discovered agents.
 
 use communitas_x0x_client::X0xClient;

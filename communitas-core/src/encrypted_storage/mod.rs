@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Local Storage System for Communitas
 //!
 //! This module implements a multi-identity local storage system that:

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Canvas toolbar component for tool and drawing option selection.
 
 use communitas_ui_api::ToolType;

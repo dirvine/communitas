@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Integration tests for the ContactsService.
 //!
 //! These tests verify the contacts service layer works correctly

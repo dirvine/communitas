@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Tree view sidebar for folder navigation.
 
 use communitas_ui_api::DiskType;

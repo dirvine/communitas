@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Message list component for displaying conversation messages.
 
 use crate::tokens::colors;

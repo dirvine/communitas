@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! End-to-end tests for authentication flows.
 //!
 //! These tests verify complete authentication workflows through the AuthService layer,

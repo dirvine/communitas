@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Application Configuration Management
 //!
 //! Manages app-level configuration separate from encrypted vaults.

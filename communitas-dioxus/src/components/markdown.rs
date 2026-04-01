@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Lightweight markdown renderer for message bubbles.
 //!
 //! Supports a safe, minimal subset of CommonMark:

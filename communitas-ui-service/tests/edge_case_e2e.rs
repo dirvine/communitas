@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! End-to-end edge case tests for the Communitas UI services.
 //!
 //! These tests verify graceful handling of edge cases like empty lists,

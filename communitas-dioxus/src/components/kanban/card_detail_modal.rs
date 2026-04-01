@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Card detail modal for viewing and editing card contents.
 
 use communitas_ui_api::kanban::{

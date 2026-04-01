@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Default permission mappings for standard roles.
 
 use std::collections::HashMap;

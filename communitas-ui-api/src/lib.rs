@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Shared UI-facing models for Communitas front-ends.
 
 // Security: Enforce no-panic policy in production code

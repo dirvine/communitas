@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Main canvas view component for rendering and interacting with the canvas.
 
 use super::history_scrubber::HistoryIndicator;

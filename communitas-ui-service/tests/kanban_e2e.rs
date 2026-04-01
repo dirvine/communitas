@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! End-to-end tests for kanban board workflows.
 //!
 //! These tests verify complete kanban board workflows through the KanbanService layer,

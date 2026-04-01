@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Global offline state indicators for app-wide network status.
 //!
 //! This module provides components for indicating network connectivity status

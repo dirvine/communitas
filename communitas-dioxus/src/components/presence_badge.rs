@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Presence badge component for displaying contact status.
 
 use communitas_ui_api::PresenceStatus;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Startup performance benchmarks for Communitas Dioxus application.
 //!
 //! Measures the time to bootstrap UI services, which is the primary

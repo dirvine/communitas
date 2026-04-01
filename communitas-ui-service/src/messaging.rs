@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Messaging service for thread and message operations with reactive subscriptions.
 
 use std::collections::HashMap;

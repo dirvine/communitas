@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Entity categorization hook for efficient sidebar rendering.
 //!
 //! This module provides a hook and data structure for categorizing entities

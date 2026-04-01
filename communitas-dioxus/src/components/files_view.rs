@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! File sharing view -- drop zone, send/receive, transfer list.
 
 use communitas_x0x_client::{FileTransfer, TransferDirection, TransferStatus, X0xClient};

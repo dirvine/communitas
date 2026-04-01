@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Download manager component with multi-file support and checksum verification.
 
 use communitas_ui_api::{DownloadProgress as DownloadProgressData, DownloadState};

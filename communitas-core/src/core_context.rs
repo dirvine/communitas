@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Copyright (c) 2025 Saorsa Labs Limited
 //
 // Dual-licensed under the AGPL-3.0-or-later and a commercial license.

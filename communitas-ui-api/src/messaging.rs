@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Messaging and presence DTOs for thread lists, messages, and contact status.
 
 use crate::{SyncState, UnifiedContact, UnifiedEntityType};

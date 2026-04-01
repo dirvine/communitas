@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Exact WebSocket client for real-time x0xd sessions.
 //!
 //! Supports the daemon's `/ws` and `/ws/direct` endpoints. Note that `/events`

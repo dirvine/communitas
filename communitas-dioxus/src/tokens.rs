@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Design tokens for consistent styling across Communitas UI.
 //!
 //! These tokens define the visual language of the application:

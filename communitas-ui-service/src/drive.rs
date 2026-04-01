@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Drive service for virtual disk operations with progress tracking.
 //!
 //! Provides a UI-friendly abstraction over the storage system with:

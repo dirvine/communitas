@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Board view component with columns, cards, and swimlane support.
 
 use communitas_ui_api::kanban::{BoardView as BoardViewData, CardState, CardView, SwimlaneMode};

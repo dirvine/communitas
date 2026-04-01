@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Card filtering system for the Kanban.
 //!
 //! This module provides [`CardFilter`] for querying cards based on

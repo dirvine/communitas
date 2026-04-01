@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Session Management for Multi-Account Support
 //!
 //! Handles authenticated sessions with automatic expiration,

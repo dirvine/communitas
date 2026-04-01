@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! KanbanService - High-level API for the Kanban system.
 //!
 //! This module provides [`KanbanService`], the main entry point for all

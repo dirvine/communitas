@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Modal for creating a new space (group) or joining an existing one via invite link.
 
 use crate::design_tokens::{motion, radius, semantic, shadow, spacing, typography};

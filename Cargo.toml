@@ -12,10 +12,10 @@ members = [
 ]
 
 [workspace.package]
-version = "0.11.4"
+version = "0.11.5"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
-license = "GPL-3.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/saorsalabs/communitas"
 homepage = "https://communitas.life"
 

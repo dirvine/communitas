@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! People/contacts management view.
 //!
 //! Shows contacts with trust levels, agent card import, and search.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use yrs::updates::decoder::Decode;
 use yrs::{Doc, GetString, ReadTxn, Text, Transact, Update};
 

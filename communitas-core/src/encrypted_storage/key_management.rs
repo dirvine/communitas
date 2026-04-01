@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Key Management with PBKDF2 and Platform Keyring Integration
 //!
 //! Implements secure key derivation using PBKDF2 with 100,000 iterations

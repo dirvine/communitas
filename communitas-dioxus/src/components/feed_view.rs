@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Social feed view for spaces.
 //!
 //! A simple post-based feed per space, published and received via the x0x

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Upload progress component with multi-file support.
 
 use communitas_ui_api::{DiskType, UploadProgress as UploadProgressData, UploadState};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Reusable sidebar section for displaying entity lists.
 //!
 //! This component consolidates the repetitive entity list patterns in the sidebar,

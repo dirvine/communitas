@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Integration tests for offline UX components in Communitas Dioxus.
 //!
 //! These tests verify the offline-first UX behavior including:

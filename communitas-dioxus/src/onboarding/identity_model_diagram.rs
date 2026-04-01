@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Identity model diagram component.
 //!
 //! Visual diagram explaining the WHO/WHERE/SHOWN identity model:

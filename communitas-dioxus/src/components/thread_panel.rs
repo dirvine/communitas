@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Thread panel component for threaded conversations.
 //!
 //! Opens as a side panel when clicking a thread indicator on a message.

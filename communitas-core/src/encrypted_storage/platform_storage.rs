@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Platform-specific secure storage implementation
 //!
 //! Handles OS-specific storage paths and integrates with platform security features:

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Page components that integrate the new Digital Forest Sanctuary design system.
 //!
 //! These pages use the v2 components (auth_v2, app_shell, entity_view, messaging_v2)

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Context-sensitive detail panel (360px right column).
 //!
 //! Displays different content based on the current selection:

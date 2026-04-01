@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Forward Error Correction Storage
 //!
 //! Provides resilient storage using Reed-Solomon erasure coding with

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Comprehensive CRDT Tests with Property-Based Testing
 //!
 //! Tests vector clocks, causal ordering, and CRDT message synchronization

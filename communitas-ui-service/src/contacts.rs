@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Contacts service layer for managing contact operations.
 //!
 //! This module provides a service wrapper around the Communitas core contact APIs,

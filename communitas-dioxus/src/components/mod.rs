@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Dioxus UI components for Communitas.
 //!
 //! This is a binary crate's component library. Many components and their re-exports

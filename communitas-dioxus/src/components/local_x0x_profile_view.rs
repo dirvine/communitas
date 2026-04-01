@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Local x0x identity/details view for the desktop-first shell.
 //!
 //! This is the owned-machine profile surface for the active Dioxus lane.

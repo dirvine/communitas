@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Comprehensive MessageSyncService Tests
 //!
 //! Tests message synchronization, out-of-order detection, missing message recovery,

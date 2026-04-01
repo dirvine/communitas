@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Layer panel component for canvas layer management.
 
 use communitas_ui_api::Layer;

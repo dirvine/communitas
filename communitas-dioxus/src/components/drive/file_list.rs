@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! File list component with list and grid views.
 
 use communitas_ui_api::{DirectoryEntry, SyncState};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Collaborative wiki pages per space using x0x KvStore.
 //!
 //! Each space gets a dedicated KvStore (`x0x-wiki-{group_prefix}`) holding:

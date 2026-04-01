@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Main application shell with 3-column layout.
 //!
 //! Layout structure:

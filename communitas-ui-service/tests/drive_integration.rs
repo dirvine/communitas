@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Integration tests for the drive service using real CommunitasApp.
 //!
 //! These tests verify the full drive flow including file operations,

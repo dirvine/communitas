@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Thin typed mirror of the x0xd REST and WebSocket APIs.
 //!
 //! This crate provides [`X0xClient`] for HTTP access to daemon routes,

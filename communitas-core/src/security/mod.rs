@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Security module for Communitas core
 //!
 //! This module provides security-related functionality including

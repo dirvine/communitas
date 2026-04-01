@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Presence Service for Group-Scoped Presence Beacons
 //!
 //! Implements SPEC.md S5: Presence model

@@ -1,5 +1,7 @@
 # ADR-007: Gossip Overlay Networking
 
+> **SUPERSEDED**: This ADR describes communitas' original peer-to-peer networking design. As of 2026-03, communitas delegates ALL networking to x0x daemon (see ADR-028). Retained for historical reference.
+
 ## Status
 
 Accepted (2025-12-24)

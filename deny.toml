@@ -46,7 +46,21 @@ skip = []
 [advisories]
 db-path = "$CARGO_HOME/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-ignore = []
+# GTK3 bindings are unmaintained (gtk-rs moved to GTK4) but Tauri 2 / Dioxus
+# still depend on them for Linux builds. No safe upgrade available — these are
+# transitive deps we can't control. Revisit when Tauri ships GTK4 support.
+ignore = [
+    "RUSTSEC-2024-0370",  # gdk-pixbuf — unmaintained
+    "RUSTSEC-2024-0384",  # gdk — unmaintained
+    "RUSTSEC-2024-0411",  # gtk — unmaintained
+    "RUSTSEC-2024-0412",  # pango — unmaintained
+    "RUSTSEC-2024-0413",  # atk — unmaintained
+    "RUSTSEC-2024-0415",  # gdk-sys — unmaintained
+    "RUSTSEC-2024-0416",  # atk-sys — unmaintained
+    "RUSTSEC-2024-0418",  # gio — unmaintained
+    "RUSTSEC-2024-0419",  # glib — unmaintained
+    "RUSTSEC-2024-0420",  # cairo-rs — unmaintained
+]
 
 [sources]
 unknown-registry = "deny"

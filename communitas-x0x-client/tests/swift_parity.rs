@@ -172,8 +172,7 @@ fn parity_map_covers_all_rust_methods() {
         }
     }
 
-    let mapped: std::collections::HashSet<&str> =
-        RUST_TO_SWIFT.iter().map(|(r, _)| *r).collect();
+    let mapped: std::collections::HashSet<&str> = RUST_TO_SWIFT.iter().map(|(r, _)| *r).collect();
 
     let mut unmapped = Vec::new();
     for method in &client_methods {

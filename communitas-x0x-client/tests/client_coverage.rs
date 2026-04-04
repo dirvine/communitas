@@ -53,9 +53,21 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     // Machines
     ("list_machines", "GET", "/contacts/:agent_id/machines"),
     ("add_machine", "POST", "/contacts/:agent_id/machines"),
-    ("remove_machine", "DELETE", "/contacts/:agent_id/machines/:machine_id"),
-    ("pin_machine", "POST", "/contacts/:agent_id/machines/:machine_id/pin"),
-    ("unpin_machine", "DELETE", "/contacts/:agent_id/machines/:machine_id/pin"),
+    (
+        "remove_machine",
+        "DELETE",
+        "/contacts/:agent_id/machines/:machine_id",
+    ),
+    (
+        "pin_machine",
+        "POST",
+        "/contacts/:agent_id/machines/:machine_id/pin",
+    ),
+    (
+        "unpin_machine",
+        "DELETE",
+        "/contacts/:agent_id/machines/:machine_id/pin",
+    ),
     // Trust
     ("evaluate_trust", "POST", "/trust/evaluate"),
     // MLS Groups
@@ -63,7 +75,11 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("list_mls_groups", "GET", "/mls/groups"),
     ("get_mls_group", "GET", "/mls/groups/:id"),
     ("add_mls_member", "POST", "/mls/groups/:id/members"),
-    ("remove_mls_member", "DELETE", "/mls/groups/:id/members/:agent_id"),
+    (
+        "remove_mls_member",
+        "DELETE",
+        "/mls/groups/:id/members/:agent_id",
+    ),
     ("encrypt", "POST", "/mls/groups/:id/encrypt"),
     ("decrypt", "POST", "/mls/groups/:id/decrypt"),
     ("create_mls_welcome", "POST", "/mls/groups/:id/welcome"),
@@ -170,11 +186,7 @@ fn no_duplicate_ws_methods() {
             dupes.push(*name);
         }
     }
-    assert!(
-        dupes.is_empty(),
-        "Duplicate WS method names: {:?}",
-        dupes
-    );
+    assert!(dupes.is_empty(), "Duplicate WS method names: {:?}", dupes);
 }
 
 /// Coverage count matches expected total.

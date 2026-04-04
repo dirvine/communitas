@@ -4,6 +4,41 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.11.5] - 2026-04-05
+
+### Documentation
+- Comprehensive documentation audit: fixed version references, broken links, stale ADR statuses
+- Updated ADR index with ADR-023 through ADR-028
+- Marked networking ADRs (007, 013, 014, 015) as superseded per ADR-028
+
+---
+
+## [0.11.0] - 2026-03
+
+### Changed
+- **x0x Daemon Delegation (ADR-028)**: All P2P networking delegated to x0xd daemon
+- Removed `communitas-mcp`, `communitas-headless`, `communitas-p2p-test` crates
+- Added `communitas-x0x-client` for x0xd REST + WebSocket integration
+- Networking ADRs (007, 013, 014, 015) superseded
+
+---
+
+## [0.10.0] - 2026-02
+
+### Added
+- ADR-023 through ADR-027: Security capability architecture (unlock grants, policy kernel, capability registry, principal hierarchy, canvas client strategy)
+- `communitas-workspace-hack` crate for dependency unification
+
+---
+
+## [0.9.0] - 2026-02
+
+### Changed
+- Workspace restructuring and crate consolidation
+- Version bumps for crates.io publishing alignment
+
+---
+
 ## [0.8.2] - 2026-01-25
 
 ### M8 Production Readiness & UX Polish

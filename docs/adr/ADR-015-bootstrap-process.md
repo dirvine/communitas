@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted (2025-01-15)
+Superseded (2026-03) — replaced by ADR-028 (x0x Daemon Networking Delegation)
 
 ## Context
 

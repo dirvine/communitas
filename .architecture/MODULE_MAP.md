@@ -4,8 +4,8 @@
 
 This document provides a factual inventory of the Communitas codebase, explicitly marking what exists today versus what is aspirational or required for future expansion.
 
-**Generated**: 2026-02-01
-**Version**: 0.8.2
+**Generated**: 2026-04-05
+**Version**: 0.11.5
 
 ---
 
@@ -24,15 +24,17 @@ This document provides a factual inventory of the Communitas codebase, explicitl
 
 | Crate | Purpose | Status |
 |-------|---------|--------|
-| `communitas-core` | Cross-platform business logic, P2P, crypto | **STABLE** |
+| `communitas-core` | Cross-platform business logic, crypto, storage | **STABLE** |
 | `communitas-ui-api` | Serializable view models (shared types) | **STABLE** |
 | `communitas-ui-service` | Shared service layer for all UI surfaces | **STABLE** |
 | `communitas-dioxus` | Desktop application (Dioxus + Tauri) | **STABLE** |
-| `communitas-mcp` | AI agent interface (MCP server) | **STABLE** |
-| `communitas-headless` | Bootstrap/seed node daemon | **STABLE** |
 | `communitas-kanban` | CRDT-based project boards | **STABLE** |
-| `communitas-p2p-test` | P2P testing utilities | **STABLE** |
+| `communitas-x0x-client` | x0xd daemon discovery, HTTP client, WebSocket | **STABLE** |
 | `communitas-bench` | Performance benchmarks | **EMERGING** |
+| `communitas-workspace-hack` | Workspace dependency unification | **STABLE** |
+| ~~`communitas-mcp`~~ | ~~AI agent interface~~ | **REMOVED** (networking delegated to x0xd) |
+| ~~`communitas-headless`~~ | ~~Bootstrap/seed node daemon~~ | **REMOVED** (replaced by x0xd) |
+| ~~`communitas-p2p-test`~~ | ~~P2P testing utilities~~ | **REMOVED** (networking delegated to x0xd) |
 
 ---
 
@@ -92,19 +94,21 @@ This document provides a factual inventory of the Communitas codebase, explicitl
 | `crdt_manager/` | CRDT lifecycle management | **STABLE** |
 | `legacy_crdt.rs` | Legacy vector clock (deprecated) | **DEPRECATED** |
 
-### 2.6 Gossip Overlay Network
+### 2.6 Gossip Overlay Network (REMOVED — ADR-028)
+
+> **Note**: The `gossip/` module tree was removed when networking was delegated to the x0x daemon (ADR-028, 2026-03). All P2P networking now goes through `communitas-x0x-client`.
 
 | Module | Purpose | Status |
 |--------|---------|--------|
-| `gossip/context.rs` | GossipContext orchestrator | **STABLE** |
-| `gossip/boot.rs` | GossipBootSequence | **STABLE** |
-| `gossip/presence.rs` | PresenceInfo, PresenceWrapper | **STABLE** |
-| `gossip/discovery.rs` | FoafDiscovery, IntroducerConfig | **STABLE** |
-| `gossip/sites.rs` | SitePublisher, SiteFetcher (DNS-free web) | **EMERGING** |
-| `gossip/contact_storage.rs` | ContactStore, ContactRecord | **STABLE** |
-| `gossip/peer_cache.rs` | PeerCache | **STABLE** |
-| `gossip/backup.rs` | BackupManager | **EMERGING** |
-| `gossip/name_record.rs` | NameRegistry (DNS-free names) | **EMERGING** |
+| ~~`gossip/context.rs`~~ | ~~GossipContext orchestrator~~ | **REMOVED** |
+| ~~`gossip/boot.rs`~~ | ~~GossipBootSequence~~ | **REMOVED** |
+| ~~`gossip/presence.rs`~~ | ~~PresenceInfo, PresenceWrapper~~ | **REMOVED** |
+| ~~`gossip/discovery.rs`~~ | ~~FoafDiscovery, IntroducerConfig~~ | **REMOVED** |
+| ~~`gossip/sites.rs`~~ | ~~SitePublisher, SiteFetcher~~ | **REMOVED** |
+| ~~`gossip/contact_storage.rs`~~ | ~~ContactStore, ContactRecord~~ | **REMOVED** |
+| ~~`gossip/peer_cache.rs`~~ | ~~PeerCache~~ | **REMOVED** |
+| ~~`gossip/backup.rs`~~ | ~~BackupManager~~ | **REMOVED** |
+| ~~`gossip/name_record.rs`~~ | ~~NameRegistry~~ | **REMOVED** |
 
 ### 2.7 Security Infrastructure
 
@@ -118,14 +122,16 @@ This document provides a factual inventory of the Communitas codebase, explicitl
 | `security/device.rs` | Device identification | **EMERGING** |
 | `validation.rs` | ValidationService | **STABLE** |
 
-### 2.8 WebRTC
+### 2.8 WebRTC (REMOVED — ADR-028)
+
+> **Note**: The `webrtc/` module tree was removed when networking was delegated to the x0x daemon (ADR-028, 2026-03).
 
 | Module | Purpose | Status |
 |--------|---------|--------|
-| `webrtc/service.rs` | CommunitasWebRtcService | **STABLE** |
-| `webrtc/gossip_signaling.rs` | GossipSignalingTransport | **STABLE** |
-| `webrtc/identity.rs` | CommunitasIdentity wrapper | **STABLE** |
-| `webrtc/recorder.rs` | Recording sessions | **EMERGING** |
+| ~~`webrtc/service.rs`~~ | ~~CommunitasWebRtcService~~ | **REMOVED** |
+| ~~`webrtc/gossip_signaling.rs`~~ | ~~GossipSignalingTransport~~ | **REMOVED** |
+| ~~`webrtc/identity.rs`~~ | ~~CommunitasIdentity wrapper~~ | **REMOVED** |
+| ~~`webrtc/recorder.rs`~~ | ~~Recording sessions~~ | **REMOVED** |
 
 ### 2.9 Resilience & Observability
 
@@ -164,19 +170,9 @@ This document provides a factual inventory of the Communitas codebase, explicitl
 
 ---
 
-## 4. communitas-mcp Modules
+## 4. communitas-mcp Modules (REMOVED)
 
-| Module | Purpose | Status |
-|--------|---------|--------|
-| `server.rs` | McpServer JSON-RPC handler | **STABLE** |
-| `tools.rs` | Tool definitions (120+ tools) | **STABLE** |
-| `protocol.rs` | MCP protocol types | **STABLE** |
-| `auth.rs` | AuthState, Scopes, UnlockLease | **STABLE** |
-| `token.rs` | Delegate token management | **STABLE** |
-| `http.rs` | HTTPS transport | **STABLE** |
-| `tls.rs` | Post-quantum TLS setup | **STABLE** |
-| `ui_resources.rs` | MCP Apps UI widgets | **STABLE** |
-| `ui_session.rs` | UI session tokens | **STABLE** |
+> **Note**: The `communitas-mcp` crate was removed when networking was delegated to x0xd (ADR-028). MCP functionality is now provided by x0xd's built-in MCP server.
 
 ---
 

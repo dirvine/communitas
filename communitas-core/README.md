@@ -4,13 +4,13 @@ Core business logic library for the Communitas P2P collaboration platform.
 
 ## Overview
 
-Communitas Core is a Rust library that provides all the essential functionality for building decentralized collaboration applications. It's used by both the desktop application and headless daemon, providing a consistent API without any UI dependencies.
+Communitas Core is a Rust library that provides all the essential functionality for building decentralized collaboration applications. It's used by the Dioxus desktop application and the native macOS Swift app, providing a consistent API without any UI dependencies. All P2P networking is delegated to the x0x daemon (x0xd) via `communitas-x0x-client` (see ADR-028).
 
 ## Features
 
 - **Post-Quantum Cryptography**: ML-DSA signatures and ML-KEM key exchange
 - **Connection Words (four-word networking)**: Human-readable IP:port encoding for peer dialing
-- **Gossip Overlay Network**: Distributed P2P communication layer
+- **x0x Daemon Integration**: All P2P networking via x0xd REST + WebSocket API
 - **CRDT Document Sync**: Conflict-free collaborative editing with Yrs
 - **Encrypted Storage**: Platform-specific secure credential storage (keyring)
 - **Presence Service**: Real-time user availability tracking
@@ -29,18 +29,6 @@ communitas-core/
 ├── crdt.rs                  # CRDT document operations
 ├── doc_replicator.rs        # Document replication logic
 ├── encrypted_storage/       # Secure credential storage
-├── gossip/                  # P2P gossip overlay
-│   ├── context.rs          # Gossip network context
-│   ├── coordinator.rs      # Message coordination
-│   ├── crdt_sync.rs        # CRDT synchronization
-│   ├── groups.rs           # Group management
-│   ├── identity.rs         # Identity operations
-│   ├── membership.rs       # Membership tracking
-│   ├── presence.rs         # Presence detection
-│   ├── pubsub.rs          # Publish-subscribe messaging
-│   ├── rendezvous.rs      # Peer rendezvous
-│   ├── transport.rs       # Network transport
-│   └── types.rs           # Shared types
 ├── identity.rs             # Identity + connection word encoding helpers
 ├── keystore.rs            # Cryptographic key storage
 ├── local_storage.rs       # Local data persistence
@@ -49,6 +37,8 @@ communitas-core/
 ├── security/              # Security primitives
 └── storage/               # Storage abstractions
 ```
+
+> **Note**: P2P networking (gossip, transport, peer discovery) was removed in favor of the x0x daemon (ADR-028). See `communitas-x0x-client` for the networking API.
 
 ## Quick Start
 
@@ -65,35 +55,25 @@ tokio = { version = "1.39", features = ["full"] }
 ### Basic Usage
 
 ```rust
-use communitas_core::{CoreContext, AuthService, GossipContext};
+use communitas_x0x_client::{X0xClient, DaemonManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize core context
-    let core_ctx = CoreContext::new("./data").await?;
+    // Ensure x0xd is running (installs if needed)
+    let dm = DaemonManager::new();
+    dm.ensure_running().await?;
 
-    // Create identity (public key based)
-    let auth = AuthService::new(core_ctx.clone()).await?;
-    let session = auth.register(
-        "pubkey_hex_or_identity_id",
-        "Alice",
-        "Desktop-01",
-        "secure-password"
-    ).await?;
+    // Auto-discover daemon address + token and connect
+    let client = X0xClient::new();
+    let identity = client.agent().await?;
+    println!("Agent ID: {}", identity.agent_id);
 
-    println!("Created identity: {}", session.four_words);
-    println!("Entity ID: {}", session.entity_id);
+    // Publish a message to a gossip topic
+    client.publish("general-chat", b"Hello, World!").await?;
 
-    // Initialize gossip network
-    let gossip = GossipContext::new(core_ctx).await?;
-    gossip.start().await?;
-
-    // Send message to channel
-    gossip.publish(
-        "channel-id",
-        "Hello, World!".as_bytes(),
-        vec!["recipient-identity"]
-    ).await?;
+    // Check online peers
+    let agents = client.presence().await?;
+    println!("Online agents: {:?}", agents);
 
     Ok(())
 }
@@ -146,42 +126,49 @@ let session = auth.login(
 auth.logout().await?;
 ```
 
-## Gossip Network
+## Networking (via x0xd)
 
-### Network Initialization
+All P2P networking is delegated to the x0x daemon. See [ADR-028](../docs/adr/ADR-028-x0x-daemon-networking-delegation.md).
+
+### Gossip Pub/Sub
 
 ```rust
-use communitas_core::{GossipContext, CoreContext};
+use communitas_x0x_client::X0xClient;
 
-let core_ctx = CoreContext::new("./data").await?;
-let gossip = GossipContext::new(core_ctx).await?;
+let client = X0xClient::new();
 
-// Start gossip network
-gossip.start().await?;
-
-// Join a topic
-gossip.subscribe("general-chat").await?;
+// Subscribe to a topic
+let sub_id = client.subscribe("general-chat").await?;
 
 // Publish message
-gossip.publish(
-    "general-chat",
-    b"Hello everyone!",
-    vec![] // Empty = broadcast to all subscribers
-).await?;
+client.publish("general-chat", b"Hello everyone!").await?;
+
+// Unsubscribe when done
+client.unsubscribe(&sub_id).await?;
 ```
 
 ### Peer Discovery
 
 ```rust
-// Discover peers via rendezvous
-let peers = gossip.discover_peers("general-chat").await?;
-
-for peer in peers {
-    println!("Found peer: {:?}", peer);
+// Discover agents on the network
+let agents = client.discovered_agents().await?;
+for agent in agents {
+    println!("Found agent: {:?}", agent);
 }
 
-// Check online presence
-let is_online = gossip.is_online("ocean-forest-moon-star").await?;
+// Check who's online
+let online = client.presence().await?;
+println!("Online: {:?}", online);
+```
+
+### Direct Messaging
+
+```rust
+// Connect to a specific agent
+client.connect_agent("agent-id-hex").await?;
+
+// Send a direct message
+client.send_direct("agent-id-hex", b"Private message").await?;
 ```
 
 ## CRDT Document Collaboration
@@ -276,54 +263,38 @@ let content = storage.get_content(&hash).await?;
 
 ## Message Synchronization
 
-### Reliable Messaging
+Messaging is handled through x0xd's gossip pub/sub and direct messaging APIs. For reliable delivery, use direct messaging with connection management:
 
 ```rust
-use communitas_core::message_sync::MessageSync;
+use communitas_x0x_client::X0xClient;
 
-let sync = MessageSync::new(gossip_ctx.clone()).await?;
+let client = X0xClient::new();
 
-// Send message with automatic retry
-sync.send_reliable(
-    "recipient-identity",
-    "channel-id",
-    b"Important message"
-).await?;
+// Direct reliable messaging to a specific agent
+client.connect_agent("recipient-agent-id").await?;
+client.send_direct("recipient-agent-id", b"Important message").await?;
 
-// Receive messages
-let messages = sync.receive_since(last_timestamp).await?;
-
-for msg in messages {
-    println!("From: {}, Content: {:?}", msg.sender, msg.content);
-}
+// Broadcast to a topic for group messaging
+client.publish("channel-topic", b"Hello channel!").await?;
 ```
 
 ## Presence Service
 
-### Online Status Tracking
+Online status is tracked by the x0x daemon. Query it via the REST API:
 
 ```rust
-use communitas_core::presence_service::PresenceService;
+use communitas_x0x_client::X0xClient;
 
-let presence = PresenceService::new(gossip_ctx.clone()).await?;
+let client = X0xClient::new();
 
-// Set own status
-presence.set_status("online", "Working on docs").await?;
+// List all online agents
+let online_agents = client.presence().await?;
+for agent_id in &online_agents {
+    println!("{} is online", agent_id);
+}
 
-// Check peer status
-let status = presence.get_status("ocean-forest-moon-star").await?;
-println!("Status: {:?}", status);
-
-// Subscribe to presence changes
-presence.subscribe(|event| {
-    match event {
-        PresenceEvent::Online(peer) => println!("{} came online", peer),
-        PresenceEvent::Offline(peer) => println!("{} went offline", peer),
-        PresenceEvent::StatusChange(peer, status) => {
-            println!("{} changed status to {}", peer, status)
-        }
-    }
-}).await?;
+// For real-time presence updates, use the WebSocket connection
+// which streams events including presence changes.
 ```
 
 ## Security
@@ -477,13 +448,17 @@ cargo doc -p communitas-core --open
 cargo test -p communitas-core -- identity::tests
 ```
 
-**Gossip Network Won't Start**
+**x0xd Daemon Not Reachable**
 ```bash
-# Check port availability
-lsof -i :8080
+# Check if x0xd is running
+pgrep -f x0xd
+
+# Check config files exist
+cat ~/Library/Application\ Support/x0x/api.port
+cat ~/Library/Application\ Support/x0x/api-token
 
 # Enable debug logging
-RUST_LOG=communitas_core::gossip=debug cargo run
+RUST_LOG=communitas_x0x_client=debug cargo run
 ```
 
 **Storage Errors**
@@ -506,7 +481,7 @@ security delete-generic-password -s "communitas"
 
 ## Contributing
 
-See [../../docs/development/contributing.md](../../docs/development/contributing.md)
+See [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ## License
 
@@ -514,7 +489,7 @@ Dual-licensed under AGPL-3.0-or-later and commercial license.
 
 ## See Also
 
-- [Communitas Desktop](../communitas-desktop/README.md) - Desktop application using this core
-- [Communitas Headless](../communitas-headless/README.md) - Headless daemon using this core
+- [Communitas Dioxus](../communitas-dioxus/) - Cross-platform Dioxus + Tauri desktop application
+- [Communitas Apple](../communitas-apple/) - Native macOS SwiftUI application
 - [Architecture Documentation](../../docs/architecture/) - System architecture details
 - [API Reference](../../docs/api/) - Complete API documentation

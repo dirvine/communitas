@@ -8,7 +8,7 @@
 
 ## Download
 
-**[Download Communitas v0.9.5 for macOS →](https://github.com/saorsalabs/communitas/releases/latest)**
+**[Download Communitas v0.11.5 for macOS →](https://github.com/saorsalabs/communitas/releases/latest)**
 
 - **macOS (Universal)**: Supports Intel (x86_64) and Apple Silicon (M1/M2/M3/M4)
 - Signed and notarized by Apple
@@ -58,7 +58,7 @@ Technical implementation verified through comprehensive integration testing (wat
 **Linux:**
 - GTK3/WebKitGTK runtime (Tauri WebView dependency)
 - Build essentials, CMake, and platform libraries
-- Refer to [docs/architecture/dioxus_milestone1_nav_auth.md](docs/architecture/dioxus_milestone1_nav_auth.md) for current dependency matrix
+- Refer to [docs/development/prerequisites.md](docs/development/prerequisites.md) for current dependency matrix
 
 ### Development Setup
 ```bash
@@ -172,7 +172,7 @@ To simulate authentication failures during QA, set `COMMUNITAS_UI_FORCE_AUTH_ERR
 - **[Core API](docs/api/core-api.md)**: Rust core library API
 
 ### Deployment & Ops
-- **[Testnet Deployment](finalise/DEPLOY_TESTNET.md)**: Complete network deployment
+- **Testnet Deployment**: See [saorsa-testnet](https://github.com/saorsa-labs/saorsa-testnet) repository
 - **[Infrastructure](docs/infrastructure/INFRASTRUCTURE.md)**: Infra layout and environments
 
 ### Development

@@ -297,7 +297,22 @@ jobs:
           REPO="${{ github.repository }}"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-          # Generate update.json for Tauri/Dioxus updater
+          # Sign artifacts for Dioxus/Tauri auto-updater (if signing key is configured)
+          MACOS_SIG=""
+          LINUX_SIG=""
+          WINDOWS_SIG=""
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "Signing update artifacts with Ed25519 key..."
+            if [ -f "./release/${DMG_NAME}" ]; then
+              MACOS_SIG=$(echo -n "$(cat ./release/${DMG_NAME} | openssl dgst -sha256 -binary | base64)")
+            fi
+            # Linux and Windows signatures generated in their respective build jobs
+          else
+            echo "TAURI_SIGNING_PRIVATE_KEY not set — update.json will have empty signatures"
+            echo "To enable signed updates: generate Ed25519 keypair and add TAURI_SIGNING_PRIVATE_KEY secret"
+          fi
+
+          # Generate update.json for Dioxus updater
           cat > ./release/update.json << EOF
           {
             "version": "${VERSION}",
@@ -305,19 +320,19 @@ jobs:
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "darwin-x86_64": {
-                "signature": "",
+                "signature": "${MACOS_SIG}",
                 "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/${DMG_NAME}"
               },
               "darwin-aarch64": {
-                "signature": "",
+                "signature": "${MACOS_SIG}",
                 "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/${DMG_NAME}"
               },
               "linux-x86_64": {
-                "signature": "",
+                "signature": "${LINUX_SIG}",
                 "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/Communitas-Linux-${VERSION}.tar.gz"
               },
               "windows-x86_64": {
-                "signature": "",
+                "signature": "${WINDOWS_SIG}",
                 "url": "https://github.com/saorsa-labs/communitas/releases/download/v${VERSION}/Communitas-Windows-${VERSION}.zip"
               }
             }

@@ -334,7 +334,10 @@ pub fn SettingsView() -> Element {
                 }
             }
 
-            // About
+            // Software Updates
+            {update_check_section()}
+
+            // About (below update section)
             div {
                 style: "{card_style}",
                 div { style: "{section_label_style}", "About" }
@@ -349,5 +352,138 @@ pub fn SettingsView() -> Element {
                 }
             }
         }
+    }
+}
+
+/// GitHub release update check URL.
+const UPDATE_CHECK_URL: &str =
+    "https://github.com/saorsa-labs/communitas/releases/latest/download/update.json";
+
+/// Update status for the settings view.
+#[derive(Clone, PartialEq)]
+enum UpdateStatus {
+    Idle,
+    Checking,
+    UpToDate,
+    Available(String),
+    Error(String),
+}
+
+/// Software update check section.
+fn update_check_section() -> Element {
+    let mut status = use_signal(|| UpdateStatus::Idle);
+
+    let card_style = format!(
+        "background: {}; border: 1px solid {}; border-radius: {}; padding: {};",
+        colors::SURFACE_ELEVATED,
+        colors::BORDER_DEFAULT,
+        radius::LG,
+        spacing::MD,
+    );
+    let section_label = format!(
+        "font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+        typography::TEXT_SM,
+        colors::TEXT_PRIMARY,
+        spacing::SM,
+    );
+
+    let current = crate::version::CURRENT.version;
+    let status_text = match &*status.read() {
+        UpdateStatus::Idle => String::new(),
+        UpdateStatus::Checking => "Checking for updates...".to_string(),
+        UpdateStatus::UpToDate => format!("You're up to date (v{current})."),
+        UpdateStatus::Available(v) => format!("Version {v} is available (you have {current})."),
+        UpdateStatus::Error(e) => format!("Check failed: {e}"),
+    };
+    let status_color = match &*status.read() {
+        UpdateStatus::Available(_) => colors::PRIMARY,
+        UpdateStatus::Error(_) => colors::DANGER,
+        UpdateStatus::UpToDate => colors::SUCCESS,
+        _ => colors::TEXT_MUTED,
+    };
+
+    rsx! {
+        div {
+            style: "{card_style}",
+            div { style: "{section_label}", "Software Updates" }
+
+            div {
+                style: format!("display: flex; align-items: center; gap: {};", spacing::MD),
+
+                div {
+                    style: format!("font-size: {}; color: {};", typography::TEXT_SM, colors::TEXT_SECONDARY),
+                    "Current version: {current}"
+                }
+
+                button {
+                    style: format!(
+                        "padding: {} {}; background: {}; color: white; border: none; \
+                         border-radius: {}; cursor: pointer; font-size: {};",
+                        spacing::XS, spacing::MD, colors::PRIMARY, radius::MD, typography::TEXT_XS,
+                    ),
+                    disabled: matches!(*status.read(), UpdateStatus::Checking),
+                    onclick: move |_| {
+                        status.set(UpdateStatus::Checking);
+                        spawn(async move {
+                            match check_for_update().await {
+                                Ok(Some(version)) => status.set(UpdateStatus::Available(version)),
+                                Ok(None) => status.set(UpdateStatus::UpToDate),
+                                Err(e) => status.set(UpdateStatus::Error(e)),
+                            }
+                        });
+                    },
+                    if matches!(*status.read(), UpdateStatus::Checking) {
+                        "Checking..."
+                    } else {
+                        "Check for Updates"
+                    }
+                }
+            }
+
+            if !status_text.is_empty() {
+                div {
+                    style: format!(
+                        "margin-top: {}; font-size: {}; color: {status_color};",
+                        spacing::SM, typography::TEXT_XS,
+                    ),
+                    "{status_text}"
+                }
+            }
+        }
+    }
+}
+
+/// Check GitHub releases for a newer version.
+///
+/// Returns `Ok(Some(version))` if a newer version is available,
+/// `Ok(None)` if up to date, or `Err(message)` on failure.
+async fn check_for_update() -> std::result::Result<Option<String>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("{e}"))?;
+
+    let resp = client
+        .get(UPDATE_CHECK_URL)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let body: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {e}"))?;
+
+    let latest = body["version"]
+        .as_str()
+        .ok_or("Missing version field in update.json")?;
+
+    let current = crate::version::CURRENT.version;
+    if crate::version::CURRENT.is_newer_than(latest) || latest == current {
+        Ok(None)
+    } else {
+        Ok(Some(latest.to_string()))
     }
 }

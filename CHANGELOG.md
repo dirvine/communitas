@@ -4,6 +4,14 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.11.8] - 2026-04-05
+
+### Fixed
+- Aligned the crates publish workflow with repository clippy policy instead of failing on unrelated style warnings
+- Removed `communitas-workspace-hack` from publishable crate manifests and added `communitas-x0x-client` to staged crates.io publishing so release publishes validate cleanly
+
+---
+
 ## [0.11.7] - 2026-04-05
 
 ### Fixed

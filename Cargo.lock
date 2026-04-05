@@ -792,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-core"
-version = "0.11.7"
+version = "0.11.8"
 dependencies = [
  "ammonia",
  "anyhow",
@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-dioxus"
-version = "0.11.7"
+version = "0.11.8"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -884,7 +884,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-kanban"
-version = "0.11.7"
+version = "0.11.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -901,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-ui-api"
-version = "0.11.7"
+version = "0.11.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -909,7 +909,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-ui-service"
-version = "0.11.7"
+version = "0.11.8"
 dependencies = [
  "async-trait",
  "blake3",
@@ -1001,7 +1001,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-x0x-client"
-version = "0.11.7"
+version = "0.11.8"
 dependencies = [
  "base64 0.22.1",
  "dirs-next",

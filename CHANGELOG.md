@@ -4,6 +4,13 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.11.7] - 2026-04-05
+
+### Fixed
+- Aligned `communitas-x0x-client` parity tests with the Rust 1.88 formatter used in CI so release, publish, and security workflows stay green
+
+---
+
 ## [0.11.6] - 2026-04-05
 
 ### Added

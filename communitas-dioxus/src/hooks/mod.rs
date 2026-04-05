@@ -12,9 +12,13 @@
 
 pub mod focus;
 pub mod use_categorized_entities;
+pub mod use_presence;
 
 // Re-export focus utilities
 pub use focus::{FocusTrapConfig, use_auto_focus, use_focus_trap, use_return_focus};
 
 // Re-export entity categorization
 pub use use_categorized_entities::CategorizedEntities;
+
+// Re-export presence polling
+pub use use_presence::use_presence;

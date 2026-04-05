@@ -4,6 +4,7 @@
 
 use communitas_x0x_client::{FileTransfer, TransferDirection, TransferStatus, X0xClient};
 use dioxus::prelude::*;
+use sha2::{Digest, Sha256};
 use tracing::warn;
 
 use crate::tokens::{colors, radius, spacing, typography};
@@ -124,25 +125,8 @@ pub fn FilesView(props: FilesViewProps) -> Element {
                 }
             }
 
-            // Drop zone placeholder
-            div {
-                style: format!(
-                    "border: 2px dashed {}; border-radius: {}; padding: {}; \
-                     text-align: center; color: {};",
-                    colors::BORDER_DEFAULT,
-                    radius::LG,
-                    spacing::LG,
-                    colors::TEXT_MUTED,
-                ),
-                div {
-                    style: format!("font-size: {}; margin-bottom: {};", typography::TEXT_SM, spacing::SM),
-                    "File sending is available via the x0x CLI"
-                }
-                div {
-                    style: format!("font-size: {};", typography::TEXT_XS),
-                    "Use: x0x send-file <agent-id> <file-path>"
-                }
-            }
+            // Send file form
+            {send_file_form(refresh_key)}
 
             // Incoming files requiring action
             if !incoming_pending.is_empty() {
@@ -340,6 +324,152 @@ pub fn FilesView(props: FilesViewProps) -> Element {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Send file form — agent ID + file path inputs.
+fn send_file_form(mut refresh_key: Signal<u64>) -> Element {
+    let mut agent_id_input = use_signal(String::new);
+    let mut file_path_input = use_signal(String::new);
+    let mut sending = use_signal(|| false);
+    let mut send_error = use_signal(|| None::<String>);
+    let mut send_success = use_signal(|| None::<String>);
+
+    let card_style = format!(
+        "background-color: {}; border: 1px solid {}; border-radius: {}; padding: {};",
+        colors::SURFACE_ELEVATED,
+        colors::BORDER_DEFAULT,
+        radius::LG,
+        spacing::MD,
+    );
+
+    let input_style = format!(
+        "flex: 1; padding: {} {}; border: 1px solid {}; border-radius: {}; \
+         background: {}; color: {}; font-size: {};",
+        spacing::SM,
+        spacing::MD,
+        colors::BORDER_DEFAULT,
+        radius::MD,
+        colors::SURFACE_CARD,
+        colors::TEXT_PRIMARY,
+        typography::TEXT_SM,
+    );
+
+    rsx! {
+        div {
+            style: "{card_style}",
+            div {
+                style: format!(
+                    "font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+                    typography::TEXT_SM, colors::TEXT_PRIMARY, spacing::SM,
+                ),
+                "Send File"
+            }
+
+            div {
+                style: format!("display: flex; flex-direction: column; gap: {};", spacing::SM),
+
+                input {
+                    style: "{input_style}",
+                    r#type: "text",
+                    placeholder: "Recipient agent ID (hex)",
+                    value: "{agent_id_input}",
+                    oninput: move |evt: FormEvent| agent_id_input.set(evt.value()),
+                }
+                input {
+                    style: "{input_style}",
+                    r#type: "text",
+                    placeholder: "File path (e.g. /Users/me/file.pdf)",
+                    value: "{file_path_input}",
+                    oninput: move |evt: FormEvent| file_path_input.set(evt.value()),
+                }
+
+                if let Some(ref err) = *send_error.read() {
+                    div {
+                        style: format!("color: {}; font-size: {};", colors::DANGER, typography::TEXT_XS),
+                        "{err}"
+                    }
+                }
+                if let Some(ref msg) = *send_success.read() {
+                    div {
+                        style: format!("color: {}; font-size: {};", colors::SUCCESS, typography::TEXT_XS),
+                        "{msg}"
+                    }
+                }
+
+                button {
+                    style: format!(
+                        "padding: {} {}; background: {}; color: white; border: none; \
+                         border-radius: {}; cursor: pointer; font-size: {}; align-self: flex-start;",
+                        spacing::SM, spacing::LG, colors::PRIMARY, radius::MD, typography::TEXT_SM,
+                    ),
+                    disabled: sending(),
+                    onclick: move |_| {
+                        let agent_id = agent_id_input().trim().to_string();
+                        let file_path = file_path_input().trim().to_string();
+                        if agent_id.is_empty() || file_path.is_empty() {
+                            send_error.set(Some("Both agent ID and file path are required".into()));
+                            return;
+                        }
+                        sending.set(true);
+                        send_error.set(None);
+                        send_success.set(None);
+
+                        spawn(async move {
+                            let path = std::path::Path::new(&file_path);
+                            let meta = match tokio::fs::metadata(path).await {
+                                Ok(m) => m,
+                                Err(e) => {
+                                    send_error.set(Some(format!("Cannot read file: {e}")));
+                                    sending.set(false);
+                                    return;
+                                }
+                            };
+                            let size = meta.len();
+                            let filename = path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "file".to_string());
+
+                            // Compute SHA-256
+                            let data = match tokio::fs::read(path).await {
+                                Ok(d) => d,
+                                Err(e) => {
+                                    send_error.set(Some(format!("Failed to read file: {e}")));
+                                    sending.set(false);
+                                    return;
+                                }
+                            };
+                            let hash = Sha256::digest(&data);
+                            let sha256 = format!("{hash:x}");
+
+                            let client = X0xClient::new();
+                            match client
+                                .send_file(&agent_id, &filename, size, &sha256, Some(&file_path))
+                                .await
+                            {
+                                Ok(transfer_id) => {
+                                    let short = if transfer_id.len() > 8 {
+                                        &transfer_id[..8]
+                                    } else {
+                                        &transfer_id
+                                    };
+                                    send_success.set(Some(format!(
+                                        "Transfer started: {short}"
+                                    )));
+                                    agent_id_input.set(String::new());
+                                    file_path_input.set(String::new());
+                                    refresh_key.set(refresh_key() + 1);
+                                }
+                                Err(e) => send_error.set(Some(format!("Send failed: {e}"))),
+                            }
+                            sending.set(false);
+                        });
+                    },
+                    if sending() { "Sending..." } else { "Send File" }
                 }
             }
         }

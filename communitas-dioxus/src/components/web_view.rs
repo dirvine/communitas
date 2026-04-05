@@ -91,8 +91,13 @@ pub fn WebView(props: WebViewProps) -> Element {
         async move {
             let client = X0xClient::new();
 
-            // Ensure the store exists
-            if let Err(e) = client.create_store(&store_id, &store_id).await {
+            // Create store if it doesn't already exist (check first to avoid 409)
+            let store_exists = client
+                .list_stores()
+                .await
+                .map(|stores| stores.iter().any(|s| s.id == store_id))
+                .unwrap_or(false);
+            if !store_exists && let Err(e) = client.create_store(&store_id, &store_id).await {
                 let msg = format!("{e}");
                 if !msg.contains("409") && !msg.contains("already") && !msg.contains("exists") {
                     warn!(target: "ui.web", "failed to create web store {store_id}: {e}");

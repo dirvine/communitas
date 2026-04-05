@@ -286,10 +286,13 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
                         }
                     },
 
-                    SpaceTab::Board => rsx! {
-                        div {
-                            style: "flex: 1; overflow: auto;",
-                            components::kanban::BoardListPage {}
+                    SpaceTab::Board => {
+                        let gid = space_id.clone();
+                        rsx! {
+                            div {
+                                style: "flex: 1; overflow: auto;",
+                                components::board_view::BoardView { group_id: gid }
+                            }
                         }
                     },
 

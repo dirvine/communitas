@@ -12,6 +12,7 @@ pub mod announcer;
 pub mod app_shell;
 pub mod app_sidebar;
 pub mod auth_v2;
+pub mod board_view;
 pub mod canvas;
 pub mod channel_chat;
 pub mod channel_sidebar;

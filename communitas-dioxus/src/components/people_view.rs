@@ -82,6 +82,10 @@ pub fn PeopleView() -> Element {
     let mut import_input = use_signal(String::new);
     let mut import_busy = use_signal(|| false);
     let mut import_error = use_signal(|| None::<String>);
+    let mut add_agent_id = use_signal(String::new);
+    let mut add_label = use_signal(String::new);
+    let mut add_busy = use_signal(|| false);
+    let mut add_error = use_signal(|| None::<String>);
     let mut refresh_key = use_signal(|| 0u64);
 
     // Discovered agents state
@@ -268,6 +272,70 @@ pub fn PeopleView() -> Element {
                             spacing::SM,
                             typography::TEXT_XS,
                             colors::DANGER,
+                        ),
+                        "{err}"
+                    }
+                }
+            }
+
+            // Add contact by agent ID
+            div {
+                style: "{card_style}",
+                div {
+                    style: format!(
+                        "font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+                        typography::TEXT_SM, colors::TEXT_PRIMARY, spacing::SM,
+                    ),
+                    "Add Contact by Agent ID"
+                }
+                div {
+                    style: format!("display: flex; gap: {};", spacing::SM),
+                    input {
+                        style: "{input_style}",
+                        r#type: "text",
+                        placeholder: "Agent ID (64 hex chars)",
+                        value: "{add_agent_id}",
+                        oninput: move |evt: FormEvent| add_agent_id.set(evt.value()),
+                    }
+                    input {
+                        style: "{input_style}",
+                        r#type: "text",
+                        placeholder: "Label (optional)",
+                        value: "{add_label}",
+                        oninput: move |evt: FormEvent| add_label.set(evt.value()),
+                    }
+                    button {
+                        style: "{btn_style}",
+                        disabled: add_busy() || add_agent_id().trim().is_empty(),
+                        onclick: move |_| {
+                            let agent_id = add_agent_id().trim().to_string();
+                            if agent_id.is_empty() { return; }
+                            let label = add_label().trim().to_string();
+                            let label_opt = if label.is_empty() { None } else { Some(label) };
+                            add_busy.set(true);
+                            add_error.set(None);
+
+                            spawn(async move {
+                                let client = X0xClient::new();
+                                match client.add_contact(&agent_id, TrustLevel::Known, label_opt.as_deref()).await {
+                                    Ok(_) => {
+                                        add_agent_id.set(String::new());
+                                        add_label.set(String::new());
+                                        refresh_key.set(refresh_key() + 1);
+                                    }
+                                    Err(e) => add_error.set(Some(format!("{e}"))),
+                                }
+                                add_busy.set(false);
+                            });
+                        },
+                        if add_busy() { "Adding..." } else { "Add" }
+                    }
+                }
+                if let Some(ref err) = *add_error.read() {
+                    div {
+                        style: format!(
+                            "margin-top: {}; font-size: {}; color: {};",
+                            spacing::SM, typography::TEXT_XS, colors::DANGER,
                         ),
                         "{err}"
                     }

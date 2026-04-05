@@ -11,9 +11,9 @@
 
 use std::sync::Arc;
 
+use communitas_core::EntityType;
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event};
-use communitas_core::legacy_crdt::EntityType;
 use communitas_kanban::TimeRange;
 use communitas_ui_api::kanban::{CardState, PriorityView, SwimlaneMode};
 use communitas_ui_service::UiServices;

@@ -1,4 +1,0 @@
-hakari-package = "communitas-workspace-hack"
-dep-format-version = "4"
-resolver = "2"
-platforms = []

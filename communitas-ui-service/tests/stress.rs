@@ -14,9 +14,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use communitas_core::EntityType;
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event};
-use communitas_core::legacy_crdt::EntityType;
 use communitas_ui_service::UiServices;
 use communitas_ui_service::kanban::CardUpdate;
 use communitas_ui_service::storage::UiStorage;

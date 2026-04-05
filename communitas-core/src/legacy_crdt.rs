@@ -145,29 +145,8 @@ pub struct MessageMetadata {
     pub reply_to_id: Option<String>,         // If replying to specific message
 }
 
-/// Entity type
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum EntityType {
-    Person,
-    Group,
-    Project,
-    Channel,
-    Organisation,
-}
-
-impl EntityType {
-    /// Get the string representation for document IDs
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            EntityType::Person => "person",
-            EntityType::Group => "group",
-            EntityType::Project => "project",
-            EntityType::Channel => "channel",
-            EntityType::Organisation => "organisation",
-        }
-    }
-}
+// EntityType has been extracted to crate::entity_type
+pub use crate::entity_type::EntityType;
 
 /// Complete message with CRDT metadata
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

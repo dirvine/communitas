@@ -435,8 +435,8 @@ fn test_drive_staged_file_shows_queued_state() {
 }
 
 async fn test_drive_staged_file_shows_queued_state_inner() {
+    use communitas_core::EntityType;
     use communitas_core::command::{Command, Event};
-    use communitas_core::legacy_crdt::EntityType;
     use communitas_ui_api::drive::DiskType;
 
     let temp = TempDir::new().unwrap();
@@ -496,8 +496,8 @@ fn test_drive_staging_queue_clear_transitions_state() {
 }
 
 async fn test_drive_staging_queue_clear_transitions_state_inner() {
+    use communitas_core::EntityType;
     use communitas_core::command::{Command, Event};
-    use communitas_core::legacy_crdt::EntityType;
     use communitas_ui_api::drive::DiskType;
 
     let temp = TempDir::new().unwrap();
@@ -562,8 +562,8 @@ fn test_kanban_card_sync_state_default() {
 }
 
 async fn test_kanban_card_sync_state_default_inner() {
+    use communitas_core::EntityType;
     use communitas_core::command::{Command, Event};
-    use communitas_core::legacy_crdt::EntityType;
 
     let temp = TempDir::new().unwrap();
     let services = make_authenticated_services(&temp).await;
@@ -614,8 +614,8 @@ fn test_kanban_new_card_sync_state() {
 }
 
 async fn test_kanban_new_card_sync_state_inner() {
+    use communitas_core::EntityType;
     use communitas_core::command::{Command, Event};
-    use communitas_core::legacy_crdt::EntityType;
     use communitas_ui_api::SyncState;
 
     let temp = TempDir::new().unwrap();

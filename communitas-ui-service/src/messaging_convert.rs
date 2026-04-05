@@ -10,10 +10,10 @@
 //! source and target types are defined in external crates. Use the explicit
 //! conversion functions instead.
 
+use communitas_core::EntityType;
 use communitas_core::command::{
     MessageResponse, ReactionResponse, SearchResult as CoreSearchResult,
 };
-use communitas_core::legacy_crdt::EntityType;
 use communitas_ui_api::{Message, MessageReaction, SearchResult, UnifiedEntityType};
 
 /// Convert a core `MessageResponse` to a UI `Message`.

@@ -43,6 +43,7 @@ pub mod ui_core; // Shared UI API surface for native shells // Legacy vector clo
 pub mod doc_replicator;
 pub mod encrypted_storage;
 pub mod entity_service;
+pub mod entity_type;
 pub mod error;
 pub mod identity;
 pub mod invite; // Cross-organization collaboration via four-word invites
@@ -75,8 +76,8 @@ pub use crdt_manager::{CrdtError, CrdtManager, CrdtResult};
 pub use entity_service::{
     CascadeRemovalResult, Entity, EntityService, EntityServiceError, EntityServiceResult,
 };
+pub use entity_type::EntityType;
 pub use error::{AppError, AppResult as Result};
-pub use legacy_crdt::EntityType;
 pub use linking_service::{LinkingError, LinkingResult, LinkingService, SyncResult};
 pub use message_service::{MessageService, MessageServiceError, MessageServiceResult};
 pub use resource_limits::{ResourceLimitError, ResourceLimits};

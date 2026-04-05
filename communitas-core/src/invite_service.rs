@@ -9,10 +9,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use crate::EntityType;
 use crate::crdt_manager::CrdtManager;
 use crate::entity_service::EntityService;
 use crate::invite::{Invite, InviteActionError, InviteStatus};
-use crate::legacy_crdt::EntityType;
 use crate::permissions::{MemberPermissions, ResourceType};
 
 /// Request data for creating an invite.
@@ -2711,10 +2711,10 @@ mod crdt_proptests {
 #[cfg(test)]
 mod crdt_storage_tests {
     use super::*;
+    use crate::EntityType;
     use crate::crdt_manager::CrdtManager;
     use crate::entity_service::EntityService;
     use crate::invite::{Invite, InviteStatus};
-    use crate::legacy_crdt::EntityType;
     use std::sync::Arc;
     use tempfile::TempDir;
 

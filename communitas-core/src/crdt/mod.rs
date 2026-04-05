@@ -92,11 +92,14 @@ pub use documents::{ChannelDocument, CrdtDocument, MemberDocument, OrganizationD
 pub use offline_queue::{OfflineQueue, OperationBuilder, OperationType, QueuedOperation};
 pub use operations::{Counter, LWWRegister, LamportTimestamp, ORSet, Tombstone};
 
+// Re-export EntityType from its dedicated module
+pub use crate::entity_type::EntityType;
+
 // Re-export legacy CRDT types for backwards compatibility during migration
 pub use crate::legacy_crdt::{
     CRDTMessage, CanvasCursorUpdate, CanvasOperation, CanvasOperationType, CanvasStateRequest,
-    CanvasStateResponse, ClockOrdering, EntitySyncState, EntityType, GossipMessageType,
-    LocalMessageState, MemberSyncRequest, MemberSyncResponse, MemberUpdate, MemberUpdateAction,
-    MessageContent, MessageMetadata, MessageStatus, MissingRange, PeerInfo, PeerListRequest,
-    PeerListResponse, Reaction, SyncRequest, SyncResponse, VectorClock, sort_messages_causally,
+    CanvasStateResponse, ClockOrdering, EntitySyncState, GossipMessageType, LocalMessageState,
+    MemberSyncRequest, MemberSyncResponse, MemberUpdate, MemberUpdateAction, MessageContent,
+    MessageMetadata, MessageStatus, MissingRange, PeerInfo, PeerListRequest, PeerListResponse,
+    Reaction, SyncRequest, SyncResponse, VectorClock, sort_messages_causally,
 };

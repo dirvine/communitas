@@ -162,7 +162,7 @@ impl LinkingService {
     pub async fn create_local_entity(
         &self,
         name: String,
-        entity_type: crate::legacy_crdt::EntityType,
+        entity_type: crate::EntityType,
         description: Option<String>,
         created_by: String,
     ) -> LinkingResult<Entity> {
@@ -177,8 +177,8 @@ impl LinkingService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::EntityType;
     use crate::crdt_manager::CrdtManager;
-    use crate::legacy_crdt::EntityType;
     use tempfile::TempDir;
 
     async fn create_test_service() -> (LinkingService, TempDir) {

@@ -26,7 +26,7 @@ use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::messaging_convert::{
     core_entity_type_to_ui, core_message_to_ui, core_search_result_to_ui,
 };
-use communitas_core::legacy_crdt::EntityType;
+use communitas_core::EntityType;
 
 /// Errors returned by the messaging service.
 #[derive(Debug, Error)]

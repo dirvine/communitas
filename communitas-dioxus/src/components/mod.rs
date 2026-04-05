@@ -33,7 +33,6 @@ pub mod error_boundary;
 pub mod feed_view;
 pub mod files_view;
 pub mod filter_chips;
-pub mod kanban;
 pub mod layout;
 pub mod local_x0x_profile_view;
 pub mod markdown;

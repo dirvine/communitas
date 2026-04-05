@@ -26,7 +26,6 @@ whoami = "1.5"
 tracing = { workspace = true }
 uuid = { version = "1.8", features = ["v4"] }
 zeroize = "1.7"
-communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }
 
 [features]
 default = []

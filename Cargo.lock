@@ -806,7 +806,6 @@ dependencies = [
  "chrono",
  "ciborium",
  "communitas-kanban",
- "communitas-workspace-hack",
  "communitas-x0x-client",
  "dirs 5.0.1",
  "flate2",
@@ -889,7 +888,6 @@ version = "0.11.7"
 dependencies = [
  "anyhow",
  "chrono",
- "communitas-workspace-hack",
  "lru 0.16.3",
  "serde",
  "serde_json",
@@ -905,7 +903,6 @@ dependencies = [
 name = "communitas-ui-api"
 version = "0.11.7"
 dependencies = [
- "communitas-workspace-hack",
  "serde",
  "serde_json",
 ]
@@ -921,7 +918,6 @@ dependencies = [
  "communitas-core",
  "communitas-kanban",
  "communitas-ui-api",
- "communitas-workspace-hack",
  "dirs 5.0.1",
  "hex",
  "proptest",

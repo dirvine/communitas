@@ -32,7 +32,6 @@ tracing = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true }
-communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }
 
 [dev-dependencies]
 tempfile = "3"

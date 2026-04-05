@@ -81,16 +81,15 @@ jobs:
           echo "Checking crates can be packaged..."
           cargo publish -p communitas-ui-api --dry-run
           cargo publish -p communitas-kanban --dry-run
-          # Note: core and ui-service need deps published first
-          # Just check they can be packaged locally
-          cargo package -p communitas-core --allow-dirty
-          cargo package -p communitas-ui-service --allow-dirty
+          cargo publish -p communitas-x0x-client --dry-run
+          # core and ui-service are validated in the staged publish jobs after
+          # their upstream workspace crates have been published to crates.io.
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Publish Layer 1: No local dependencies
   # ═══════════════════════════════════════════════════════════════════════════
   publish-layer-1:
-    name: Publish Layer 1 (ui-api, kanban)
+    name: Publish Layer 1 (ui-api, kanban, x0x-client)
     needs: validate
     if: github.event.inputs.dry_run != 'true'
     runs-on: ubuntu-latest
@@ -121,6 +120,12 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           cargo publish -p communitas-kanban --no-verify || echo "Already published or error"
+
+      - name: Publish communitas-x0x-client
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish -p communitas-x0x-client --no-verify || echo "Already published or error"
 
       - name: Wait for crates.io propagation
         run: |
@@ -212,11 +217,13 @@ jobs:
           echo "### Published Crates" >> $GITHUB_STEP_SUMMARY
           echo "- communitas-ui-api" >> $GITHUB_STEP_SUMMARY
           echo "- communitas-kanban" >> $GITHUB_STEP_SUMMARY
+          echo "- communitas-x0x-client" >> $GITHUB_STEP_SUMMARY
           echo "- communitas-core" >> $GITHUB_STEP_SUMMARY
           echo "- communitas-ui-service" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Links" >> $GITHUB_STEP_SUMMARY
           echo "- [communitas-ui-api](https://crates.io/crates/communitas-ui-api)" >> $GITHUB_STEP_SUMMARY
           echo "- [communitas-kanban](https://crates.io/crates/communitas-kanban)" >> $GITHUB_STEP_SUMMARY
+          echo "- [communitas-x0x-client](https://crates.io/crates/communitas-x0x-client)" >> $GITHUB_STEP_SUMMARY
           echo "- [communitas-core](https://crates.io/crates/communitas-core)" >> $GITHUB_STEP_SUMMARY
           echo "- [communitas-ui-service](https://crates.io/crates/communitas-ui-service)" >> $GITHUB_STEP_SUMMARY

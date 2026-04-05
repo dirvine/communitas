@@ -785,6 +785,60 @@ public struct DiscoveredAgentWrapper: Codable, Sendable {
     }
 }
 
+// MARK: - Presence (Extended)
+
+/// Response from `GET /presence/status/:id`.
+public struct PresenceStatusResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let online: Bool
+    public let agent: DiscoveredAgent?
+}
+
+/// Response wrapper for `GET /presence/find/:id` — optional agent.
+public struct PresenceFindResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let agent: DiscoveredAgent?
+}
+
+// MARK: - Agent Discovery (Extended)
+
+/// Response from `GET /agents/reachability/:agent_id`.
+public struct ReachabilityInfo: Codable, Sendable {
+    public let likelyDirect: Bool
+    public let needsCoordination: Bool
+    public let isRelay: Bool
+    public let isCoordinator: Bool
+    public let addresses: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case likelyDirect = "likely_direct"
+        case needsCoordination = "needs_coordination"
+        case isRelay = "is_relay"
+        case isCoordinator = "is_coordinator"
+        case addresses
+    }
+}
+
+/// Response from `POST /agents/find/:agent_id`.
+public struct FindAgentResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let found: Bool
+    public let addresses: [String]?
+}
+
+/// Response from `GET /users/:user_id/agents`.
+public struct UserAgentsResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let userId: String
+    public let agents: [DiscoveredAgent]
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case userId = "user_id"
+        case agents
+    }
+}
+
 // MARK: - Daemon State
 
 public enum DaemonState: String, Sendable {

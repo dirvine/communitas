@@ -25,7 +25,7 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 pulldown-cmark = "0.12"
-communitas-workspace-hack = { version = "0.1", path = "../communitas-workspace-hack" }
+
 
 [dependencies.tokio]
 workspace = true

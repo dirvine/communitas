@@ -66,9 +66,8 @@ jobs:
 
       - name: Run clippy
         run: |
-          # Match the repository clippy policy used by CI/release validation.
-          # Do not fail publishing on general style warnings unrelated to safety.
-          cargo clippy --workspace --all-features -- \
+          cargo clippy --all-features -- \
+            -D warnings \
             -D clippy::panic \
             -D clippy::unwrap_used \
             -D clippy::expect_used
@@ -113,19 +112,42 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          cargo publish -p communitas-ui-api --no-verify || echo "Already published or error"
+          cargo publish -p communitas-ui-api --no-verify 2>&1 || {
+            STATUS=$?
+            # Version already exists is expected (exit 0), everything else is a real failure
+            if cargo search communitas-ui-api --limit 1 | grep -q "$(cargo metadata --no-deps -q --format-version 1 | jq -r '.packages[] | select(.name=="communitas-ui-api") | .version')"; then
+              echo "::notice::communitas-ui-api already published at this version"
+            else
+              echo "::error::Failed to publish communitas-ui-api (exit $STATUS)"
+              exit 1
+            fi
+          }
 
       - name: Publish communitas-kanban
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          cargo publish -p communitas-kanban --no-verify || echo "Already published or error"
+          cargo publish -p communitas-kanban --no-verify 2>&1 || {
+            if cargo search communitas-kanban --limit 1 | grep -q "$(cargo metadata --no-deps -q --format-version 1 | jq -r '.packages[] | select(.name=="communitas-kanban") | .version')"; then
+              echo "::notice::communitas-kanban already published at this version"
+            else
+              echo "::error::Failed to publish communitas-kanban"
+              exit 1
+            fi
+          }
 
       - name: Publish communitas-x0x-client
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          cargo publish -p communitas-x0x-client --no-verify || echo "Already published or error"
+          cargo publish -p communitas-x0x-client --no-verify 2>&1 || {
+            if cargo search communitas-x0x-client --limit 1 | grep -q "$(cargo metadata --no-deps -q --format-version 1 | jq -r '.packages[] | select(.name=="communitas-x0x-client") | .version')"; then
+              echo "::notice::communitas-x0x-client already published at this version"
+            else
+              echo "::error::Failed to publish communitas-x0x-client"
+              exit 1
+            fi
+          }
 
       - name: Wait for crates.io propagation
         run: |
@@ -162,7 +184,14 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          cargo publish -p communitas-core --no-verify || echo "Already published or error"
+          cargo publish -p communitas-core --no-verify 2>&1 || {
+            if cargo search communitas-core --limit 1 | grep -q "$(cargo metadata --no-deps -q --format-version 1 | jq -r '.packages[] | select(.name=="communitas-core") | .version')"; then
+              echo "::notice::communitas-core already published at this version"
+            else
+              echo "::error::Failed to publish communitas-core"
+              exit 1
+            fi
+          }
 
       - name: Wait for crates.io propagation
         run: |
@@ -199,7 +228,14 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          cargo publish -p communitas-ui-service --no-verify || echo "Already published or error"
+          cargo publish -p communitas-ui-service --no-verify 2>&1 || {
+            if cargo search communitas-ui-service --limit 1 | grep -q "$(cargo metadata --no-deps -q --format-version 1 | jq -r '.packages[] | select(.name=="communitas-ui-service") | .version')"; then
+              echo "::notice::communitas-ui-service already published at this version"
+            else
+              echo "::error::Failed to publish communitas-ui-service"
+              exit 1
+            fi
+          }
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Summary

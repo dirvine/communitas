@@ -117,6 +117,20 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("constitution_json", "GET", "/constitution/json"),
     // Upgrades
     ("check_upgrade", "GET", "/upgrade"),
+    // Presence (extended)
+    ("presence_online", "GET", "/presence/online"),
+    ("presence_foaf", "GET", "/presence/foaf"),
+    ("presence_find", "GET", "/presence/find/:id"),
+    ("presence_status", "GET", "/presence/status/:id"),
+    // Agent discovery (extended)
+    (
+        "agent_reachability",
+        "GET",
+        "/agents/reachability/:agent_id",
+    ),
+    ("find_agent", "POST", "/agents/find/:agent_id"),
+    // User agents
+    ("user_agents", "GET", "/users/:user_id/agents"),
 ];
 
 /// Every public method on X0xWebSocket.
@@ -193,8 +207,8 @@ fn no_duplicate_ws_methods() {
 #[test]
 fn coverage_count_is_correct() {
     assert!(
-        COVERED_REST.len() >= 71,
-        "Expected at least 71 REST methods, got {}. \
+        COVERED_REST.len() >= 78,
+        "Expected at least 78 REST methods, got {}. \
          Did you add a method to X0xClient without updating COVERED_REST?",
         COVERED_REST.len()
     );

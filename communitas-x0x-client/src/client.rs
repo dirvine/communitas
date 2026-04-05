@@ -990,6 +990,103 @@ impl X0xClient {
         let resp = self.client.get(self.url("/ws/sessions")).send().await?;
         self.parse(resp).await
     }
+
+    // ── Presence (extended) ─────────────────────────────────────────────
+
+    /// List all currently online agents (network view, non-blocked).
+    pub async fn presence_online(&self) -> Result<Vec<DiscoveredAgent>> {
+        let resp = self.client.get(self.url("/presence/online")).send().await?;
+        let list: PresenceOnlineList = self.parse(resp).await?;
+        Ok(list.agents)
+    }
+
+    /// FOAF random-walk discovery of nearby agents (social view: Trusted + Known only).
+    ///
+    /// `ttl` controls hop depth (default 3), `timeout_ms` controls max wait (default 5000).
+    pub async fn presence_foaf(
+        &self,
+        ttl: Option<u32>,
+        timeout_ms: Option<u64>,
+    ) -> Result<Vec<DiscoveredAgent>> {
+        let mut req = self.client.get(self.url("/presence/foaf"));
+        if let Some(t) = ttl {
+            req = req.query(&[("ttl", t.to_string())]);
+        }
+        if let Some(ms) = timeout_ms {
+            req = req.query(&[("timeout_ms", ms.to_string())]);
+        }
+        let resp = req.send().await?;
+        let list: FoafDiscoveryList = self.parse(resp).await?;
+        Ok(list.agents)
+    }
+
+    /// Find a specific agent by ID via FOAF random walk.
+    ///
+    /// Returns `None` if the agent was not found within the walk limits.
+    pub async fn presence_find(
+        &self,
+        agent_id: &str,
+        ttl: Option<u32>,
+        timeout_ms: Option<u64>,
+    ) -> Result<Option<DiscoveredAgent>> {
+        let mut req = self
+            .client
+            .get(self.url(&format!("/presence/find/{agent_id}")));
+        if let Some(t) = ttl {
+            req = req.query(&[("ttl", t.to_string())]);
+        }
+        if let Some(ms) = timeout_ms {
+            req = req.query(&[("timeout_ms", ms.to_string())]);
+        }
+        let resp = req.send().await?;
+        let result: PresenceFindResponse = self.parse(resp).await?;
+        Ok(result.agent)
+    }
+
+    /// Get local cache presence status for a specific agent — no network I/O.
+    pub async fn presence_status(&self, agent_id: &str) -> Result<PresenceStatusResponse> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/presence/status/{agent_id}")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    // ── Agent discovery (extended) ──────────────────────────────────────
+
+    /// Check NAT traversal reachability for an agent before connecting.
+    pub async fn agent_reachability(&self, agent_id: &str) -> Result<ReachabilityInfo> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/agents/reachability/{agent_id}")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Actively search for an agent (3-stage: cache → shard → rendezvous).
+    ///
+    /// Returns addresses if found, empty vec if not.
+    pub async fn find_agent(&self, agent_id: &str) -> Result<FindAgentResponse> {
+        let resp = self
+            .client
+            .post(self.url(&format!("/agents/find/{agent_id}")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Look up all agents belonging to a user ID.
+    pub async fn user_agents(&self, user_id: &str) -> Result<Vec<DiscoveredAgent>> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/users/{user_id}/agents")))
+            .send()
+            .await?;
+        let list: UserAgentsList = self.parse(resp).await?;
+        Ok(list.agents)
+    }
 }
 
 impl Default for X0xClient {

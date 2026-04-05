@@ -273,8 +273,10 @@ mod tests {
     #[tokio::test]
     async fn test_auth_service_basic_flow() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let vault_dir = temp_dir.path().join("vaults");
+        std::fs::create_dir_all(&vault_dir).expect("Failed to create vault directory");
         let config = StorageConfig {
-            vault_dir: temp_dir.path().to_path_buf(),
+            vault_dir,
             use_keyring: false,
             ..Default::default()
         };

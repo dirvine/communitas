@@ -849,6 +849,75 @@ pub struct WsSessionList {
     pub shared_subscriptions: HashMap<String, u32>,
 }
 
+// ── Presence (extended) ────────────────────────────────────────────────────
+
+/// Response from `GET /presence/online`.
+///
+/// Same shape as discovered-agents list, but filtered to exclude blocked agents.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PresenceOnlineList {
+    pub agents: Vec<DiscoveredAgent>,
+}
+
+/// Response from `GET /presence/foaf`.
+///
+/// FOAF random-walk discovery returns trusted/known agents nearby.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FoafDiscoveryList {
+    pub agents: Vec<DiscoveredAgent>,
+}
+
+/// Response from `GET /presence/status/:id`.
+///
+/// Local cache lookup — no network I/O.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PresenceStatusResponse {
+    pub online: bool,
+    #[serde(default)]
+    pub agent: Option<DiscoveredAgent>,
+}
+
+/// Response from `GET /presence/find/:id`.
+///
+/// FOAF walk targeting a specific agent.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PresenceFindResponse {
+    #[serde(default)]
+    pub agent: Option<DiscoveredAgent>,
+}
+
+// ── Agent discovery (extended) ─────────────────────────────────────────────
+
+/// Response from `GET /agents/reachability/:agent_id`.
+///
+/// NAT traversal heuristics for a specific agent.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReachabilityInfo {
+    pub likely_direct: bool,
+    pub needs_coordination: bool,
+    pub is_relay: bool,
+    pub is_coordinator: bool,
+    #[serde(default)]
+    pub addresses: Vec<String>,
+}
+
+/// Response from `POST /agents/find/:agent_id`.
+///
+/// Active 3-stage search: cache → shard → rendezvous.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FindAgentResponse {
+    pub found: bool,
+    #[serde(default)]
+    pub addresses: Vec<String>,
+}
+
+/// Response from `GET /users/:user_id/agents`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserAgentsList {
+    pub user_id: String,
+    pub agents: Vec<DiscoveredAgent>,
+}
+
 // ── WebSocket frames ────────────────────────────────────────────────────────
 
 /// Messages sent by the client to x0xd over WebSocket.

@@ -618,6 +618,55 @@ public final class X0xClient: Sendable {
         try await get("/ws/sessions")
     }
 
+    // MARK: - Presence (Extended)
+
+    /// List all currently online agents (network view, non-blocked). `GET /presence/online`
+    public func presenceOnline() async throws -> [DiscoveredAgent] {
+        let resp: DiscoveredAgentsResponse = try await get("/presence/online")
+        return resp.agents
+    }
+
+    /// FOAF random-walk discovery of nearby agents (social view). `GET /presence/foaf`
+    public func presenceFoaf(ttl: UInt32? = nil, timeoutMs: UInt64? = nil) async throws -> [DiscoveredAgent] {
+        var items: [URLQueryItem] = []
+        if let t = ttl { items.append(URLQueryItem(name: "ttl", value: "\(t)")) }
+        if let ms = timeoutMs { items.append(URLQueryItem(name: "timeout_ms", value: "\(ms)")) }
+        let resp: DiscoveredAgentsResponse = try await get("/presence/foaf", queryItems: items)
+        return resp.agents
+    }
+
+    /// Find a specific agent by hex ID via FOAF random walk. `GET /presence/find/:id`
+    public func presenceFind(agentId: String, ttl: UInt32? = nil, timeoutMs: UInt64? = nil) async throws -> DiscoveredAgent? {
+        var items: [URLQueryItem] = []
+        if let t = ttl { items.append(URLQueryItem(name: "ttl", value: "\(t)")) }
+        if let ms = timeoutMs { items.append(URLQueryItem(name: "timeout_ms", value: "\(ms)")) }
+        let resp: PresenceFindResponse = try await get("/presence/find/\(agentId)", queryItems: items)
+        return resp.agent
+    }
+
+    /// Get local cache presence status for a specific agent. `GET /presence/status/:id`
+    public func presenceStatus(agentId: String) async throws -> PresenceStatusResponse {
+        try await get("/presence/status/\(agentId)")
+    }
+
+    // MARK: - Agent Discovery (Extended)
+
+    /// Check NAT traversal reachability for an agent. `GET /agents/reachability/:agent_id`
+    public func agentReachability(agentId: String) async throws -> ReachabilityInfo {
+        try await get("/agents/reachability/\(agentId)")
+    }
+
+    /// Actively search for an agent (3-stage: cache → shard → rendezvous). `POST /agents/find/:agent_id`
+    public func findAgent(agentId: String) async throws -> FindAgentResponse {
+        try await postEmpty("/agents/find/\(agentId)")
+    }
+
+    /// Look up all agents belonging to a user ID. `GET /users/:user_id/agents`
+    public func userAgents(userId: String) async throws -> [DiscoveredAgent] {
+        let resp: UserAgentsResponse = try await get("/users/\(userId)/agents")
+        return resp.agents
+    }
+
     // MARK: - Private Helpers
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
@@ -658,6 +707,18 @@ public final class X0xClient: Sendable {
         } catch {
             throw X0xError.encodingError(underlying: error)
         }
+
+        let (data, response) = try await performRequest(request)
+        return try decodeFlatResponse(data: data, response: response)
+    }
+
+    private func postEmpty<T: Decodable>(_ path: String) async throws -> T {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw X0xError.invalidURL(path: path)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
 
         let (data, response) = try await performRequest(request)
         return try decodeFlatResponse(data: data, response: response)

@@ -482,8 +482,10 @@ mod tests {
     #[tokio::test]
     async fn test_vault_creation_and_login() {
         let temp_dir = TempDir::new().unwrap();
+        let vault_dir = temp_dir.path().join("vaults");
+        std::fs::create_dir_all(&vault_dir).unwrap();
         let config = StorageConfig {
-            vault_dir: temp_dir.path().to_path_buf(),
+            vault_dir,
             use_keyring: false, // Disable for tests
             ..Default::default()
         };
@@ -517,8 +519,10 @@ mod tests {
     #[tokio::test]
     async fn test_fec_storage() {
         let temp_dir = TempDir::new().unwrap();
+        let vault_dir = temp_dir.path().join("vaults");
+        std::fs::create_dir_all(&vault_dir).unwrap();
         let config = StorageConfig {
-            vault_dir: temp_dir.path().to_path_buf(),
+            vault_dir,
             use_keyring: false,
             enable_fec: true,
             fec_redundancy: 2.0, // 100% redundancy

@@ -7,7 +7,6 @@ members = [
     "communitas-ui-api",
     "communitas-ui-service",
     "communitas-bench",
-    "communitas-workspace-hack",
     "communitas-x0x-client",
 ]
 

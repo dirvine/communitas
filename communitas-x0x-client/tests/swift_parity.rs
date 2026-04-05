@@ -98,6 +98,16 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("constitution_json", "constitutionJSON"),
     // Upgrades
     ("check_upgrade", "checkUpgrade"),
+    // Presence (extended)
+    ("presence_online", "presenceOnline"),
+    ("presence_foaf", "presenceFoaf"),
+    ("presence_find", "presenceFind"),
+    ("presence_status", "presenceStatus"),
+    // Agent discovery (extended)
+    ("agent_reachability", "agentReachability"),
+    ("find_agent", "findAgent"),
+    // User agents
+    ("user_agents", "userAgents"),
 ];
 
 /// Verify that each Rust method has a Swift equivalent.

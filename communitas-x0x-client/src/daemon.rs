@@ -74,12 +74,31 @@ impl DaemonManager {
         }
     }
 
-    /// Check if the `x0x` binary is on PATH.
+    /// Check if the `x0x` binary is installed.
+    ///
+    /// Checks `which x0x` first (PATH lookup), then falls back to well-known
+    /// install locations matching the Swift DaemonManager behavior.
     pub fn is_installed() -> bool {
-        Command::new("which")
+        // Fast path: check PATH
+        if Command::new("which")
             .arg("x0x")
             .output()
             .is_ok_and(|o| o.status.success())
+        {
+            return true;
+        }
+
+        // Check well-known install locations
+        let home = dirs_next::home_dir().unwrap_or_default();
+        let candidates = [
+            std::path::PathBuf::from("/usr/local/bin/x0x"),
+            std::path::PathBuf::from("/opt/homebrew/bin/x0x"),
+            std::path::PathBuf::from("/opt/zerobrew/bin/x0x"),
+            home.join(".cargo/bin/x0x"),
+            home.join(".x0x/bin/x0x"),
+        ];
+
+        candidates.iter().any(|p| p.exists())
     }
 
     /// Install x0x using the official installer script.

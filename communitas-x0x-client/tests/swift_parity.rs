@@ -152,10 +152,12 @@ fn parity_map_covers_all_rust_methods() {
     for line in rust_src.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("pub async fn ")
-            && let Some(name) = rest.split('(').next() {
+            && let Some(name) = rest.split('(').next()
+        {
             client_methods.push(name.trim());
         } else if let Some(rest) = trimmed.strip_prefix("pub fn ")
-            && let Some(name) = rest.split('(').next() {
+            && let Some(name) = rest.split('(').next()
+        {
             // Skip constructors and non-API methods
             let name = name.trim();
             if name != "new"

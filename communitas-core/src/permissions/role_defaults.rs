@@ -40,7 +40,7 @@ pub mod roles {
 /// # Examples
 ///
 /// ```
-/// use communitas_core::permissions::{role_defaults, AccessLevel, ResourceType};
+/// use communitas_bindings::permissions::{role_defaults, AccessLevel, ResourceType};
 ///
 /// let member_perms = role_defaults("member");
 /// assert_eq!(member_perms.get(&ResourceType::Messages), Some(&AccessLevel::Edit));

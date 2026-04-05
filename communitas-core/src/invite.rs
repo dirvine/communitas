@@ -164,8 +164,8 @@ impl Invite {
     /// # Example
     ///
     /// ```
-    /// use communitas_core::invite::Invite;
-    /// use communitas_core::crdt::EntityType;
+    /// use communitas_bindings::invite::Invite;
+    /// use communitas_bindings::crdt::EntityType;
     ///
     /// let invite = Invite::new(
     ///     "alice-brave-cloud-dawn".to_string(),

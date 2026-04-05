@@ -45,7 +45,7 @@
 //! ## Usage Example
 //!
 //! ```rust,no_run
-//! use communitas_core::crdt::{
+//! use communitas_bindings::crdt::{
 //!     documents::{CrdtDocument, MemberDocument},
 //!     operations::LamportTimestamp,
 //!     offline_queue::{OfflineQueue, OperationBuilder},

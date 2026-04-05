@@ -283,10 +283,9 @@ fn all_client_methods_are_covered() {
         } else {
             None
         };
-        if let Some(name) = name {
-            if !excluded.contains(name) && !covered.contains(name) {
-                uncovered.push(name.to_string());
-            }
+        if let Some(name) = name
+            && !excluded.contains(name) && !covered.contains(name) {
+            uncovered.push(name.to_string());
         }
     }
 
@@ -320,10 +319,9 @@ fn all_ws_methods_are_covered() {
         } else {
             None
         };
-        if let Some(name) = name {
-            if !excluded.contains(name) && !covered.contains(name) {
-                uncovered.push(name.to_string());
-            }
+        if let Some(name) = name
+            && !excluded.contains(name) && !covered.contains(name) {
+            uncovered.push(name.to_string());
         }
     }
 

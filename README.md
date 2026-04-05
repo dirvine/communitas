@@ -8,7 +8,7 @@
 
 ## Download
 
-**[Download Communitas v0.11.5 for macOS →](https://github.com/saorsalabs/communitas/releases/latest)**
+**[Download Communitas v0.11.6 for macOS →](https://github.com/saorsalabs/communitas/releases/latest)**
 
 - **macOS (Universal)**: Supports Intel (x86_64) and Apple Silicon (M1/M2/M3/M4)
 - Signed and notarized by Apple

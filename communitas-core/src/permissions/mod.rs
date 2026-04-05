@@ -16,7 +16,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use communitas_core::permissions::{AccessLevel, ResourceType, role_defaults};
+//! use communitas_bindings::permissions::{AccessLevel, ResourceType, role_defaults};
 //!
 //! // Get default permissions for a "member" role
 //! let defaults = role_defaults("member");

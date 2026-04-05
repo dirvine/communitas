@@ -22,7 +22,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use communitas_core::telemetry::{TelemetryConfig, init_telemetry, shutdown_telemetry};
+//! use communitas_bindings::telemetry::{TelemetryConfig, init_telemetry, shutdown_telemetry};
 //!
 //! let config = TelemetryConfig {
 //!     endpoint: Some("http://localhost:4317".to_string()),
@@ -104,7 +104,7 @@ pub enum TelemetryError {
 /// # Example
 ///
 /// ```rust,ignore
-/// use communitas_core::telemetry::{TelemetryConfig, init_telemetry};
+/// use communitas_bindings::telemetry::{TelemetryConfig, init_telemetry};
 ///
 /// let config = TelemetryConfig::default();
 /// match init_telemetry(config) {
@@ -187,7 +187,7 @@ pub fn shutdown_telemetry() {
 /// # Example
 ///
 /// ```rust,ignore
-/// let meter = communitas_core::telemetry::meter("communitas.sync");
+/// let meter = communitas_bindings::telemetry::meter("communitas.sync");
 /// let counter = meter.u64_counter("sync_operations").init();
 /// counter.add(1, &[]);
 /// ```

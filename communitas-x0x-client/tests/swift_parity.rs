@@ -151,23 +151,21 @@ fn parity_map_covers_all_rust_methods() {
     let mut client_methods: Vec<&str> = Vec::new();
     for line in rust_src.lines() {
         let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("pub async fn ") {
-            if let Some(name) = rest.split('(').next() {
-                client_methods.push(name.trim());
-            }
-        } else if let Some(rest) = trimmed.strip_prefix("pub fn ") {
-            if let Some(name) = rest.split('(').next() {
-                // Skip constructors and non-API methods
-                let name = name.trim();
-                if name != "new"
-                    && name != "from_config"
-                    && name != "with_base_url"
-                    && name != "with_base_url_and_token"
-                    && name != "discover"
-                    && name != "base_url"
-                {
-                    client_methods.push(name);
-                }
+        if let Some(rest) = trimmed.strip_prefix("pub async fn ")
+            && let Some(name) = rest.split('(').next() {
+            client_methods.push(name.trim());
+        } else if let Some(rest) = trimmed.strip_prefix("pub fn ")
+            && let Some(name) = rest.split('(').next() {
+            // Skip constructors and non-API methods
+            let name = name.trim();
+            if name != "new"
+                && name != "from_config"
+                && name != "with_base_url"
+                && name != "with_base_url_and_token"
+                && name != "discover"
+                && name != "base_url"
+            {
+                client_methods.push(name);
             }
         }
     }

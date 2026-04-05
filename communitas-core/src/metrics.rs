@@ -16,7 +16,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use communitas_core::metrics::{Metrics, SyncMetrics};
+//! use communitas_bindings::metrics::{Metrics, SyncMetrics};
 //!
 //! let metrics = Metrics::new();
 //!
@@ -404,7 +404,7 @@ pub fn global_metrics() -> &'static Metrics {
 /// # Example
 ///
 /// ```rust,ignore
-/// use communitas_core::metrics::timed_sync;
+/// use communitas_bindings::metrics::timed_sync;
 ///
 /// let result = timed_sync("push", || async {
 ///     // perform sync operation

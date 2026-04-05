@@ -33,7 +33,7 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use communitas_core::{CommunitasApp, Command, Query};
+//! use communitas_bindings::{CommunitasApp, Command, Query};
 //!
 //! #[tokio::main]
 //! async fn main() {

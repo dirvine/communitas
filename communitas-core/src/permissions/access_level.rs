@@ -58,7 +58,7 @@ impl AccessLevel {
     /// # Examples
     ///
     /// ```
-    /// use communitas_core::permissions::AccessLevel;
+    /// use communitas_bindings::permissions::AccessLevel;
     ///
     /// assert!(AccessLevel::Edit.allows(AccessLevel::ReadOnly));
     /// assert!(AccessLevel::Edit.allows(AccessLevel::Edit));

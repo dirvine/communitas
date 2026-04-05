@@ -4,6 +4,20 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.11.6] - 2026-04-05
+
+### Added
+- API coverage guardrails and Swift parity tests for the `communitas-x0x-client` surface
+
+### Fixed
+- Restored green release validation by correcting `communitas-core` doctest imports to use the published library crate name
+- Resolved cargo-deny/license compliance issues in CI
+
+### Documentation
+- Comprehensive documentation audit and ADR cleanup across the workspace
+
+---
+
 ## [0.11.5] - 2026-04-05
 
 ### Documentation

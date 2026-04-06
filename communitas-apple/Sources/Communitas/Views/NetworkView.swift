@@ -9,9 +9,13 @@ struct NetworkView: View {
     @State private var daemonStatus: DaemonStatus?
     @State private var healthStatus: HealthStatus?
     @State private var peers: [PeerInfo] = []
+    @State private var directConnections: [DirectConnection] = []
+    @State private var bootstrapCache: BootstrapCacheStatus?
+    @State private var webSocketSessions: WsSessionList?
+    @State private var upgradeStatus: UpgradeStatus?
     @State private var isRefreshing = false
 
-    private let statsColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    private let statsColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
 
     var body: some View {
         ScrollView {
@@ -20,6 +24,7 @@ struct NetworkView: View {
                 nodeHealthSection
                 externalAddressesSection
                 networkStatsSection
+                diagnosticsSection
                 peersTable
             }
             .padding(24)
@@ -64,6 +69,12 @@ struct NetworkView: View {
                 value: "\(networkStatus?.externalAddrs?.count ?? 0)",
                 icon: "globe",
                 color: DeepSpace.amber
+            )
+            StatCard(
+                title: "Direct",
+                value: "\(directConnections.count)",
+                icon: "bolt.horizontal.circle",
+                color: DeepSpace.green
             )
         }
     }
@@ -270,6 +281,46 @@ struct NetworkView: View {
         }
     }
 
+    // MARK: - Diagnostics Section
+
+    private var diagnosticsSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                if let bootstrapCount = bootstrapCache?.connectionCount {
+                    statRow(label: "Bootstrap Cache", value: "\(bootstrapCount) connected")
+                }
+
+                if let sessions = webSocketSessions?.sessions.count {
+                    statRow(label: "WebSocket Sessions", value: "\(sessions)")
+                }
+
+                if let shared = webSocketSessions?.sharedSubscriptions, !shared.isEmpty {
+                    statRow(label: "Shared Topic Subs", value: "\(shared.count)")
+                }
+
+                if let available = upgradeStatus?.updateAvailable {
+                    if available {
+                        statRow(label: "Upgrade", value: "Update available: \(upgradeStatus?.version ?? "unknown")")
+                    } else if let current = upgradeStatus?.currentVersion ?? upgradeStatus?.version {
+                        statRow(label: "Upgrade", value: "Up to date (\(current))")
+                    }
+                }
+
+                if bootstrapCache == nil && webSocketSessions == nil && upgradeStatus == nil {
+                    Text("No extended diagnostics available")
+                        .font(.caption)
+                        .foregroundStyle(DeepSpace.textMuted)
+                        .padding(.vertical, 4)
+                }
+            }
+            .padding(4)
+        } label: {
+            Label("Daemon Diagnostics", systemImage: "stethoscope")
+                .foregroundStyle(DeepSpace.textPrimary)
+        }
+        .backgroundStyle(DeepSpace.surface1)
+    }
+
     // MARK: - Peers Table
 
     private var peersTable: some View {
@@ -421,6 +472,30 @@ struct NetworkView: View {
             daemonStatus = try await appState.client.status()
         } catch {
             daemonStatus = nil
+        }
+
+        do {
+            directConnections = try await appState.client.directConnections()
+        } catch {
+            directConnections = []
+        }
+
+        do {
+            bootstrapCache = try await appState.client.bootstrapCache()
+        } catch {
+            bootstrapCache = nil
+        }
+
+        do {
+            webSocketSessions = try await appState.client.wsSessions()
+        } catch {
+            webSocketSessions = nil
+        }
+
+        do {
+            upgradeStatus = try await appState.client.checkUpgrade()
+        } catch {
+            upgradeStatus = nil
         }
     }
 

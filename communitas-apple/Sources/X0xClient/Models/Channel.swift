@@ -34,14 +34,17 @@ public struct ChannelChatMessage: Codable, Identifiable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, text, channel, broadcast, timestamp, type, reactions
+        case msgType = "msg_type"
         case senderName = "sender_name"
         case senderId = "sender_id"
         case threadRoot = "thread_root"
         case replyCount = "reply_count"
         case messageId = "message_id"
+        case msgId = "msg_id"
         case editedAt = "edited_at"
         case isDeleted = "is_deleted"
         case replyToId = "reply_to_id"
+        case quoteId = "quote_id"
     }
 
     public init(
@@ -78,6 +81,67 @@ public struct ChannelChatMessage: Codable, Identifiable, Sendable, Equatable {
         self.replyToId = replyToId
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+        text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName) ?? ""
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId) ?? ""
+        timestamp = try container.decodeIfPresent(Int64.self, forKey: .timestamp) ?? 0
+        channel = try container.decodeIfPresent(String.self, forKey: .channel) ?? ""
+        threadRoot = try container.decodeIfPresent(String.self, forKey: .threadRoot)
+        broadcast = try container.decodeIfPresent(Bool.self, forKey: .broadcast) ?? false
+        replyCount = try container.decodeIfPresent(Int.self, forKey: .replyCount) ?? 0
+        messageId = try container.decodeIfPresent(String.self, forKey: .msgId)
+            ?? container.decodeIfPresent(String.self, forKey: .messageId)
+        let rawType = try container.decodeIfPresent(String.self, forKey: .type)
+            ?? container.decodeIfPresent(String.self, forKey: .msgType)
+            ?? ChatPayloadType.message.rawValue
+        type = ChatPayloadType(rawValue: rawType) ?? .message
+        editedAt = try container.decodeIfPresent(Int64.self, forKey: .editedAt)
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        reactions = try container.decodeIfPresent([String: Int].self, forKey: .reactions) ?? [:]
+        replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
+            ?? container.decodeIfPresent(String.self, forKey: .quoteId)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(text, forKey: .text)
+        try container.encode(senderName, forKey: .senderName)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(channel, forKey: .channel)
+        if let threadRoot, !threadRoot.isEmpty {
+            try container.encode(threadRoot, forKey: .threadRoot)
+        }
+        if broadcast {
+            try container.encode(true, forKey: .broadcast)
+        }
+        if replyCount > 0 {
+            try container.encode(replyCount, forKey: .replyCount)
+        }
+        if let messageId, !messageId.isEmpty {
+            try container.encode(messageId, forKey: .msgId)
+        }
+        if type != .message {
+            try container.encode(type.rawValue, forKey: .type)
+        }
+        if let editedAt {
+            try container.encode(editedAt, forKey: .editedAt)
+        }
+        if isDeleted {
+            try container.encode(true, forKey: .isDeleted)
+        }
+        if !reactions.isEmpty {
+            try container.encode(reactions, forKey: .reactions)
+        }
+        if let replyToId, !replyToId.isEmpty {
+            try container.encode(replyToId, forKey: .replyToId)
+        }
+    }
+
     /// The message timestamp as a `Date`.
     public var date: Date {
         Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000.0)
@@ -97,7 +161,7 @@ public enum ReactionAction: String, Codable, Sendable {
 }
 
 /// A gossip payload for emoji reactions. Published on the same channel topic as chat messages.
-/// JSON layout matches the Dioxus interop contract.
+/// JSON layout matches the x0x GUI conventions.
 public struct ReactionEvent: Codable, Sendable {
     public let id: String
     /// Always `"reaction"` — used to distinguish from `ChannelChatMessage` payloads.
@@ -111,9 +175,12 @@ public struct ReactionEvent: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, type, emoji, action, timestamp
-        case messageId = "messageId"
-        case senderId = "senderId"
-        case senderName = "senderName"
+        case messageId = "msg_id"
+        case legacyMessageId = "messageId"
+        case senderId = "sender_id"
+        case legacySenderId = "senderId"
+        case senderName = "sender_name"
+        case legacySenderName = "senderName"
     }
 
     public init(
@@ -133,6 +200,35 @@ public struct ReactionEvent: Codable, Sendable {
         self.senderId = senderId
         self.senderName = senderName
         self.timestamp = timestamp
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        type = try container.decodeIfPresent(String.self, forKey: .type) ?? "reaction"
+        messageId = try container.decodeIfPresent(String.self, forKey: .messageId)
+            ?? container.decode(String.self, forKey: .legacyMessageId)
+        emoji = try container.decode(String.self, forKey: .emoji)
+        action = try container.decode(ReactionAction.self, forKey: .action)
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId)
+            ?? container.decode(String.self, forKey: .legacySenderId)
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName)
+            ?? container.decodeIfPresent(String.self, forKey: .legacySenderName)
+            ?? ""
+        timestamp = try container.decodeIfPresent(Int64.self, forKey: .timestamp)
+            ?? Int64(Date().timeIntervalSince1970 * 1000)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
+        try container.encode(messageId, forKey: .messageId)
+        try container.encode(emoji, forKey: .emoji)
+        try container.encode(action, forKey: .action)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encode(senderName, forKey: .senderName)
+        try container.encode(timestamp, forKey: .timestamp)
     }
 }
 
@@ -171,7 +267,7 @@ public struct ChannelMeta: Codable, Identifiable, Sendable, Equatable {
 public typealias ChannelIndex = [ChannelMeta]
 
 /// An ephemeral typing event published on the channel topic to show who is typing.
-/// Payload format matches the typing indicator spec.
+/// Payload format matches the x0x GUI conventions.
 public struct TypingEvent: Codable, Sendable {
     public let id: String
     /// Always `"typing"` — used to distinguish from other payload types.
@@ -182,8 +278,10 @@ public struct TypingEvent: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, type, timestamp
-        case senderId = "senderId"
-        case senderName = "senderName"
+        case senderId = "sender_id"
+        case legacySenderId = "senderId"
+        case senderName = "sender_name"
+        case legacySenderName = "senderName"
     }
 
     public init(id: String = UUID().uuidString, senderId: String, senderName: String,
@@ -193,5 +291,75 @@ public struct TypingEvent: Codable, Sendable {
         self.senderId = senderId
         self.senderName = senderName
         self.timestamp = timestamp
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        type = try container.decodeIfPresent(String.self, forKey: .type) ?? "typing"
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId)
+            ?? container.decode(String.self, forKey: .legacySenderId)
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName)
+            ?? container.decodeIfPresent(String.self, forKey: .legacySenderName)
+            ?? ""
+        timestamp = try container.decodeIfPresent(Int64.self, forKey: .timestamp)
+            ?? Int64(Date().timeIntervalSince1970 * 1000)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encode(senderName, forKey: .senderName)
+        try container.encode(timestamp, forKey: .timestamp)
+    }
+}
+
+/// A pin/unpin event for channel messages, matching the x0x GUI convention.
+public struct PinEvent: Codable, Sendable {
+    public let type: String
+    public let messageId: String
+    public let action: String
+    public let senderId: String
+    public let timestamp: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case type, action, timestamp
+        case messageId = "msg_id"
+        case legacyMessageId = "messageId"
+        case senderId = "sender_id"
+        case legacySenderId = "senderId"
+    }
+
+    public init(messageId: String, action: String, senderId: String,
+                timestamp: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) {
+        self.type = "pin"
+        self.messageId = messageId
+        self.action = action
+        self.senderId = senderId
+        self.timestamp = timestamp
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decodeIfPresent(String.self, forKey: .type) ?? "pin"
+        messageId = try container.decodeIfPresent(String.self, forKey: .messageId)
+            ?? container.decode(String.self, forKey: .legacyMessageId)
+        action = try container.decode(String.self, forKey: .action)
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId)
+            ?? container.decodeIfPresent(String.self, forKey: .legacySenderId)
+            ?? ""
+        timestamp = try container.decodeIfPresent(Int64.self, forKey: .timestamp)
+            ?? Int64(Date().timeIntervalSince1970 * 1000)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(messageId, forKey: .messageId)
+        try container.encode(action, forKey: .action)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encode(timestamp, forKey: .timestamp)
     }
 }

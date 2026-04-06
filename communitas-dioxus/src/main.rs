@@ -12,6 +12,8 @@ pub mod onboarding;
 #[allow(dead_code, unused_imports, unused_variables)]
 pub mod pages;
 mod platform;
+/// Embedded release signing public key (ML-DSA-65) for update verification
+mod release_signing_key;
 pub mod styles;
 pub mod styles_v2;
 pub mod tokens;
@@ -330,6 +332,7 @@ fn AppShell(children: Element) -> Element {
                 groups.set(entries);
             }
 
+            let online_agents = client.presence().await.unwrap_or_default();
             if let Ok(contact_list) = client.list_contacts().await {
                 let entries: Vec<ContactEntry> = contact_list
                     .into_iter()
@@ -338,7 +341,7 @@ fn AppShell(children: Element) -> Element {
                         label: c
                             .label
                             .unwrap_or_else(|| x0x_contract::fallback_sender_name(&c.agent_id)),
-                        online: false, // presence will be wired later
+                        online: online_agents.iter().any(|id| id == &c.agent_id),
                     })
                     .collect();
                 contacts.set(entries);

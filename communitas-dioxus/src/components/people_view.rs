@@ -86,6 +86,10 @@ pub fn PeopleView() -> Element {
     let mut add_label = use_signal(String::new);
     let mut add_busy = use_signal(|| false);
     let mut add_error = use_signal(|| None::<String>);
+    let mut lookup_agent_id = use_signal(String::new);
+    let mut lookup_busy = use_signal(|| false);
+    let mut lookup_result = use_signal(|| None::<String>);
+    let mut lookup_error = use_signal(|| None::<String>);
     let mut refresh_key = use_signal(|| 0u64);
 
     // Discovered agents state
@@ -338,6 +342,105 @@ pub fn PeopleView() -> Element {
                             spacing::SM, typography::TEXT_XS, colors::DANGER,
                         ),
                         "{err}"
+                    }
+                }
+            }
+
+            // Discovery tools
+            div {
+                style: "{card_style}",
+                div {
+                    style: format!(
+                        "font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+                        typography::TEXT_SM, colors::TEXT_PRIMARY, spacing::SM,
+                    ),
+                    "Discovery Tools"
+                }
+                div {
+                    style: format!("display: flex; gap: {};", spacing::SM),
+                    input {
+                        style: "{input_style}",
+                        r#type: "text",
+                        placeholder: "Find agent ID / check reachability",
+                        value: "{lookup_agent_id}",
+                        oninput: move |evt: FormEvent| lookup_agent_id.set(evt.value()),
+                    }
+                    button {
+                        style: "{btn_style}",
+                        disabled: lookup_busy() || lookup_agent_id().trim().is_empty(),
+                        onclick: move |_| {
+                            let agent_id = lookup_agent_id().trim().to_string();
+                            if agent_id.is_empty() { return; }
+                            lookup_busy.set(true);
+                            lookup_error.set(None);
+                            lookup_result.set(None);
+                            spawn(async move {
+                                let client = X0xClient::new();
+                                let mut lines = Vec::new();
+
+                                match client.find_agent(&agent_id).await {
+                                    Ok(found) => {
+                                        lines.push(if found.found {
+                                            "Found on network".to_string()
+                                        } else {
+                                            "Not found yet".to_string()
+                                        });
+                                        if !found.addresses.is_empty() {
+                                            lines.push(format!("Search addrs: {}", found.addresses.join(", ")));
+                                        }
+                                    }
+                                    Err(err) => {
+                                        lookup_error.set(Some(format!("Find failed: {err}")));
+                                        lookup_busy.set(false);
+                                        return;
+                                    }
+                                }
+
+                                if let Ok(status) = client.presence_status(&agent_id).await {
+                                    lines.push(if status.online {
+                                        "Presence: online".to_string()
+                                    } else {
+                                        "Presence: offline / unknown".to_string()
+                                    });
+                                }
+
+                                if let Ok(reachability) = client.agent_reachability(&agent_id).await {
+                                    let path = if reachability.likely_direct {
+                                        "likely direct"
+                                    } else if reachability.needs_coordination {
+                                        "needs coordination"
+                                    } else {
+                                        "unknown path"
+                                    };
+                                    lines.push(format!("Reachability: {path}"));
+                                    if !reachability.addresses.is_empty() {
+                                        lines.push(format!("Known addrs: {}", reachability.addresses.join(", ")));
+                                    }
+                                }
+
+                                lookup_result.set(Some(lines.join(" • ")));
+                                lookup_busy.set(false);
+                            });
+                        },
+                        if lookup_busy() { "Checking..." } else { "Inspect" }
+                    }
+                }
+                if let Some(ref err) = *lookup_error.read() {
+                    div {
+                        style: format!(
+                            "margin-top: {}; font-size: {}; color: {};",
+                            spacing::SM, typography::TEXT_XS, colors::DANGER,
+                        ),
+                        "{err}"
+                    }
+                }
+                if let Some(ref result) = *lookup_result.read() {
+                    div {
+                        style: format!(
+                            "margin-top: {}; font-size: {}; color: {};",
+                            spacing::SM, typography::TEXT_XS, colors::TEXT_SECONDARY,
+                        ),
+                        "{result}"
                     }
                 }
             }
@@ -618,6 +721,32 @@ pub fn PeopleView() -> Element {
                                         colors::TEXT_MUTED,
                                     ),
                                     "{last_seen_text}"
+                                }
+
+                                button {
+                                    style: format!(
+                                        "background-color: {}; color: {}; border: none; border-radius: {}; \
+                                         padding: 4px {}; font-size: {}; cursor: pointer; flex-shrink: 0;",
+                                        colors::PRIMARY,
+                                        colors::TEXT_INVERSE,
+                                        radius::SM,
+                                        spacing::SM,
+                                        typography::TEXT_XS,
+                                    ),
+                                    onclick: {
+                                        let aid = agent_id.clone();
+                                        move |_| {
+                                            let aid = aid.clone();
+                                            spawn(async move {
+                                                let client = X0xClient::new();
+                                                if let Err(e) = client.add_contact(&aid, TrustLevel::Known, None).await {
+                                                    warn!(target: "ui.people", "failed to add discovered agent as contact: {e}");
+                                                }
+                                                refresh_key.set(refresh_key() + 1);
+                                            });
+                                        }
+                                    },
+                                    "Add"
                                 }
                             }
                         }

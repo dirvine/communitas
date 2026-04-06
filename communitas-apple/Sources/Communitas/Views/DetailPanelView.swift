@@ -41,6 +41,7 @@ struct AgentProfilePanel: View {
 
     @State private var machines: [MachineRecord] = []
     @State private var isLoading = false
+    @State private var currentIdentityType: String?
 
     var body: some View {
         ScrollView {
@@ -106,6 +107,22 @@ struct AgentProfilePanel: View {
                 }
                 .backgroundStyle(DeepSpace.surface2)
 
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Identity Type")
+                            .font(.caption2)
+                            .foregroundStyle(DeepSpace.textMuted)
+                        HStack(spacing: 6) {
+                            identityTypeButton("Anonymous", value: "anonymous")
+                            identityTypeButton("Known", value: "known")
+                            identityTypeButton("Trusted", value: "trusted")
+                            identityTypeButton("Pinned", value: "pinned")
+                        }
+                    }
+                    .padding(4)
+                }
+                .backgroundStyle(DeepSpace.surface2)
+
                 // Machine Records
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
@@ -137,6 +154,35 @@ struct AgentProfilePanel: View {
                                         }
                                     }
                                     Spacer()
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            Task {
+                                                if machine.pinned == true {
+                                                    try? await appState.client.unpinMachine(agentId: contact.agentId, machineId: machine.machineId)
+                                                } else {
+                                                    try? await appState.client.pinMachine(agentId: contact.agentId, machineId: machine.machineId)
+                                                }
+                                                await loadMachines()
+                                            }
+                                        } label: {
+                                            Image(systemName: machine.pinned == true ? "pin.slash" : "pin")
+                                                .font(.caption2)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help(machine.pinned == true ? "Unpin machine" : "Pin machine")
+
+                                        Button {
+                                            Task {
+                                                try? await appState.client.removeMachine(agentId: contact.agentId, machineId: machine.machineId)
+                                                await loadMachines()
+                                            }
+                                        } label: {
+                                            Image(systemName: "trash")
+                                                .font(.caption2)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Remove machine")
+                                    }
                                 }
                                 .padding(.vertical, 2)
                             }
@@ -146,19 +192,35 @@ struct AgentProfilePanel: View {
                 }
                 .backgroundStyle(DeepSpace.surface2)
 
-                // Remove Contact
-                Button(role: .destructive) {
-                    Task {
-                        try? await appState.client.removeContact(agentId: contact.agentId)
-                        appState.selectedInspectorItem = nil
-                        await appState.refresh()
+                HStack(spacing: 8) {
+                    Button(role: .destructive) {
+                        Task {
+                            try? await appState.client.revokeContact(
+                                agentId: contact.agentId,
+                                reason: "Revoked from Communitas"
+                            )
+                            await appState.refresh()
+                        }
+                    } label: {
+                        Label("Revoke", systemImage: "hand.raised")
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Label("Remove Contact", systemImage: "person.badge.minus")
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
+                    .tint(.orange)
+
+                    Button(role: .destructive) {
+                        Task {
+                            try? await appState.client.removeContact(agentId: contact.agentId)
+                            appState.selectedInspectorItem = nil
+                            await appState.refresh()
+                        }
+                    } label: {
+                        Label("Remove Contact", systemImage: "person.badge.minus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(DeepSpace.red)
                 }
-                .buttonStyle(.bordered)
-                .tint(DeepSpace.red)
                 .padding(.top, 8)
 
                 Spacer()
@@ -166,6 +228,7 @@ struct AgentProfilePanel: View {
             .padding(.horizontal, 16)
         }
         .task {
+            currentIdentityType = contact.identityType?.lowercased()
             await loadMachines()
         }
     }
@@ -173,11 +236,7 @@ struct AgentProfilePanel: View {
     private func trustButton(_ label: String, level: TrustLevel, color: Color) -> some View {
         Button {
             Task {
-                try? await appState.client.addContact(
-                    agentId: contact.agentId,
-                    trustLevel: level,
-                    label: contact.label
-                )
+                try? await appState.client.setTrust(agentId: contact.agentId, level: level)
                 await appState.refresh()
             }
         } label: {
@@ -195,6 +254,33 @@ struct AgentProfilePanel: View {
         .overlay(
             Capsule()
                 .stroke(contact.trustLevel == level ? color.opacity(0.5) : DeepSpace.border, lineWidth: 1)
+        )
+    }
+
+    private func identityTypeButton(_ label: String, value: String) -> some View {
+        let isActive = currentIdentityType == value
+        return Button {
+            currentIdentityType = value
+            Task {
+                try? await appState.client.updateContact(
+                    agentId: contact.agentId,
+                    trustLevel: nil,
+                    identityType: value
+                )
+                await appState.refresh()
+            }
+        } label: {
+            Text(label)
+                .font(.caption2)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .background(isActive ? DeepSpace.cyan.opacity(0.2) : DeepSpace.surface3, in: Capsule())
+        .foregroundStyle(isActive ? DeepSpace.cyan : DeepSpace.textMuted)
+        .overlay(
+            Capsule()
+                .stroke(isActive ? DeepSpace.cyan.opacity(0.5) : DeepSpace.border, lineWidth: 1)
         )
     }
 

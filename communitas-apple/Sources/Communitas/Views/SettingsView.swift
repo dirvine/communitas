@@ -5,6 +5,8 @@ struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @AppStorage("daemonURL") private var daemonURL = "http://127.0.0.1:12700"
     @AppStorage("displayName") private var displayName = ""
+    @State private var agentCardLink: String?
+    @State private var generatingCard = false
 
     var body: some View {
         Form {
@@ -57,6 +59,32 @@ struct SettingsView: View {
                                 .truncationMode(.middle)
                         }
                     }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Button {
+                                generateAgentCard(includeGroups: true)
+                            } label: {
+                                Label(generatingCard ? "Generating..." : "Generate Share Link", systemImage: "link")
+                            }
+                            .disabled(generatingCard || appState.daemonState != .running)
+
+                            if let link = agentCardLink {
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(link, forType: .string)
+                                } label: {
+                                    Label("Copy Link", systemImage: "doc.on.doc")
+                                }
+                            }
+                        }
+                        if let link = agentCardLink {
+                            Text(link)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .lineLimit(3)
+                        }
+                    }
+                    .padding(.top, 4)
                 } else {
                     Text("Not connected to daemon.")
                         .foregroundStyle(.secondary)
@@ -77,6 +105,40 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
+        .task {
+            guard agentCardLink == nil, appState.daemonState == .running else { return }
+            await loadAgentCardLink()
+        }
+    }
+
+    private func loadAgentCardLink() async {
+        do {
+            let resp = try await appState.client.agentCard(displayName: nil, includeGroups: true)
+            agentCardLink = resp.link
+        } catch {
+            agentCardLink = nil
+        }
+    }
+
+    private func generateAgentCard(includeGroups: Bool) {
+        generatingCard = true
+        Task {
+            defer { generatingCard = false }
+            do {
+                let name = displayName.trimmingCharacters(in: .whitespaces)
+                let resp = try await appState.client.agentCard(
+                    displayName: name.isEmpty ? nil : name,
+                    includeGroups: includeGroups
+                )
+                await MainActor.run {
+                    agentCardLink = resp.link
+                }
+            } catch {
+                await MainActor.run {
+                    appState.errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     private var daemonStateLabel: String {

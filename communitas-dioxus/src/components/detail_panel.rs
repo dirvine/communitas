@@ -159,6 +159,7 @@ fn PanelHeader(title: String, on_close: EventHandler<()>) -> Element {
 fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
     let mut display_name = use_signal(|| None::<String>);
     let mut current_trust = use_signal(|| None::<TrustLevel>);
+    let mut current_identity_type = use_signal(|| None::<String>);
     let mut machines = use_signal(Vec::<MachineRecord>::new);
     let mut loading = use_signal(|| true);
     let mut error_msg = use_signal(|| None::<String>);
@@ -175,6 +176,7 @@ fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
                 Ok(contacts) => {
                     if let Some(contact) = contacts.iter().find(|c| c.agent_id == aid) {
                         current_trust.set(Some(contact.trust_level));
+                        current_identity_type.set(contact.identity_type.clone());
                         display_name.set(contact.label.clone());
                     }
                 }
@@ -387,6 +389,84 @@ fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
                 ),
             }
 
+            // Identity type section
+            div {
+                style: format!(
+                    "display: flex; \
+                     flex-direction: column; \
+                     gap: {};",
+                    spacing::SM,
+                ),
+
+                span {
+                    style: format!(
+                        "font-size: {}; \
+                         font-weight: {}; \
+                         color: {}; \
+                         text-transform: uppercase; \
+                         letter-spacing: {};",
+                        typography::SIZE_XS,
+                        typography::WEIGHT_SEMIBOLD,
+                        semantic::TEXT_MUTED,
+                        typography::TRACKING_WIDER,
+                    ),
+                    "Identity Type"
+                }
+
+                div {
+                    style: format!("display: flex; gap: {}; flex-wrap: wrap;", spacing::XS),
+                    for (value, label) in [
+                        ("anonymous", "Anonymous"),
+                        ("known", "Known"),
+                        ("trusted", "Trusted"),
+                        ("pinned", "Pinned"),
+                    ] {
+                        {
+                            let is_active = current_identity_type()
+                                .as_deref()
+                                .map(|ty| ty.eq_ignore_ascii_case(value))
+                                .unwrap_or(false);
+                            let aid = agent_id.clone();
+                            rsx! {
+                                button {
+                                    key: "{value}",
+                                    style: format!(
+                                        "padding: 4px {}; border-radius: {}; border: 1px solid {}; \
+                                         background: {}; color: {}; font-size: {}; cursor: pointer;",
+                                        spacing::SM,
+                                        radius::MD,
+                                        if is_active { semantic::PRIMARY } else { semantic::BORDER_SUBTLE },
+                                        if is_active { semantic::PRIMARY } else { "transparent" },
+                                        if is_active { semantic::TEXT_INVERSE } else { semantic::TEXT_MUTED },
+                                        typography::SIZE_XS,
+                                    ),
+                                    onclick: move |_| {
+                                        let aid = aid.clone();
+                                        current_identity_type.set(Some(value.to_string()));
+                                        spawn(async move {
+                                            let client = X0xClient::new();
+                                            if let Err(e) = client.update_contact(&aid, None, Some(value)).await {
+                                                error!(target: "ui.detail_panel", "Failed to set identity type: {e}");
+                                            }
+                                        });
+                                    },
+                                    "{label}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Divider
+            div {
+                style: format!(
+                    "height: 1px; background: {}; margin: {} 0;",
+                    semantic::BORDER_SUBTLE,
+                    spacing::XS,
+                ),
+            }
+
             // Machine records section
             div {
                 style: format!(
@@ -434,6 +514,10 @@ fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
                         {
                             let aid = agent_id.clone();
                             let mid = machine.machine_id.clone();
+                            let aid_for_pin = aid.clone();
+                            let mid_for_pin = mid.clone();
+                            let aid_for_remove = aid.clone();
+                            let mid_for_remove = mid.clone();
                             let m_label = machine.label.clone();
                             let m_first_seen = machine.first_seen;
                             let m_last_seen = machine.last_seen;
@@ -447,8 +531,8 @@ fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
                                     last_seen: m_last_seen,
                                     pinned: m_pinned,
                                     on_toggle_pin: move |pinned: bool| {
-                                        let aid = aid.clone();
-                                        let mid = mid.clone();
+                                        let aid = aid_for_pin.clone();
+                                        let mid = mid_for_pin.clone();
                                         spawn(async move {
                                             let client = X0xClient::new();
                                             let result = if pinned {
@@ -458,6 +542,21 @@ fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
                                             };
                                             if let Err(e) = result {
                                                 error!(target: "ui.detail_panel", "Failed to toggle pin: {e}");
+                                            }
+                                        });
+                                    },
+                                    on_remove: move |_| {
+                                        let aid = aid_for_remove.clone();
+                                        let mid = mid_for_remove.clone();
+                                        spawn(async move {
+                                            let client = X0xClient::new();
+                                            match client.remove_machine(&aid, &mid).await {
+                                                Ok(()) => {
+                                                    machines.with_mut(|list| list.retain(|m| m.machine_id != mid));
+                                                }
+                                                Err(e) => {
+                                                    error!(target: "ui.detail_panel", "Failed to remove machine: {e}");
+                                                }
                                             }
                                         });
                                     },
@@ -484,52 +583,94 @@ fn AgentProfileView(agent_id: String, on_close: EventHandler<()>) -> Element {
             // Spacer
             div { style: "flex: 1;" }
 
-            // Remove Contact button
-            button {
-                style: format!(
-                    "width: 100%; \
-                     padding: {} {}; \
-                     border: 1px solid {}; \
-                     border-radius: {}; \
-                     background: transparent; \
-                     color: {}; \
-                     font-size: {}; \
-                     font-weight: {}; \
-                     cursor: {}; \
-                     opacity: {}; \
-                     transition: {};",
-                    spacing::SM,
-                    spacing::BASE,
-                    palette::ROSE_500,
-                    radius::LG,
-                    palette::ROSE_400,
-                    typography::SIZE_SM,
-                    typography::WEIGHT_MEDIUM,
-                    if removing() { "not-allowed" } else { "pointer" },
-                    if removing() { "0.6" } else { "1" },
-                    motion::transition("background, opacity"),
-                ),
-                disabled: removing(),
-                onclick: {
-                    let aid = agent_id.clone();
-                    move |_| {
-                        let aid = aid.clone();
-                        removing.set(true);
-                        spawn(async move {
-                            let client = X0xClient::new();
-                            match client.remove_contact(&aid).await {
-                                Ok(()) => {
-                                    // Panel will be closed by parent after refresh
+            div {
+                style: format!("display: flex; gap: {};", spacing::SM),
+
+                button {
+                    style: format!(
+                        "flex: 1; \
+                         padding: {} {}; \
+                         border: 1px solid {}; \
+                         border-radius: {}; \
+                         background: transparent; \
+                         color: {}; \
+                         font-size: {}; \
+                         font-weight: {}; \
+                         cursor: pointer; \
+                         transition: {};",
+                        spacing::SM,
+                        spacing::BASE,
+                        palette::AMBER_500,
+                        radius::LG,
+                        palette::AMBER_400,
+                        typography::SIZE_SM,
+                        typography::WEIGHT_MEDIUM,
+                        motion::transition("background, opacity"),
+                    ),
+                    onclick: {
+                        let aid = agent_id.clone();
+                        move |_| {
+                            let aid = aid.clone();
+                            spawn(async move {
+                                let client = X0xClient::new();
+                                if let Err(e) = client
+                                    .revoke_contact(&aid, "Revoked from Communitas")
+                                    .await
+                                {
+                                    error_msg.set(Some(format!("Failed to revoke contact: {e}")));
                                 }
-                                Err(e) => {
-                                    error_msg.set(Some(format!("Failed to remove contact: {e}")));
+                            });
+                        }
+                    },
+                    "Revoke Contact"
+                }
+
+                button {
+                    style: format!(
+                        "flex: 1; \
+                         padding: {} {}; \
+                         border: 1px solid {}; \
+                         border-radius: {}; \
+                         background: transparent; \
+                         color: {}; \
+                         font-size: {}; \
+                         font-weight: {}; \
+                         cursor: {}; \
+                         opacity: {}; \
+                         transition: {};",
+                        spacing::SM,
+                        spacing::BASE,
+                        palette::ROSE_500,
+                        radius::LG,
+                        palette::ROSE_400,
+                        typography::SIZE_SM,
+                        typography::WEIGHT_MEDIUM,
+                        if removing() { "not-allowed" } else { "pointer" },
+                        if removing() { "0.6" } else { "1" },
+                        motion::transition("background, opacity"),
+                    ),
+                    disabled: removing(),
+                    onclick: {
+                        let aid = agent_id.clone();
+                        move |_| {
+                            let aid = aid.clone();
+                            removing.set(true);
+                            spawn(async move {
+                                let client = X0xClient::new();
+                                match client.remove_contact(&aid).await {
+                                    Ok(()) => {
+                                        // Panel will be closed by parent after refresh
+                                    }
+                                    Err(e) => {
+                                        error_msg.set(Some(format!("Failed to remove contact: {e}")));
+                                    }
                                 }
-                            }
-                            removing.set(false);
-                        });
-                    }
-                },
-                if removing() { "Removing..." } else { "Remove Contact" }
+                                removing.set(false);
+                            });
+                        }
+                    },
+                    if removing() { "Removing..." } else { "Remove Contact" }
+                }
             }
         }
     }
@@ -601,6 +742,7 @@ fn MachineRow(
     last_seen: Option<u64>,
     pinned: bool,
     on_toggle_pin: EventHandler<bool>,
+    on_remove: EventHandler<()>,
 ) -> Element {
     let short_mid = if machine_id.len() > 12 {
         format!(
@@ -689,31 +831,48 @@ fn MachineRow(
                 }
             }
 
-            // Pin toggle
-            button {
-                style: format!(
-                    "width: 28px; \
-                     height: 28px; \
-                     display: flex; \
-                     align-items: center; \
-                     justify-content: center; \
-                     background: {}; \
-                     border: 1px solid {}; \
-                     border-radius: {}; \
-                     cursor: pointer; \
-                     color: {}; \
-                     font-size: {}; \
-                     transition: {};",
-                    if is_pinned { semantic::PRIMARY } else { "transparent" },
-                    if is_pinned { semantic::PRIMARY } else { semantic::BORDER_SUBTLE },
-                    radius::MD,
-                    if is_pinned { semantic::TEXT_INVERSE } else { semantic::TEXT_MUTED },
-                    typography::SIZE_XS,
-                    motion::transition("background, border-color, color"),
-                ),
-                title: if is_pinned { "Unpin machine" } else { "Pin machine" },
-                onclick: move |_| on_toggle_pin.call(!is_pinned),
-                "\u{1F4CC}" // pin emoji
+            div {
+                style: format!("display: flex; gap: {};", spacing::XS),
+                button {
+                    style: format!(
+                        "width: 28px; \
+                         height: 28px; \
+                         display: flex; \
+                         align-items: center; \
+                         justify-content: center; \
+                         background: {}; \
+                         border: 1px solid {}; \
+                         border-radius: {}; \
+                         cursor: pointer; \
+                         color: {}; \
+                         font-size: {}; \
+                         transition: {};",
+                        if is_pinned { semantic::PRIMARY } else { "transparent" },
+                        if is_pinned { semantic::PRIMARY } else { semantic::BORDER_SUBTLE },
+                        radius::MD,
+                        if is_pinned { semantic::TEXT_INVERSE } else { semantic::TEXT_MUTED },
+                        typography::SIZE_XS,
+                        motion::transition("background, border-color, color"),
+                    ),
+                    title: if is_pinned { "Unpin machine" } else { "Pin machine" },
+                    onclick: move |_| on_toggle_pin.call(!is_pinned),
+                    "\u{1F4CC}"
+                }
+                button {
+                    style: format!(
+                        "width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; \
+                         background: transparent; border: 1px solid {}; border-radius: {}; cursor: pointer; \
+                         color: {}; font-size: {}; transition: {};",
+                        semantic::BORDER_SUBTLE,
+                        radius::MD,
+                        semantic::TEXT_MUTED,
+                        typography::SIZE_XS,
+                        motion::transition("background, border-color, color"),
+                    ),
+                    title: "Remove machine",
+                    onclick: move |_| on_remove.call(()),
+                    "\u{1F5D1}"
+                }
             }
         }
     }

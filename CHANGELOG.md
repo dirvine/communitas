@@ -4,6 +4,11 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.11.9] - 2026-04-06
+
+### Added
+- Post-quantum ML-DSA-65 signing for auto-updates
+
 ## [0.11.8] - 2026-04-05
 
 ### Fixed

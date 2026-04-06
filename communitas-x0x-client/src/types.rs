@@ -348,6 +348,8 @@ pub struct Contact {
     pub added_at: Option<u64>,
     #[serde(default)]
     pub last_seen: Option<u64>,
+    #[serde(default)]
+    pub identity_type: Option<String>,
 }
 
 /// Response wrapper for `GET /contacts`.

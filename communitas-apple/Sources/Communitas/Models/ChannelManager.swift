@@ -254,6 +254,9 @@ final class ChannelManager: ObservableObject {
         do {
             try await savePinnedMessages(channel: currentChannel, ids: updated)
             pinnedMessageIds = updated
+            let event = PinEvent(messageId: messageId, action: "pin", senderId: agentId)
+            let payload = try JSONEncoder().encode(event).base64EncodedString()
+            try await client.publish(topic: channelTopic(name: currentChannel), payload: payload)
         } catch {
             errorMessage = "Failed to pin message: \(error.localizedDescription)"
         }
@@ -266,6 +269,9 @@ final class ChannelManager: ObservableObject {
         do {
             try await savePinnedMessages(channel: currentChannel, ids: updated)
             pinnedMessageIds = updated
+            let event = PinEvent(messageId: messageId, action: "unpin", senderId: agentId)
+            let payload = try JSONEncoder().encode(event).base64EncodedString()
+            try await client.publish(topic: channelTopic(name: currentChannel), payload: payload)
         } catch {
             errorMessage = "Failed to unpin message: \(error.localizedDescription)"
         }
@@ -350,6 +356,12 @@ final class ChannelManager: ObservableObject {
             }
             return
         }
+        if peeked?.type == "pin" {
+            if let pinEvent = try? JSONDecoder().decode(PinEvent.self, from: payloadData) {
+                applyPinEvent(pinEvent)
+            }
+            return
+        }
 
         guard let chatMsg = try? JSONDecoder().decode(ChannelChatMessage.self, from: payloadData) else {
             return
@@ -421,6 +433,21 @@ final class ChannelManager: ObservableObject {
         if let idx = messages.firstIndex(where: { $0.id == messageId }) {
             messages[idx].isDeleted = true
             saveHistory(channel: currentChannel, messages: messages)
+        }
+    }
+
+    private func applyPinEvent(_ pin: PinEvent) {
+        if pin.action == "pin" {
+            guard !pinnedMessageIds.contains(pin.messageId) else { return }
+            if pinnedMessageIds.count < maxPins {
+                pinnedMessageIds.append(pin.messageId)
+            }
+        } else {
+            pinnedMessageIds.removeAll { $0 == pin.messageId }
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            try? await savePinnedMessages(channel: currentChannel, ids: pinnedMessageIds)
         }
     }
 

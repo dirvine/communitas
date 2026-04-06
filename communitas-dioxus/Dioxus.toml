@@ -74,12 +74,11 @@ endpoints = [
 ]
 
 # Public key for verifying update signatures
-# TODO: Generate Ed25519 keypair with `tauri signer generate` and populate:
-# - pubkey here (public key)
-# - TAURI_SIGNING_PRIVATE_KEY GitHub secret (private key)
-# - Sign artifacts in CI with `tauri signer sign`
-# Until then, auto-update checks for new versions but cannot verify signatures.
-pubkey = ""
+# NOTE: We use ML-DSA-65 (Post-Quantum Cryptography) for signing, not Ed25519.
+# The public key is embedded in src/release_signing_key.rs as a byte array.
+# The Dioxus native updater expects Ed25519, so signature verification is done
+# via custom code that uses the embedded ML-DSA-65 key.
+pubkey = ""  # Disabled - using embedded ML-DSA key insteadGXSuhAA8AK47J"
 
 # Update dialog configuration
 # dialog = true  # Show native dialog for updates (default: true)

@@ -1,0 +1,10 @@
+[package]
+name = "sign-release"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fips204 = { version = "0.4", features = ["default-rng"] }
+base64 = "0.22"
+hex = "0.4"
+rand_core = "0.6"

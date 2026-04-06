@@ -1,5 +1,77 @@
+import CryptoKit
 import SwiftUI
 import X0xClient
+
+/// Canonical direct-message payload shared with the x0x GUI.
+private struct DirectWirePayload: Codable {
+    let id: String?
+    let text: String
+    let senderName: String?
+    let senderId: String?
+    let ts: Int64?
+    let timestamp: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case id, text, ts, timestamp
+        case senderName = "sender_name"
+        case senderId = "sender_id"
+    }
+}
+
+private struct DirectInboundEvent: Codable {
+    let type: String?
+    let sender: String?
+    let payload: String?
+    let timestamp: UInt64?
+    let receivedAt: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case type, sender, payload, timestamp
+        case receivedAt = "received_at"
+    }
+}
+
+private func directMessageId(senderId: String, timestamp: Int64, text: String) -> String {
+    let seed = Data("\(senderId):\(timestamp):\(text)".utf8)
+    return SHA256.hash(data: seed).map { String(format: "%02x", $0) }.joined()
+}
+
+private func decodeDirectPayload(_ data: Data, senderId: String, fallbackSenderName: String) -> DMMessage? {
+    if let payload = try? JSONDecoder().decode(DirectWirePayload.self, from: data) {
+        let resolvedTimestamp = payload.ts ?? payload.timestamp ?? Int64(Date().timeIntervalSince1970 * 1000)
+        let resolvedSenderId = payload.senderId ?? senderId
+        let resolvedSenderName = {
+            let candidate = payload.senderName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return candidate.isEmpty ? fallbackSenderName : candidate
+        }()
+        let resolvedId = {
+            let candidate = payload.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return candidate.isEmpty ? directMessageId(senderId: resolvedSenderId, timestamp: resolvedTimestamp, text: payload.text) : candidate
+        }()
+        return DMMessage(
+            id: resolvedId,
+            text: payload.text,
+            senderId: resolvedSenderId,
+            senderName: resolvedSenderName,
+            timestamp: resolvedTimestamp,
+            isOutgoing: false
+        )
+    }
+
+    guard let messageText = String(data: data, encoding: .utf8) else {
+        return nil
+    }
+
+    let timestamp = Int64(Date().timeIntervalSince1970 * 1000)
+    return DMMessage(
+        id: directMessageId(senderId: senderId, timestamp: timestamp, text: messageText),
+        text: messageText,
+        senderId: senderId,
+        senderName: fallbackSenderName,
+        timestamp: timestamp,
+        isOutgoing: false
+    )
+}
 
 /// A direct message for local storage and display.
 struct DMMessage: Codable, Identifiable {
@@ -238,7 +310,16 @@ struct DirectMessageView: View {
         Task {
             defer { isSending = false }
             do {
-                let payload = Data(text.utf8).base64EncodedString()
+                let wire = DirectWirePayload(
+                    id: msg.id,
+                    text: msg.text,
+                    senderName: msg.senderName,
+                    senderId: msg.senderId,
+                    ts: msg.timestamp,
+                    timestamp: nil
+                )
+                let payloadData = try JSONEncoder().encode(wire)
+                let payload = payloadData.base64EncodedString()
                 try await appState.client.sendDirect(agentId: contact.agentId, payload: payload)
                 messages.append(msg)
                 saveHistory(agentId: contact.agentId)
@@ -279,31 +360,21 @@ struct DirectMessageView: View {
 
     @MainActor
     private func handleDirectMessage(_ text: String, from contact: Contact) async {
-        guard let data = text.data(using: .utf8) else { return }
-
-        struct DirectEvent: Codable {
-            let event: String?
-            let sender: String?
-            let payload: String?
-            let timestamp: UInt64?
-        }
-
-        guard let event = try? JSONDecoder().decode(DirectEvent.self, from: data),
+        guard let data = text.data(using: .utf8),
+              let event = try? JSONDecoder().decode(DirectInboundEvent.self, from: data),
               event.sender == contact.agentId,
               let payload = event.payload,
-              let payloadData = Data(base64Encoded: payload),
-              let messageText = String(data: payloadData, encoding: .utf8) else {
+              let payloadData = Data(base64Encoded: payload) else {
             return
         }
 
-        let msg = DMMessage(
-            id: UUID().uuidString,
-            text: messageText,
+        guard let msg = decodeDirectPayload(
+            payloadData,
             senderId: contact.agentId,
-            senderName: contact.label ?? truncatedId(contact.agentId),
-            timestamp: Int64(Date().timeIntervalSince1970 * 1000),
-            isOutgoing: false
-        )
+            fallbackSenderName: contact.label ?? truncatedId(contact.agentId)
+        ) else {
+            return
+        }
 
         if !messages.contains(where: { $0.id == msg.id }) {
             messages.append(msg)

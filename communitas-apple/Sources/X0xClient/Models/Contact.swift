@@ -20,6 +20,7 @@ public struct Contact: Codable, Sendable, Identifiable, Hashable {
     public let trustLevel: TrustLevel
     public let addedAt: UInt64?
     public let lastSeen: UInt64?
+    public let identityType: String?
 
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
@@ -27,14 +28,16 @@ public struct Contact: Codable, Sendable, Identifiable, Hashable {
         case trustLevel = "trust_level"
         case addedAt = "added_at"
         case lastSeen = "last_seen"
+        case identityType = "identity_type"
     }
 
-    public init(agentId: String, label: String?, trustLevel: TrustLevel, addedAt: UInt64?, lastSeen: UInt64? = nil) {
+    public init(agentId: String, label: String?, trustLevel: TrustLevel, addedAt: UInt64?, lastSeen: UInt64? = nil, identityType: String? = nil) {
         self.agentId = agentId
         self.label = label
         self.trustLevel = trustLevel
         self.addedAt = addedAt
         self.lastSeen = lastSeen
+        self.identityType = identityType
     }
 }
 

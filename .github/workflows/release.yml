@@ -290,26 +290,38 @@ jobs:
           echo "$NOTES" > release_notes.md
           echo "notes_file=release_notes.md" >> $GITHUB_OUTPUT
 
+      - name: Install Rust for signing tool
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Build PQC signing tool
+        run: |
+          cd tools/sign-release
+          cargo build --release
+          echo "SIGN_TOOL=$(pwd)/target/release/sign-release" >> $GITHUB_ENV
+
       - name: Generate update manifest
+        env:
+          ML_DSA_SECRET_KEY: ${{ secrets.ML_DSA_SECRET_KEY }}
         run: |
           VERSION="${{ needs.build-macos.outputs.version }}"
           DMG_NAME="${{ needs.build-macos.outputs.dmg_name }}"
           REPO="${{ github.repository }}"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-          # Sign artifacts for Dioxus/Tauri auto-updater (if signing key is configured)
+          # Sign artifacts with ML-DSA-65 (PQC) if signing key is configured
           MACOS_SIG=""
           LINUX_SIG=""
           WINDOWS_SIG=""
-          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-            echo "Signing update artifacts with Ed25519 key..."
+          if [ -n "${ML_DSA_SECRET_KEY:-}" ]; then
+            echo "Signing update artifacts with ML-DSA-65 (Post-Quantum Cryptography)..."
             if [ -f "./release/${DMG_NAME}" ]; then
-              MACOS_SIG=$(echo -n "$(cat ./release/${DMG_NAME} | openssl dgst -sha256 -binary | base64)")
+              MACOS_SIG=$($SIGN_TOOL "$ML_DSA_SECRET_KEY" "./release/${DMG_NAME}")
+              echo "macOS signature generated (${#MACOS_SIG} chars)"
             fi
-            # Linux and Windows signatures generated in their respective build jobs
+            # Linux and Windows signatures would be generated in their respective build jobs
           else
-            echo "TAURI_SIGNING_PRIVATE_KEY not set — update.json will have empty signatures"
-            echo "To enable signed updates: generate Ed25519 keypair and add TAURI_SIGNING_PRIVATE_KEY secret"
+            echo "ML_DSA_SECRET_KEY not set — update.json will have empty signatures"
+            echo "To enable PQC-signed updates: ensure ML_DSA_SECRET_KEY secret is configured"
           fi
 
           # Generate update.json for Dioxus updater

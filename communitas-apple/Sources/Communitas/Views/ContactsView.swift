@@ -7,6 +7,8 @@ struct ContactsView: View {
     @State private var selectedContact: Contact?
     @State private var discoveredAgents: [DiscoveredAgent] = []
     @State private var isLoadingAgents = false
+    @State private var discoveryReport: String?
+    @State private var showingDiscoveryReport = false
 
     var body: some View {
         Group {
@@ -44,6 +46,11 @@ struct ContactsView: View {
         .task {
             await loadDiscoveredAgents()
         }
+        .alert("Agent Diagnostics", isPresented: $showingDiscoveryReport, actions: {
+            Button("OK", role: .cancel) {}
+        }, message: {
+            Text(discoveryReport ?? "No diagnostics available")
+        })
     }
 
     /// Combined list showing contacts and discovered agents.
@@ -202,6 +209,23 @@ struct ContactsView: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
+            Button("Add as Contact") {
+                Task {
+                    try? await appState.client.addContact(
+                        agentId: agent.agentId,
+                        trustLevel: .known,
+                        label: nil
+                    )
+                    await appState.refresh()
+                }
+            }
+
+            Button("Inspect Reachability") {
+                Task {
+                    await inspectDiscoveredAgent(agent)
+                }
+            }
+
             Button("Copy Agent ID") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(agent.agentId, forType: .string)
@@ -219,6 +243,34 @@ struct ContactsView: View {
             // Best-effort — silently ignore failures
             discoveredAgents = []
         }
+    }
+
+    private func inspectDiscoveredAgent(_ agent: DiscoveredAgent) async {
+        var lines: [String] = []
+
+        if let status = try? await appState.client.presenceStatus(agentId: agent.agentId) {
+            lines.append(status.online ? "Presence: online" : "Presence: offline / unknown")
+        }
+
+        if let reachability = try? await appState.client.agentReachability(agentId: agent.agentId) {
+            if reachability.likelyDirect {
+                lines.append("Reachability: likely direct")
+            } else if reachability.needsCoordination {
+                lines.append("Reachability: needs coordination")
+            } else {
+                lines.append("Reachability: unknown")
+            }
+            if !reachability.addresses.isEmpty {
+                lines.append("Addresses: \(reachability.addresses.joined(separator: ", "))")
+            }
+        }
+
+        if let found = try? await appState.client.findAgent(agentId: agent.agentId), found.found {
+            lines.append("Active find: found")
+        }
+
+        discoveryReport = lines.isEmpty ? "No diagnostics available for this agent yet." : lines.joined(separator: " • ")
+        showingDiscoveryReport = true
     }
 
     private func relativeTime(_ unixSecs: UInt64) -> String {
@@ -287,9 +339,9 @@ struct AddContactSheet: View {
                 .font(.title2)
 
             Form {
-                TextField("Agent ID", text: $agentId)
+                TextField("Agent ID or x0x card link", text: $agentId)
                     .font(.system(.body, design: .monospaced))
-                TextField("Label (optional)", text: $label)
+                TextField("Label (optional; agent ID only)", text: $label)
                 Picker("Trust Level", selection: $trustLevel) {
                     ForEach(TrustLevel.allCases, id: \.self) { level in
                         Text(level.rawValue.capitalized).tag(level)
@@ -326,11 +378,19 @@ struct AddContactSheet: View {
         Task {
             defer { isAdding = false }
             do {
-                try await appState.client.addContact(
-                    agentId: agentId.trimmingCharacters(in: .whitespaces),
-                    trustLevel: trustLevel,
-                    label: trimmedLabel.isEmpty ? nil : trimmedLabel
-                )
+                let raw = agentId.trimmingCharacters(in: .whitespaces)
+                let looksLikeCard = raw.contains("x0x://agent/")
+                    || raw.contains("\"agent_id\"")
+                    || (raw.count > 96 && raw.count != 64)
+                if looksLikeCard {
+                    _ = try await appState.client.importAgentCard(card: raw, trustLevel: trustLevel)
+                } else {
+                    try await appState.client.addContact(
+                        agentId: raw,
+                        trustLevel: trustLevel,
+                        label: trimmedLabel.isEmpty ? nil : trimmedLabel
+                    )
+                }
                 await appState.refresh()
                 dismiss()
             } catch {

@@ -263,7 +263,8 @@ struct FilesView: View {
                 agentId: selectedAgentId,
                 filename: filename,
                 size: size,
-                sha256: sha256
+                sha256: sha256,
+                path: url.path
             )
             await refreshTransfers()
         } catch {

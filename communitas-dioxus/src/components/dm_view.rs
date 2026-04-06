@@ -12,9 +12,87 @@ use crate::x0x_contract;
 use base64::Engine as _;
 use communitas_x0x_client::{X0xClient, X0xWebSocket};
 use dioxus::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct DirectMessagePayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sender_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sender_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ts: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    timestamp: Option<u64>,
+}
+
+fn direct_message_id(sender_id: &str, timestamp: u64, text: &str) -> String {
+    let seed = format!("{sender_id}:{timestamp}:{text}");
+    format!("{:x}", Sha256::digest(seed.as_bytes()))
+}
+
+fn decode_direct_message_payload(payload: &[u8], sender_id: &str) -> Result<ChatMessage, String> {
+    if let Ok(message) = serde_json::from_slice::<DirectMessagePayload>(payload) {
+        let timestamp = message.ts.or(message.timestamp).unwrap_or_else(|| {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0)
+        });
+        let resolved_sender_id = message.sender_id.unwrap_or_else(|| sender_id.to_string());
+        let resolved_sender_name = message
+            .sender_name
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| x0x_contract::fallback_sender_name(&resolved_sender_id));
+        let resolved_id = message
+            .id
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| direct_message_id(&resolved_sender_id, timestamp, &message.text));
+
+        return Ok(ChatMessage {
+            id: resolved_id,
+            text: message.text,
+            sender_name: resolved_sender_name,
+            sender_id: resolved_sender_id,
+            timestamp,
+            channel: String::new(),
+            thread_root: None,
+            broadcast: false,
+            is_deleted: false,
+            reply_count: 0,
+            reactions: HashMap::new(),
+        });
+    }
+
+    match std::str::from_utf8(payload) {
+        Ok(text) => {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            Ok(ChatMessage {
+                id: direct_message_id(sender_id, timestamp, text),
+                text: text.to_string(),
+                sender_name: x0x_contract::fallback_sender_name(sender_id),
+                sender_id: sender_id.to_string(),
+                timestamp,
+                channel: String::new(),
+                thread_root: None,
+                broadcast: false,
+                is_deleted: false,
+                reply_count: 0,
+                reactions: HashMap::new(),
+            })
+        }
+        Err(err) => Err(format!("unrecognized direct-message payload: {err}")),
+    }
+}
 
 /// Truncate an agent ID for display.
 fn short_agent_id(id: &str) -> String {
@@ -130,7 +208,7 @@ pub fn DmView(
                         }
 
                         match base64::engine::general_purpose::STANDARD.decode(&payload) {
-                            Ok(bytes) => match serde_json::from_slice::<ChatMessage>(&bytes) {
+                            Ok(bytes) => match decode_direct_message_payload(&bytes, &sender) {
                                 Ok(msg) => {
                                     let history_msg = msg.clone();
                                     let history_peer = peer_id.clone();
@@ -181,15 +259,16 @@ pub fn DmView(
             composer_text.set(String::new());
 
             spawn(async move {
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
                 let msg = ChatMessage {
                     id: uuid::Uuid::new_v4().to_string(),
                     text,
                     sender_name,
                     sender_id: agent_id,
-                    timestamp: SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(0),
+                    timestamp,
                     channel: String::new(), // DMs don't belong to a channel
                     thread_root: None,
                     broadcast: false,
@@ -197,8 +276,16 @@ pub fn DmView(
                     reply_count: 0,
                     reactions: HashMap::new(),
                 };
+                let wire = DirectMessagePayload {
+                    id: Some(msg.id.clone()),
+                    text: msg.text.clone(),
+                    sender_name: Some(msg.sender_name.clone()),
+                    sender_id: Some(msg.sender_id.clone()),
+                    ts: Some(msg.timestamp),
+                    timestamp: None,
+                };
 
-                match serde_json::to_vec(&msg) {
+                match serde_json::to_vec(&wire) {
                     Ok(json_bytes) => {
                         let client = X0xClient::new();
                         if let Err(e) = client.send_direct(&peer_id, &json_bytes).await {

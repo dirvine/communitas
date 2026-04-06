@@ -66,24 +66,41 @@ jobs:
         env:
           SPARKLE_KEY: ${{ secrets.SPARKLE_KEY }}
         run: |
-          # Download Sparkle tools to extract the public key from the private key
+          # Download Sparkle tools so later steps can bundle/sign using the same version.
           SPARKLE_VERSION="2.6.4"
           curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
             -o /tmp/sparkle.tar.xz
           mkdir -p /tmp/sparkle
           tar -xf /tmp/sparkle.tar.xz -C /tmp/sparkle
 
-          # The SPARKLE_KEY env var contains the Ed25519 private key (64 bytes base64).
-          # The public key is the last 32 bytes of the 64-byte Ed25519 key.
-          # sign_update reads SPARKLE_KEY from env; generate_keys uses the Keychain.
-          # Extract public key directly from the private key bytes.
-          PUB_KEY=$(echo "$SPARKLE_KEY" | base64 -d | tail -c 32 | base64)
-          if [ -z "$PUB_KEY" ]; then
-            echo "WARNING: Could not extract Sparkle public key"
-            PUB_KEY=""
-          fi
-          echo "sparkle_pub_key=$PUB_KEY" >> $GITHUB_OUTPUT
-          echo "Sparkle public key extracted: ${PUB_KEY:0:12}..."
+          # Extract the Ed25519 public key in a platform-portable way.
+          # macOS runners use BSD base64, so avoid shell-specific -d/-D flags.
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import base64
+          import os
+          import re
+          import sys
+
+          raw = os.environ.get("SPARKLE_KEY", "").strip()
+          payload = b""
+
+          if raw:
+              compact = "".join(raw.split())
+              if re.fullmatch(r"[0-9a-fA-F]+", compact) and len(compact) % 2 == 0:
+                  payload = bytes.fromhex(compact)
+              else:
+                  try:
+                      payload = base64.b64decode(compact, validate=True)
+                  except Exception:
+                      payload = b""
+
+          pub = base64.b64encode(payload[-32:]).decode("ascii") if len(payload) >= 32 else ""
+          print(f"sparkle_pub_key={pub}")
+          if pub:
+              print(f"Sparkle public key extracted: {pub[:12]}...", file=sys.stderr)
+          else:
+              print("WARNING: Could not extract Sparkle public key", file=sys.stderr)
+          PY
 
       - name: Create .app bundle
         id: bundle

@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use communitas_x0x_client::{X0xClient, X0xWebSocket, discover_x0x_config};
+use communitas_x0x_client::{X0xClient, X0xSseStream, X0xWebSocket, discover_x0x_config};
 use serde::Deserialize;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -55,6 +55,18 @@ impl TestTarget {
 
     pub async fn ws_direct(&self) -> communitas_x0x_client::Result<X0xWebSocket> {
         X0xWebSocket::connect_direct_with_token(&self.ws_address(), &self.token).await
+    }
+
+    pub async fn sse(&self) -> communitas_x0x_client::Result<X0xSseStream> {
+        X0xSseStream::connect_with_token(&self.ws_address(), &self.token, "/events").await
+    }
+
+    pub async fn sse_direct(&self) -> communitas_x0x_client::Result<X0xSseStream> {
+        X0xSseStream::connect_with_token(&self.ws_address(), &self.token, "/direct/events").await
+    }
+
+    pub async fn sse_presence(&self) -> communitas_x0x_client::Result<X0xSseStream> {
+        X0xSseStream::connect_with_token(&self.ws_address(), &self.token, "/presence/events").await
     }
 
     pub fn summary(&self) -> String {
@@ -117,6 +129,13 @@ pub fn mutations_enabled() -> bool {
 pub fn direct_file_enabled() -> bool {
     matches!(
         std::env::var("X0X_TEST_ENABLE_DIRECT_FILE").as_deref(),
+        Ok("1" | "true" | "yes")
+    )
+}
+
+pub fn cross_node_crdt_enabled() -> bool {
+    matches!(
+        std::env::var("X0X_TEST_ENABLE_CROSS_NODE_CRDT").as_deref(),
         Ok("1" | "true" | "yes")
     )
 }

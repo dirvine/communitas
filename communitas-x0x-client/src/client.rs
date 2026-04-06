@@ -16,9 +16,9 @@ use crate::types::*;
 /// HTTP client for the x0xd daemon.
 ///
 /// Wraps the REST surface intentionally covered by this crate on localhost.
-/// This crate is explicitly frozen to REST + WebSocket only; SSE endpoints such
-/// as `/events` and `/direct/events` are intentionally out of scope.
-/// All methods are async and return typed responses.
+/// Real-time WebSocket and SSE surfaces are provided by [`crate::X0xWebSocket`]
+/// and [`crate::X0xSseStream`] respectively. All methods are async and return
+/// typed responses.
 ///
 /// Authentication is handled automatically: the client reads the `api.port` and
 /// `api-token` files written by x0xd and attaches `Authorization: Bearer <token>`

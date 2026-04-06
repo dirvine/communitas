@@ -149,11 +149,71 @@ async fn all_targets_expose_core_daemon_surfaces() {
             .unwrap_or_else(|err| panic!("{} bootstrap_cache failed: {err}", target.summary()));
         assert_eq!(cache.connected_peers.len() as u32, cache.connection_count);
 
+        let mut ws = target.ws().await.unwrap_or_else(|err| {
+            panic!(
+                "{} general websocket connect failed: {err}",
+                target.summary()
+            )
+        });
+        match timeout(Duration::from_secs(5), ws.recv())
+            .await
+            .expect("connected frame should arrive in time")
+            .expect("general websocket should remain open")
+        {
+            WsInbound::Connected { agent_id, .. } => assert_eq!(agent_id, agent.agent_id),
+            other => panic!("expected connected frame, got {other:?}"),
+        }
+
+        let mut direct_ws = target.ws_direct().await.unwrap_or_else(|err| {
+            panic!(
+                "{} direct websocket connect failed: {err}",
+                target.summary()
+            )
+        });
+        match timeout(Duration::from_secs(5), direct_ws.recv())
+            .await
+            .expect("direct connected frame should arrive in time")
+            .expect("direct websocket should remain open")
+        {
+            WsInbound::Connected { agent_id, .. } => assert_eq!(agent_id, agent.agent_id),
+            other => panic!("expected direct connected frame, got {other:?}"),
+        }
+
+        let _events = target
+            .sse()
+            .await
+            .unwrap_or_else(|err| panic!("{} events sse connect failed: {err}", target.summary()));
+        let _direct_events = target.sse_direct().await.unwrap_or_else(|err| {
+            panic!(
+                "{} direct events sse connect failed: {err}",
+                target.summary()
+            )
+        });
+        let _presence_events = target.sse_presence().await.unwrap_or_else(|err| {
+            panic!(
+                "{} presence events sse connect failed: {err}",
+                target.summary()
+            )
+        });
+
         let sessions = client
             .ws_sessions()
             .await
             .unwrap_or_else(|err| panic!("{} ws_sessions failed: {err}", target.summary()));
         assert!(sessions.shared_subscriptions.len() <= 10_000);
+        assert!(
+            !sessions.sessions.is_empty(),
+            "{} should report at least one websocket session after connecting",
+            target.summary()
+        );
+        assert!(
+            sessions
+                .sessions
+                .iter()
+                .any(|session| session.receives_direct),
+            "{} should report a direct-capable websocket session after connecting /ws/direct",
+            target.summary()
+        );
 
         let constitution = client
             .constitution()

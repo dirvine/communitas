@@ -6,7 +6,7 @@ It is the right layer for proving that Communitas talks to the **real** x0x daem
 
 - local scratch daemons
 - all reachable VPS x0xd nodes
-- REST + WebSocket surfaces
+- REST + WebSocket + SSE surfaces
 
 It is **not** the GUI harness. Dioxus and Swift parity still need their own app-level E2E.
 
@@ -18,30 +18,34 @@ This harness is intended to validate the `communitas-x0x-client` transport contr
 
 - core daemon health and identity surfaces
 - discovery / presence / reachability
-- WebSocket session establishment
-- contact import / trust / machine pinning
-- named groups + invites
-- key-value stores
-- task lists
-- MLS group basics
-- constitution / upgrade endpoints
-
-### Covered conditionally
-
+- WebSocket session establishment and live message flow
+- SSE connection + event delivery for `/events`, `/direct/events`, and `/presence/events`
+- contact import / trust / machine pinning / revocation
+- named groups / invites / space-chat topic plumbing
+- key-value stores lifecycle
+- task lists lifecycle
+- MLS group member add/remove + encrypt/decrypt
 - direct messaging
 - file transfer accept / reject lifecycle
+- constitution / upgrade endpoints
+- graceful shutdown on ephemeral targets
 
-Those two flows are wired into `live_mutation_contract.rs`, but they are currently skipped when the harness is running entirely on same-host local named instances. Same-host named daemons hairpin through external discovery addresses today, so the reliable place to validate those flows is a future scratch-VPS mutation lane.
+### Covered in the reference x0x test suite
 
-### Intentionally not covered by this crate
+Some semantics are better proven inside canonical `../x0x` tests than through the daemon API harness alone. For release validation we also run:
 
-Per `src/lib.rs`, SSE is still out of scope for the client crate:
+- `tests/crdt_convergence_concurrent.rs`
+- `tests/crdt_partition_tolerance.rs`
+- `tests/proptest_crdt.rs`
+- `tests/trust_evaluation_test.rs`
+- `tests/proptest_groups.rs`
+- `tests/proptest_presence.rs`
 
-- `/events`
-- `/direct/events`
-- `/presence/events`
+That gives us explicit CRDT merge / convergence coverage, trust semantics coverage, and property-based checks against the canonical implementation without modifying `../x0x`.
 
-If we want literal 100% daemon transport coverage, SSE support or a raw-SSE companion harness still needs to be added.
+### Current topology caveat
+
+Cross-host scratch daemons on the VPS fleet use ephemeral QUIC ports that are not reliably firewall-exposed, so the remote scratch mutation lane validates broad stateful REST/SSE/WS contract behavior but does **not** currently prove direct/file delivery between those ephemeral VPS daemons. Those real-time delivery paths are validated in the local scratch mesh, where we now seed named instances through an explicit bootstrap peer.
 
 ## Files
 
@@ -49,13 +53,13 @@ If we want literal 100% daemon transport coverage, SSE support or a raw-SSE comp
 - `tests/support/harness.rs`
   - loads target matrices from `X0X_TEST_MATRIX_FILE`
   - falls back to local auto-discovery when no matrix is provided
-  - creates typed HTTP / WebSocket clients per target
+  - creates typed HTTP / WebSocket / SSE clients per target
 
 ### Read-only matrix suite
 - `tests/live_matrix_contract.rs`
   - safe against shared daemons
   - loops across every configured target
-  - validates core REST and WebSocket surfaces
+  - validates core REST, WebSocket, and SSE connection surfaces
   - validates multi-target discovery when 2+ targets are present
 
 ### Mutation suite
@@ -66,9 +70,13 @@ If we want literal 100% daemon transport coverage, SSE support or a raw-SSE comp
 
 ### Runner
 - `scripts/tests/x0x_client_contract_harness.sh`
-  - `local`: starts 3 scratch named `x0xd` instances and runs read-only + mutation suites
+  - `local`: starts a 3-node local scratch mesh and runs read-only + mutation suites
   - `vps`: discovers configured VPS daemons over SSH and runs the read-only matrix suite
-  - `all`: local first, then VPS
+  - `vps-mutation`: starts 3 scratch VPS daemons and runs the mutation suite
+  - `all`: local first, then VPS, then scratch VPS mutation
+- `scripts/tests/x0x_release_validation.sh`
+  - runs the full communitas-x0x-client harness
+  - then runs canonical `../x0x` semantic tests for CRDT/trust/group/presence coverage
 
 ## Usage
 
@@ -82,14 +90,15 @@ bash scripts/tests/x0x_client_contract_harness.sh local
 
 What it does:
 - starts 3 named instances with isolated data dirs
+- builds them into a scratch mesh via an explicit bootstrap peer
 - waits for `api.port` + `api-token`
 - runs:
   - `live_matrix_contract`
   - `live_mutation_contract`
 
 Current note:
-- local scratch validates the broad stateful API surface
-- direct/file mutation checks are intentionally skipped on same-host local daemons until we add scratch VPS mutation coverage
+- local scratch is the lane that validates direct messaging + file transfer delivery
+- it also validates SSE delivery and the space-chat topic path
 
 ### VPS matrix harness
 
@@ -114,7 +123,7 @@ bash scripts/tests/x0x_client_contract_harness.sh vps-mutation
 
 Current note:
 - this proves the mutation harness can run against real remote daemons
-- direct/file checks remain opt-in via `X0X_TEST_ENABLE_DIRECT_FILE=1` until those flows are made reliable in the scratch topology
+- because scratch VPS daemons sit on ephemeral QUIC ports, this lane currently validates broad stateful API behavior rather than direct/file delivery between the remote scratch daemons themselves
 
 ### Full run
 
@@ -169,8 +178,10 @@ This suite mutates daemon state:
 - updates trust
 - adds machine records
 - creates groups/stores/task lists/MLS groups
-- sends direct messages and files
+- exercises SSE/WS messaging paths
+- sends direct messages and files where topology allows
 - revokes contacts
+- shuts down an ephemeral target
 
 Do **not** run that suite against shared production-like VPS daemons unless you deliberately want those side effects.
 
@@ -178,28 +189,27 @@ Do **not** run that suite against shared production-like VPS daemons unless you 
 
 This harness gets us much closer to the right release gate:
 
-1. **Local mutation proof** against real scratch `x0xd`
+1. **Local mutation proof** against a real 3-node scratch mesh
 2. **Fleet-wide VPS contract proof** against real remote nodes
 3. **Scratch VPS mutation proof** against ephemeral named instances on real VPS nodes
 4. **Swift parity guard** via `tests/swift_parity.rs`
 5. **API surface guard** via `tests/client_coverage.rs`
+6. **Canonical x0x semantic proof** via the reference CRDT / trust / group / presence tests
 
-What is still missing for literal 100% daemon E2E:
-- enabling direct messaging + file transfer in the scratch mutation lane by default
-- SSE coverage
+What is still missing for literal 100% daemon E2E through `communitas-x0x-client` alone:
+- cross-host direct/file delivery on scratch VPS daemons with firewall-exposed QUIC ports
+- a daemon API for explicit task-list joining, which would make multi-node CRDT API testing stronger
 
 ## Next gaps
 
-To make this truly exhaustive, the next additions should be:
+To make this even stronger, the next additions should be:
 
-1. **SSE harness**
-   - `/events`
-   - `/direct/events`
-   - `/presence/events`
+1. **Cross-host scratch direct/file lane**
+   - remote scratch daemons with firewall-exposed QUIC ports
+   - proves direct/file delivery on the VPS fleet itself
 
-2. **Dedicated VPS scratch instances**
-   - ephemeral named daemons on every node
-   - lets the mutation suite run remotely too
+2. **Task-list join endpoint in x0xd**
+   - would let the client harness prove multi-node CRDT convergence through the public API
 
 3. **Soak / resilience lane**
    - long-running matrix checks
@@ -211,4 +221,4 @@ To make this truly exhaustive, the next additions should be:
    - manual workflow_dispatch with SSH secrets
    - artifact upload of generated matrices and logs
 
-That is the path to a true full x0xd API-contract harness.
+That is the path to a true full x0xd API-contract harness plus semantic release gate.

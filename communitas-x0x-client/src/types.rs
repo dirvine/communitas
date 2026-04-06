@@ -297,6 +297,52 @@ pub struct DirectMessage {
     pub received_at: Option<u64>,
 }
 
+/// Envelope carried by `/events` SSE frames.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SseEnvelope {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub data: serde_json::Value,
+}
+
+/// Payload for `/events` frames where `type == "message"`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SseMessageData {
+    pub subscription_id: String,
+    pub topic: String,
+    pub payload: String,
+    #[serde(default)]
+    pub sender: Option<String>,
+    pub verified: bool,
+    #[serde(default)]
+    pub trust_level: Option<String>,
+}
+
+/// Payload for `/events` frames where `type == "file:offer"`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SseFileOfferData {
+    pub transfer_id: String,
+    pub filename: String,
+    pub size: u64,
+    pub sender: String,
+}
+
+/// Payload for `/events` frames where `type == "file:complete"`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SseFileCompleteData {
+    pub transfer_id: String,
+    pub filename: String,
+    pub sha256: String,
+    pub path: String,
+}
+
+/// Payload for `/presence/events` frames.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PresenceStreamEvent {
+    pub event: String,
+    pub agent_id: String,
+}
+
 // ── Contacts & trust ────────────────────────────────────────────────────────
 
 /// Trust level for a contact.

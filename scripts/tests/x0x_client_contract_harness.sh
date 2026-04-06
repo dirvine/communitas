@@ -96,9 +96,11 @@ run_live_matrix_suite() {
 
 run_live_mutation_suite() {
   local matrix_file="$1"
+  local enable_direct_file="${2:-0}"
   log_info "Running live mutation contract suite with $matrix_file"
   X0X_TEST_MATRIX_FILE="$matrix_file" \
   X0X_TEST_ALLOW_MUTATION=1 \
+  X0X_TEST_ENABLE_DIRECT_FILE="$enable_direct_file" \
     cargo test -p communitas-x0x-client --test live_mutation_contract -- --ignored
 }
 
@@ -129,8 +131,10 @@ start_remote_scratch_instance() {
   local role="$3"
   local region="$4"
   local api_port="$5"
+  local bootstrap_peer="${6:-}"
   local remote_data_dir="/root/.local/share/x0x-$name"
   local remote_log="/tmp/$name.log"
+  local remote_config="/tmp/$name-config.toml"
 
   local remote_bin
   remote_bin=$(ssh "${SSH_OPTS[@]}" "root@$ip" "command -v x0xd || for bin in /root/.local/bin/x0xd /opt/x0x/x0xd /usr/local/bin/x0xd /usr/bin/x0xd; do if [ -x \"\$bin\" ]; then echo \"\$bin\"; break; fi; done")
@@ -156,9 +160,15 @@ PY
     return 1
   fi
 
+  if [[ -n "$bootstrap_peer" ]]; then
+    ssh "${SSH_OPTS[@]}" "root@$ip" "printf 'bootstrap_peers = [\"%s\"]\n' '$bootstrap_peer' > '$remote_config'"
+  else
+    ssh "${SSH_OPTS[@]}" "root@$ip" "printf 'bootstrap_peers = []\n' > '$remote_config'"
+  fi
+
   local pid
-  pid=$(ssh "${SSH_OPTS[@]}" "root@$ip" "bash -lc 'rm -rf \"$remote_data_dir\"; nohup \"$remote_bin\" --name \"$name\" --api-port \"$api_port\" --skip-update-check </dev/null >\"$remote_log\" 2>&1 & echo \$!'" )
-  REMOTE_CLEANUPS+=("ssh ${SSH_OPTS[*]} root@$ip 'kill $pid 2>/dev/null || true; pkill -f \"x0xd --name $name\" 2>/dev/null || true; rm -rf \"$remote_data_dir\" \"$remote_log\"'")
+  pid=$(ssh "${SSH_OPTS[@]}" "root@$ip" "bash -lc 'rm -rf \"$remote_data_dir\"; nohup \"$remote_bin\" --config \"$remote_config\" --name \"$name\" --api-port \"$api_port\" --skip-update-check </dev/null >\"$remote_log\" 2>&1 & echo \$!'" )
+  REMOTE_CLEANUPS+=("ssh ${SSH_OPTS[*]} root@$ip 'kill $pid 2>/dev/null || true; pkill -f \"x0xd --name $name\" 2>/dev/null || true; rm -rf \"$remote_data_dir\" \"$remote_log\" \"$remote_config\"'")
 
   for _ in $(seq 1 60); do
     if out=$(ssh "${SSH_OPTS[@]}" "root@$ip" "if [ -f '$remote_data_dir/api.port' ] && [ -f '$remote_data_dir/api-token' ]; then addr=\$(tr -d '[:space:]' < '$remote_data_dir/api.port'); token=\$(tr -d '[:space:]' < '$remote_data_dir/api-token'); printf '%s|%s\\n' \"\$addr\" \"\$token\"; fi" 2>/dev/null) && [[ -n "$out" ]]; then
@@ -179,17 +189,24 @@ PY
 start_local_instance() {
   local name="$1"
   local api_port="$2"
+  local bootstrap_peer="${3:-}"
   local data_base
   data_base="$(platform_data_base)"
   local data_dir="$data_base/x0x-$name"
   local log_file="$LOG_ROOT/$name.log"
+  local config_file="$data_dir/config.toml"
 
   rm -rf "$data_dir"
   mkdir -p "$data_dir"
   LOCAL_DATA_DIRS+=("$data_dir")
+  if [[ -n "$bootstrap_peer" ]]; then
+    printf 'bootstrap_peers = ["%s"]\n' "$bootstrap_peer" > "$config_file"
+  else
+    printf 'bootstrap_peers = []\n' > "$config_file"
+  fi
 
   log_info "Starting local x0xd instance $name on API port $api_port" >&2
-  x0xd --name "$name" --api-port "$api_port" --skip-update-check >"$log_file" 2>&1 &
+  x0xd --config "$config_file" --name "$name" --api-port "$api_port" --skip-update-check >"$log_file" 2>&1 &
   LOCAL_PIDS+=("$!")
 
   local api_file="$data_dir/api.port"
@@ -213,19 +230,75 @@ start_local_instance() {
   exit 1
 }
 
+discover_bootstrap_addr() {
+  local api_addr="$1"
+  local token="$2"
+  local mode="${3:-auto}"
+  local public_ip="${4:-}"
+
+  local body
+  body=$(curl -fsS --max-time 5 -H "Authorization: Bearer $token" "http://$api_addr/network/status")
+  python3 - "$mode" "$body" "$public_ip" <<'PY'
+import json
+import sys
+
+mode = sys.argv[1]
+raw = sys.argv[2]
+public_ip = sys.argv[3]
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit(1)
+
+external = data.get("external_addrs") or []
+local_addr = data.get("local_addr")
+
+candidates = []
+if mode == "local":
+    if local_addr and ":" in local_addr:
+        port = local_addr.rsplit(":", 1)[1]
+        candidates.append(f"127.0.0.1:{port}")
+    if local_addr:
+        candidates.append(local_addr)
+    candidates.extend(external)
+elif mode == "external":
+    if public_ip and local_addr and ":" in local_addr:
+        port = local_addr.rsplit(":", 1)[1]
+        candidates.append(f"{public_ip}:{port}")
+    candidates.extend(external)
+    if local_addr:
+        candidates.append(local_addr)
+else:
+    candidates.extend(external)
+    if local_addr:
+        candidates.append(local_addr)
+
+for candidate in candidates:
+    if candidate:
+        print(candidate)
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 run_local_suite() {
   require_cmd x0xd
 
   local names=("cxh-a-$RUN_ID" "cxh-b-$RUN_ID" "cxh-c-$RUN_ID")
   local specs=()
+  local bootstrap_peer=""
 
   for idx in 0 1 2; do
     local name="${names[$idx]}"
     local api_port
     api_port="$(free_local_port)"
-    IFS='|' read -r data_dir addr token < <(start_local_instance "$name" "$api_port")
+    IFS='|' read -r data_dir addr token < <(start_local_instance "$name" "$api_port" "$bootstrap_peer")
     specs+=("$name|$addr|$token|scratch|local|local")
     log_success "$name healthy at $addr"
+    if [[ -z "$bootstrap_peer" ]]; then
+      bootstrap_peer="$(discover_bootstrap_addr "$addr" "$token" local)"
+      log_info "Using local scratch bootstrap peer $bootstrap_peer"
+    fi
   done
 
   log_info "Waiting 15s for local instances to gossip-discover each other"
@@ -236,7 +309,7 @@ run_local_suite() {
   log_success "Local matrix written to $matrix"
 
   run_live_matrix_suite "$matrix" 1
-  run_live_mutation_suite "$matrix"
+  run_live_mutation_suite "$matrix" 1
 }
 
 discover_remote_target() {
@@ -328,6 +401,7 @@ run_vps_mutation_suite() {
   require_cmd x0xd
 
   local specs=()
+  local bootstrap_peer=""
   local inventory=(
     "cxh-vps-a-$RUN_ID|147.182.234.192|scratch-sfo|SFO3, US"
     "cxh-vps-b-$RUN_ID|116.203.101.172|scratch-nuremberg|Nuremberg, DE"
@@ -339,7 +413,7 @@ run_vps_mutation_suite() {
     local remote_port
     remote_port="$(free_remote_port "$ip")"
     local remote
-    if ! remote=$(start_remote_scratch_instance "$name" "$ip" "$role" "$region" "$remote_port"); then
+    if ! remote=$(start_remote_scratch_instance "$name" "$ip" "$role" "$region" "$remote_port" "$bootstrap_peer"); then
       continue
     fi
     IFS='|' read -r remote_name remote_addr token remote_role remote_region <<< "$remote"
@@ -367,6 +441,10 @@ run_vps_mutation_suite() {
 
     specs+=("${remote_name}|${forwarded_addr}|${token}|${remote_role}|${remote_region}|remote")
     log_success "Started scratch VPS target $name via tunnel ${forwarded_addr} -> ${remote_addr}"
+    if [[ -z "$bootstrap_peer" ]]; then
+      bootstrap_peer="$(discover_bootstrap_addr "$forwarded_addr" "$token" external "$ip")"
+      log_info "Using scratch VPS bootstrap peer $bootstrap_peer"
+    fi
   done
 
   if [[ ${#specs[@]} -lt 3 ]]; then
@@ -381,7 +459,7 @@ run_vps_mutation_suite() {
   log_info "Waiting 30s for scratch VPS daemons to announce and discover each other"
   sleep 30
 
-  run_live_mutation_suite "$matrix"
+  run_live_mutation_suite "$matrix" 0
 }
 
 print_usage() {

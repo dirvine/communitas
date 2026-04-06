@@ -147,6 +147,16 @@ const COVERED_WS: &[&str] = &[
     "ping",
 ];
 
+/// Every public method on X0xSseStream.
+const COVERED_SSE: &[&str] = &[
+    "connect",
+    "connect_direct",
+    "connect_presence",
+    "connect_to",
+    "connect_with_token",
+    "recv",
+];
+
 /// Verifies no duplicate method names in COVERED_REST.
 #[test]
 fn no_duplicate_method_names() {
@@ -203,6 +213,19 @@ fn no_duplicate_ws_methods() {
     assert!(dupes.is_empty(), "Duplicate WS method names: {:?}", dupes);
 }
 
+/// Verifies all SSE method names are unique.
+#[test]
+fn no_duplicate_sse_methods() {
+    let mut seen = HashSet::new();
+    let mut dupes = Vec::new();
+    for name in COVERED_SSE {
+        if !seen.insert(*name) {
+            dupes.push(*name);
+        }
+    }
+    assert!(dupes.is_empty(), "Duplicate SSE method names: {:?}", dupes);
+}
+
 /// Coverage count matches expected total.
 #[test]
 fn coverage_count_is_correct() {
@@ -216,6 +239,11 @@ fn coverage_count_is_correct() {
         COVERED_WS.len() >= 9,
         "Expected at least 9 WS methods, got {}",
         COVERED_WS.len()
+    );
+    assert!(
+        COVERED_SSE.len() >= 6,
+        "Expected at least 6 SSE methods, got {}",
+        COVERED_SSE.len()
     );
 }
 
@@ -260,6 +288,26 @@ fn covered_ws_methods_exist_in_source() {
     assert!(
         missing.is_empty(),
         "Methods in COVERED_WS not found in websocket.rs: {:?}",
+        missing
+    );
+}
+
+/// Verifies the SSE source contains each method name.
+#[test]
+fn covered_sse_methods_exist_in_source() {
+    let sse_src = include_str!("../src/sse.rs");
+
+    let mut missing = Vec::new();
+    for name in COVERED_SSE {
+        let pattern_async = format!("pub async fn {name}");
+        let pattern_sync = format!("pub fn {name}");
+        if !sse_src.contains(&pattern_async) && !sse_src.contains(&pattern_sync) {
+            missing.push(*name);
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "Methods in COVERED_SSE not found in sse.rs: {:?}",
         missing
     );
 }

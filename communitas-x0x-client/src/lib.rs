@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Thin typed mirror of the x0xd REST and WebSocket APIs.
+//! Thin typed mirror of the x0xd REST, WebSocket, and SSE APIs.
 //!
 //! This crate provides [`X0xClient`] for HTTP access to daemon routes,
-//! [`X0xWebSocket`] for `/ws` and `/ws/direct` sessions, and
-//! [`DaemonManager`] for CLI-faithful install/start/stop helpers.
-//!
-//! Scope freeze: this crate intentionally covers **REST + WebSocket only**.
-//! Server-sent-event surfaces such as `/events` and `/direct/events` are part
-//! of x0x, but are intentionally out of scope for this crate.
+//! [`X0xWebSocket`] for `/ws` and `/ws/direct` sessions,
+//! [`X0xSseStream`] for `/events`, `/direct/events`, and `/presence/events`,
+//! and [`DaemonManager`] for CLI-faithful install/start/stop helpers.
 //!
 //! It intentionally stays transport-focused and does not define Communitas
 //! app-level semantics such as channel schemas, topic conventions, or UI state.
@@ -38,6 +35,7 @@ pub mod client;
 pub mod config;
 pub mod daemon;
 pub mod error;
+pub mod sse;
 pub mod types;
 pub mod websocket;
 
@@ -45,5 +43,6 @@ pub use client::X0xClient;
 pub use config::{X0xConfig, discover as discover_x0x_config};
 pub use daemon::{DaemonManager, DaemonState};
 pub use error::{Result, X0xError};
+pub use sse::{SseFrame, X0xSseStream};
 pub use types::*;
 pub use websocket::X0xWebSocket;

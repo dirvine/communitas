@@ -850,8 +850,8 @@ pub fn ChannelChatView(
         move |msg_id: String, emoji: String| {
             let topic = topic.clone();
             let agent_id = own_agent_id().unwrap_or_default();
-            let sender_name = own_sender_name()
-                .unwrap_or_else(|| x0x_contract::fallback_sender_name(&agent_id));
+            let sender_name =
+                own_sender_name().unwrap_or_else(|| x0x_contract::fallback_sender_name(&agent_id));
             let reaction_key = format!("{msg_id}:{emoji}:{agent_id}");
             let remove = my_reaction_keys.read().contains(&reaction_key);
             let action = if remove { "remove" } else { "add" }.to_string();
@@ -886,7 +886,8 @@ pub fn ChannelChatView(
                                             *m.reactions.entry(emoji.clone()).or_insert(0) += 1;
                                         }
                                         "remove" => {
-                                            let current = m.reactions.get(&emoji).copied().unwrap_or(0);
+                                            let current =
+                                                m.reactions.get(&emoji).copied().unwrap_or(0);
                                             if current <= 1 {
                                                 m.reactions.remove(&emoji);
                                             } else {
@@ -1604,8 +1605,7 @@ fn ChannelMessage(
     /// M4: Resolved reply text snippet (looked up by parent from messages list).
     #[props(default)]
     reply_text_snippet: Option<String>,
-    #[props(default = false)]
-    is_pinned: bool,
+    #[props(default = false)] is_pinned: bool,
     on_open_thread: EventHandler<ChatMessage>,
     on_reply: EventHandler<()>,
     on_start_edit: EventHandler<()>,

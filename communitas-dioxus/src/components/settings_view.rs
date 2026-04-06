@@ -2,6 +2,8 @@
 
 //! Settings view -- display name, agent card, daemon info.
 
+use std::time::Duration;
+
 use communitas_x0x_client::X0xClient;
 use dioxus::prelude::*;
 use tracing::{info, warn};
@@ -30,6 +32,8 @@ fn format_uptime(secs: u64) -> String {
     }
 }
 
+const SETTINGS_LOAD_TIMEOUT_SECS: u64 = 3;
+
 /// Settings page component.
 #[component]
 pub fn SettingsView() -> Element {
@@ -48,24 +52,30 @@ pub fn SettingsView() -> Element {
     let mut daemon_api_addr = use_signal(|| "127.0.0.1:12700".to_string());
     let mut loading = use_signal(|| true);
 
-    // Load initial data
+    // Load initial data. Each request is time-bounded so one slow daemon call
+    // cannot leave the entire settings page stuck in a perpetual loading state.
     use_future(move || async move {
         let client = X0xClient::new();
+        let timeout = Duration::from_secs(SETTINGS_LOAD_TIMEOUT_SECS);
 
-        if let Ok(card_resp) = client.agent_card(None, Some(false)).await {
+        if let Ok(Ok(card_resp)) =
+            tokio::time::timeout(timeout, client.agent_card(None, Some(false))).await
+        {
             display_name.set(card_resp.card.display_name.clone());
             display_name_original.set(card_resp.card.display_name);
         }
 
-        if let Ok(card_resp) = client.agent_card(None, Some(true)).await {
+        if let Ok(Ok(card_resp)) =
+            tokio::time::timeout(timeout, client.agent_card(None, Some(true))).await
+        {
             agent_card_link.set(Some(card_resp.link));
         }
 
-        if let Ok(status) = client.status().await {
+        if let Ok(Ok(status)) = tokio::time::timeout(timeout, client.status()).await {
             daemon_version.set(Some(status.version));
             daemon_uptime.set(status.uptime_secs);
             daemon_api_addr.set(status.api_address);
-        } else if let Ok(health) = client.health().await {
+        } else if let Ok(Ok(health)) = tokio::time::timeout(timeout, client.health()).await {
             daemon_version.set(Some(health.version));
             daemon_uptime.set(health.uptime_secs);
         }
@@ -152,23 +162,22 @@ pub fn SettingsView() -> Element {
         colors::PRIMARY,
     );
 
-    if is_loading {
-        return rsx! {
-            div {
-                style: "{page_style}",
-                div {
-                    style: format!("color: {};", colors::TEXT_MUTED),
-                    "Loading settings..."
-                }
-            }
-        };
-    }
-
     rsx! {
         div {
             style: "{page_style}",
 
             h1 { style: "{heading_style}", "Settings" }
+
+            if is_loading {
+                div {
+                    style: format!(
+                        "font-size: {}; color: {};",
+                        typography::TEXT_SM,
+                        colors::TEXT_MUTED,
+                    ),
+                    "Refreshing daemon/profile details..."
+                }
+            }
 
             // Display name
             div {

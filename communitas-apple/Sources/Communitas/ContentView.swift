@@ -189,10 +189,10 @@ struct ContentView: View {
                 expandedSpaceId = nil
             } else {
                 expandedSpaceId = group.groupId
-                // Load channels when expanding. Use weak appState to avoid
-                // retaining AppState across the async boundary unnecessarily.
-                Task { [weak appState] in
-                    guard let appState else { return }
+                // Keep sidebar interactions on the main actor. AppState is a
+                // process-lifetime StateObject, so weak capture buys nothing here
+                // and has caused crashes in button dispatch on recent macOS builds.
+                Task { @MainActor in
                     let manager = appState.channelManager(for: group)
                     await manager.loadChannels()
                 }
@@ -289,9 +289,8 @@ struct ContentView: View {
             && appState.selectedSystemPage == nil
             && appState.selectedDMContact == nil
 
-        // Capture groupId and channelName as value types to avoid retaining
-        // a ChannelManager reference that may be replaced by AppState.refresh().
-        // The manager is looked up fresh inside the Task to prevent use-after-free.
+        // Capture groupId and channelName as value types so we can look up the
+        // current manager after refresh.
         let groupId = group.groupId
         let channelName = channel.name
 
@@ -302,8 +301,7 @@ struct ContentView: View {
             appState.selectedSystemPage = nil
             appState.selectedDMContact = nil
             appState.channelManagers[groupId]?.unreadCounts[channelName] = 0
-            Task { [weak appState] in
-                guard let appState else { return }
+            Task { @MainActor in
                 await appState.selectGroupAndChannel(group: group, channel: channelName)
             }
         } label: {
@@ -517,7 +515,7 @@ struct ContentView: View {
         } else if appState.selectedGroup != nil {
             SpaceView()
         } else {
-            placeholderView
+            DashboardView()
         }
     }
 
@@ -537,18 +535,6 @@ struct ContentView: View {
         }
     }
 
-    private var placeholderView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "building.2")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("Welcome to Communitas")
-                .font(.title2)
-            Text("Select a space and channel from the sidebar.")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
 }
 
 // MARK: - About View

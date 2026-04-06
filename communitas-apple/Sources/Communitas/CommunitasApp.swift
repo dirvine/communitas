@@ -178,6 +178,7 @@ struct CommunitasApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appState)
+                .environmentObject(updaterController)
         }
     }
 }

@@ -4,6 +4,15 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.11.10] - 2026-04-06
+
+### Fixed
+- Restored Swift desktop launch parity by showing the dashboard and local identity card in the default detail view
+- Fixed a macOS sidebar interaction crash caused by non-main-actor navigation tasks in the Swift app shell
+- Made Swift "Check for Updates…" always do real work by falling back to a manual appcast check when Sparkle is unavailable
+- Prevented the Dioxus settings screen from appearing hung by time-bounding daemon/profile requests and rendering the page immediately
+- Extended Dioxus channel pin/unpin parity with visible pinned-message UI and x0x-compatible pin events
+
 ## [0.11.9] - 2026-04-06
 
 ### Added

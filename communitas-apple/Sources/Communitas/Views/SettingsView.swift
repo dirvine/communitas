@@ -3,6 +3,7 @@ import X0xClient
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var updaterController: UpdaterController
     @AppStorage("daemonURL") private var daemonURL = "http://127.0.0.1:12700"
     @AppStorage("displayName") private var displayName = ""
     @State private var agentCardLink: String?
@@ -89,6 +90,15 @@ struct SettingsView: View {
                     Text("Not connected to daemon.")
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section("Software Updates") {
+                Button {
+                    updaterController.checkForUpdates()
+                } label: {
+                    Label("Check for Updates…", systemImage: "arrow.down.circle")
+                }
+                .disabled(!updaterController.canCheckForUpdates)
             }
 
             Section("About") {

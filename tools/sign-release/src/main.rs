@@ -14,11 +14,25 @@ fn main() {
         process::exit(1);
     }
 
-    let sk_hex = &args[1];
+    let sk_hex_input = &args[1];
     let file_path = &args[2];
 
+    // Clean up the hex string - remove whitespace and newlines
+    let sk_hex: String = sk_hex_input
+        .chars()
+        .filter(|c| c.is_ascii_hexdigit())
+        .collect();
+
+    if sk_hex.len() != 8064 {
+        eprintln!(
+            "Invalid secret key hex length: expected 8064 hex chars (4032 bytes), got {} chars",
+            sk_hex.len()
+        );
+        process::exit(1);
+    }
+
     // Decode secret key from hex
-    let sk_bytes = match hex::decode(sk_hex.trim()) {
+    let sk_bytes = match hex::decode(&sk_hex) {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln!("Failed to decode secret key: {}", e);

@@ -161,6 +161,10 @@ Sprint-*.md
 TASK_*.md
 TEST_*.md
 TEST_*.txt
+!communitas-x0x-client/TEST_HARNESS.md
+
+# Generated test harness artifacts
+.testnet-logs/
 
 # Claude Code session files
 .claude/vps-test.yaml

@@ -35,3 +35,5 @@ tracing = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 tempfile = "3"
+sha2 = "0.10"
+hex = { workspace = true }

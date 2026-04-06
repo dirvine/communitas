@@ -3,6 +3,9 @@ name = "sign-release"
 version = "0.1.0"
 edition = "2021"
 
+# Exclude from workspace to avoid conflicts
+[workspace]
+
 [dependencies]
 fips204 = { version = "0.4", features = ["default-rng"] }
 base64 = "0.22"

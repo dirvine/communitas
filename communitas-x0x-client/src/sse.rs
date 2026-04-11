@@ -123,10 +123,10 @@ impl X0xSseStream {
                 buffer.push_str(&chunk);
 
                 while let Some(frame) = take_next_frame(&mut buffer) {
-                    if let Some(parsed) = parse_frame(&frame) {
-                        if tx.send(parsed).is_err() {
-                            return;
-                        }
+                    if let Some(parsed) = parse_frame(&frame)
+                        && tx.send(parsed).is_err()
+                    {
+                        return;
                     }
                 }
             }

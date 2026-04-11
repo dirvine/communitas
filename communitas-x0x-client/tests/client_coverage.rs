@@ -23,6 +23,7 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("agent_user_id", "GET", "/agent/user-id"),
     ("agent_card", "GET", "/agent/card"),
     ("import_agent_card", "POST", "/agent/card/import"),
+    ("introduction", "GET", "/introduction"),
     ("ws_sessions", "GET", "/ws/sessions"),
     // Announcements
     ("announce", "POST", "/announce"),
@@ -112,9 +113,10 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("transfer_status", "GET", "/files/transfers/:id"),
     ("accept_file", "POST", "/files/accept/:id"),
     ("reject_file", "POST", "/files/reject/:id"),
-    // Constitution
+    // Constitution & GUI
     ("constitution", "GET", "/constitution"),
     ("constitution_json", "GET", "/constitution/json"),
+    ("gui_html", "GET", "/gui"),
     // Upgrades
     ("check_upgrade", "GET", "/upgrade"),
     // Presence (extended)
@@ -230,8 +232,8 @@ fn no_duplicate_sse_methods() {
 #[test]
 fn coverage_count_is_correct() {
     assert!(
-        COVERED_REST.len() >= 78,
-        "Expected at least 78 REST methods, got {}. \
+        COVERED_REST.len() >= 80,
+        "Expected at least 80 REST methods, got {}. \
          Did you add a method to X0xClient without updating COVERED_REST?",
         COVERED_REST.len()
     );
@@ -244,6 +246,78 @@ fn coverage_count_is_correct() {
         COVERED_SSE.len() >= 6,
         "Expected at least 6 SSE methods, got {}",
         COVERED_SSE.len()
+    );
+}
+
+/// Verifies coverage stays in lockstep with the sibling x0x endpoint registry.
+///
+/// We deliberately exempt `/gui/` because it is only an alias of `/gui`.
+#[test]
+fn coverage_matches_x0x_registry_when_available() {
+    let registry_path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../x0x/src/api/mod.rs");
+
+    let Ok(src) = std::fs::read_to_string(&registry_path) else {
+        eprintln!(
+            "WARNING: x0x registry not found at {} — skipping live parity check",
+            registry_path.display()
+        );
+        return;
+    };
+
+    let mut registry = HashSet::new();
+    for block in src.split("EndpointDef {").skip(1) {
+        let method = block
+            .split("method: Method::")
+            .nth(1)
+            .and_then(|rest| rest.split(',').next())
+            .map(str::trim);
+        let path = block
+            .split("path: \"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .map(str::trim);
+
+        let (Some(method), Some(path)) = (method, path) else {
+            continue;
+        };
+
+        let http_method = match method {
+            "Get" => "GET",
+            "Post" => "POST",
+            "Put" => "PUT",
+            "Patch" => "PATCH",
+            "Delete" => "DELETE",
+            _ => continue,
+        };
+        registry.insert((http_method.to_string(), path.to_string()));
+    }
+
+    let mut covered: HashSet<(String, String)> = COVERED_REST
+        .iter()
+        .map(|(_, method, path)| ((*method).to_string(), (*path).to_string()))
+        .collect();
+    covered.extend([
+        ("GET".to_string(), "/events".to_string()),
+        ("GET".to_string(), "/direct/events".to_string()),
+        ("GET".to_string(), "/presence/events".to_string()),
+        ("GET".to_string(), "/ws".to_string()),
+        ("GET".to_string(), "/ws/direct".to_string()),
+    ]);
+
+    let exempt = HashSet::from([("GET".to_string(), "/gui/".to_string())]);
+
+    let mut missing: Vec<_> = registry
+        .difference(&covered)
+        .filter(|endpoint| !exempt.contains(*endpoint))
+        .cloned()
+        .collect();
+    missing.sort();
+
+    assert!(
+        missing.is_empty(),
+        "x0x registry endpoints not covered by communitas-x0x-client: {:?}",
+        missing
     );
 }
 

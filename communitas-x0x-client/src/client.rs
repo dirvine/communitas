@@ -165,6 +165,23 @@ impl X0xClient {
         self.request_ok(self.client.delete(self.url(path))).await
     }
 
+    /// Fetch a plain-text endpoint such as `/constitution` or `/gui`.
+    async fn get_text(&self, path: &str) -> Result<String> {
+        let resp = self
+            .client
+            .get(self.url(path))
+            .send()
+            .await
+            .map_err(|_| X0xError::NotReachable(self.base_url.clone()))?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(X0xError::Daemon(format!("HTTP {status}: {body}")))
+        }
+    }
+
     // ── System & Identity ───────────────────────────────────────────────
 
     /// Health probe. Returns `Ok(status)` if the daemon is reachable.
@@ -241,6 +258,16 @@ impl X0xClient {
             .json(&req)
             .send()
             .await?;
+        self.parse(resp).await
+    }
+
+    /// Fetch this agent's trust-scoped introduction card.
+    pub async fn introduction(&self, peer_agent_id: Option<&str>) -> Result<IntroductionCard> {
+        let mut req = self.client.get(self.url("/introduction"));
+        if let Some(peer) = peer_agent_id {
+            req = req.query(&[("peer", peer)]);
+        }
+        let resp = req.send().await?;
         self.parse(resp).await
     }
 
@@ -943,7 +970,7 @@ impl X0xClient {
     // ── Upgrade ─────────────────────────────────────────────────────────
 
     /// Check for x0xd updates.
-    pub async fn check_upgrade(&self) -> Result<serde_json::Value> {
+    pub async fn check_upgrade(&self) -> Result<UpgradeStatus> {
         let resp = self.client.get(self.url("/upgrade")).send().await?;
         self.parse(resp).await
     }
@@ -955,19 +982,7 @@ impl X0xClient {
     /// Calls `GET /constitution` which returns `text/markdown` and requires no
     /// authentication.
     pub async fn constitution(&self) -> Result<String> {
-        let resp = self
-            .client
-            .get(self.url("/constitution"))
-            .send()
-            .await
-            .map_err(|_| X0xError::NotReachable(self.base_url.clone()))?;
-        let status = resp.status();
-        let body = resp.text().await?;
-        if status.is_success() {
-            Ok(body)
-        } else {
-            Err(X0xError::Daemon(format!("HTTP {status}: {body}")))
-        }
+        self.get_text("/constitution").await
     }
 
     /// Fetch the x0x constitution with version metadata.
@@ -983,6 +998,11 @@ impl X0xClient {
             .await
             .map_err(|_| X0xError::NotReachable(self.base_url.clone()))?;
         self.parse(resp).await
+    }
+
+    /// Fetch the embedded x0x daemon GUI HTML.
+    pub async fn gui_html(&self) -> Result<String> {
+        self.get_text("/gui").await
     }
 
     /// Inspect active WebSocket sessions and their shared subscriptions.

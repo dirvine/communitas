@@ -23,10 +23,12 @@ public struct CreateGroupRequest: Codable, Sendable {
 public struct CreatedGroup: Codable, Sendable {
     public let groupId: String
     public let name: String
+    public let chatTopic: String?
 
     enum CodingKeys: String, CodingKey {
         case groupId = "group_id"
         case name
+        case chatTopic = "chat_topic"
     }
 }
 
@@ -67,27 +69,33 @@ public struct GroupMember: Codable, Sendable {
 public struct GroupInfo: Codable, Sendable {
     public let groupId: String
     public let name: String
-    public let members: [GroupMember]?
     public let description: String?
+    public let creator: String?
+    public let createdAt: UInt64?
+    public let memberCount: UInt64?
+    public let chatTopic: String?
+    public let metadataTopic: String?
+    public let members: [GroupMember]?
 
     enum CodingKeys: String, CodingKey {
         case groupId = "group_id"
-        case name, members, description
+        case name, description, creator, members
+        case createdAt = "created_at"
+        case memberCount = "member_count"
+        case chatTopic = "chat_topic"
+        case metadataTopic = "metadata_topic"
     }
 }
 
 /// Request to generate an invite.
 public struct InviteRequest: Codable, Sendable {
-    public let groupId: String
     public let expirySecs: UInt64?
 
     enum CodingKeys: String, CodingKey {
-        case groupId = "group_id"
         case expirySecs = "expiry_secs"
     }
 
-    public init(groupId: String, expirySecs: UInt64?) {
-        self.groupId = groupId
+    public init(expirySecs: UInt64?) {
         self.expirySecs = expirySecs
     }
 }

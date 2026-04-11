@@ -162,6 +162,15 @@ public final class X0xClient: Sendable {
         return try await post("/agent/card/import", body: body)
     }
 
+    /// Fetch this agent's trust-scoped introduction card. `GET /introduction`
+    public func introduction(peerAgentId: String? = nil) async throws -> IntroductionCard {
+        var items: [URLQueryItem] = []
+        if let peerAgentId {
+            items.append(URLQueryItem(name: "peer", value: peerAgentId))
+        }
+        return try await get("/introduction", queryItems: items)
+    }
+
     /// Re-announce identity to the network with default flags. `POST /announce`
     public func announce() async throws {
         let _: Empty = try await post("/announce", body: Empty())
@@ -304,7 +313,7 @@ public final class X0xClient: Sendable {
 
     /// Generate an invite for a group. `POST /groups/:id/invite`
     public func invite(groupId: String, expirySecs: UInt64? = nil) async throws -> InviteResponse {
-        let body = InviteRequest(groupId: groupId, expirySecs: expirySecs)
+        let body = InviteRequest(expirySecs: expirySecs)
         return try await post("/groups/\(groupId)/invite", body: body)
     }
 
@@ -349,7 +358,7 @@ public final class X0xClient: Sendable {
     /// Get details for a specific discovered agent. `GET /agents/discovered/:agent_id`
     public func discoveredAgent(agentId: String) async throws -> DiscoveredAgent {
         let resp: DiscoveredAgentWrapper = try await get("/agents/discovered/\(agentId)")
-        return resp.toDiscoveredAgent()
+        return resp.agent
     }
 
     /// Fetch online presence. `GET /presence`
@@ -396,18 +405,7 @@ public final class X0xClient: Sendable {
     /// Get status of a specific file transfer. `GET /files/transfers/:id`
     public func transferStatus(transferId: String) async throws -> FileTransfer {
         let resp: FileTransferWrapper = try await get("/files/transfers/\(transferId)")
-        return FileTransfer(
-            transferId: resp.transferId ?? transferId,
-            direction: resp.direction ?? .sending,
-            remoteAgentId: resp.remoteAgentId ?? "",
-            filename: resp.filename ?? "",
-            totalSize: resp.totalSize ?? 0,
-            bytesTransferred: resp.bytesTransferred ?? 0,
-            status: resp.status ?? .pending,
-            sha256: resp.sha256,
-            error: resp.error,
-            startedAt: resp.startedAt
-        )
+        return resp.transfer
     }
 
     /// Accept an incoming file transfer. `POST /files/accept/:id`
@@ -449,8 +447,8 @@ public final class X0xClient: Sendable {
     }
 
     /// Add a task to a task list. `POST /task-lists/:id/tasks`
-    public func addTask(listId: String, title: String) async throws -> String {
-        let body = AddTaskRequest(title: title)
+    public func addTask(listId: String, title: String, description: String? = nil) async throws -> String {
+        let body = AddTaskRequest(title: title, description: description)
         let resp: AddTaskResponse = try await post("/task-lists/\(listId)/tasks", body: body)
         return resp.taskId
     }
@@ -497,14 +495,25 @@ public final class X0xClient: Sendable {
 
     /// List keys in a store. `GET /stores/:id/keys`
     public func storeKeys(storeId: String) async throws -> [String] {
+        let resp = try await storeKeyEntries(storeId: storeId)
+        return resp.map(\.key)
+    }
+
+    /// List detailed key metadata in a store. `GET /stores/:id/keys`
+    public func storeKeyEntries(storeId: String) async throws -> [StoreKeyEntry] {
         let resp: StoreKeysResponse = try await get("/stores/\(storeId)/keys")
-        return resp.keys.map(\.key)
+        return resp.keys
+    }
+
+    /// Fetch the raw store entry from `GET /stores/:id/:key`.
+    public func storeEntry(storeId: String, key: String) async throws -> StoreGetResponse {
+        try await get("/stores/\(storeId)/\(key)")
     }
 
     /// Get a value from a store. `GET /stores/:id/:key`
     /// The x0x store API returns base64-encoded values; this method decodes them.
     public func storeGet(storeId: String, key: String) async throws -> String {
-        let resp: StoreGetResponse = try await get("/stores/\(storeId)/\(key)")
+        let resp = try await storeEntry(storeId: storeId, key: key)
         guard let data = Data(base64Encoded: resp.value) else {
             throw X0xError.decodingError(underlying: DecodingError.dataCorrupted(
                 DecodingError.Context(codingPath: [], debugDescription: "Invalid base64 in store value")
@@ -518,12 +527,17 @@ public final class X0xClient: Sendable {
         return decoded
     }
 
-    /// Put a value in a store. `PUT /stores/:id/:key`
+    /// Put a raw base64-encoded value in a store. `PUT /stores/:id/:key`
+    public func putStoreValue(storeId: String, key: String, base64Value: String, contentType: String? = nil) async throws {
+        let body = StorePutRequest(value: base64Value, contentType: contentType)
+        let _: Empty = try await put("/stores/\(storeId)/\(key)", body: body)
+    }
+
+    /// Put a UTF-8 string value in a store. `PUT /stores/:id/:key`
     /// The x0x store API expects base64-encoded values; this method encodes them.
     public func storePut(storeId: String, key: String, value: String, contentType: String? = nil) async throws {
         let base64Value = Data(value.utf8).base64EncodedString()
-        let body = StorePutRequest(value: base64Value, contentType: contentType ?? "application/json")
-        let _: Empty = try await put("/stores/\(storeId)/\(key)", body: body)
+        try await putStoreValue(storeId: storeId, key: key, base64Value: base64Value, contentType: contentType ?? "application/json")
     }
 
     /// Delete a key from a store. `DELETE /stores/:id/:key`
@@ -597,11 +611,23 @@ public final class X0xClient: Sendable {
 
     // MARK: - Constitution
 
+    /// Fetch the raw x0x constitution markdown. `GET /constitution`
+    ///
+    /// This endpoint is auth-exempt — no Bearer token required.
+    public func constitution() async throws -> String {
+        try await getText("/constitution")
+    }
+
     /// Fetch the x0x constitution with version metadata. `GET /constitution/json`
     ///
     /// This endpoint is auth-exempt — no Bearer token required.
     public func constitutionJSON() async throws -> ConstitutionInfo {
         try await get("/constitution/json")
+    }
+
+    /// Fetch the embedded x0x GUI HTML. `GET /gui`
+    public func guiHTML() async throws -> String {
+        try await getText("/gui")
     }
 
     // MARK: - Upgrade
@@ -692,6 +718,26 @@ public final class X0xClient: Sendable {
 
         let (data, response) = try await performRequest(URLRequest(url: url))
         return try decodeFlatResponse(data: data, response: response)
+    }
+
+    private func getText(_ path: String) async throws -> String {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw X0xError.invalidURL(path: path)
+        }
+
+        let (data, response) = try await performRequest(URLRequest(url: url))
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200 ... 299).contains(httpResponse.statusCode) {
+            let body = String(data: data, encoding: .utf8) ?? "<binary>"
+            throw X0xError.httpError(statusCode: httpResponse.statusCode, body: body)
+        }
+
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw X0xError.decodingError(underlying: DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: [], debugDescription: "Response was not valid UTF-8 text")
+            ))
+        }
+        return text
     }
 
     private func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
@@ -817,25 +863,3 @@ public final class X0xClient: Sendable {
     }
 }
 
-// MARK: - Store Keys Response
-
-struct StoreKeyEntry: Codable {
-    let key: String
-    let contentType: String?
-    let contentHash: String?
-    let size: UInt64?
-    let updatedAt: UInt64?
-
-    enum CodingKeys: String, CodingKey {
-        case key
-        case contentType = "content_type"
-        case contentHash = "content_hash"
-        case size
-        case updatedAt = "updated_at"
-    }
-}
-
-struct StoreKeysResponse: Codable {
-    let ok: Bool?
-    let keys: [StoreKeyEntry]
-}

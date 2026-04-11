@@ -20,6 +20,7 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("agent_user_id", "agentUserId"),
     ("agent_card", "agentCard"),
     ("import_agent_card", "importAgentCard"),
+    ("introduction", "introduction"),
     ("ws_sessions", "wsSessions"),
     // Announcements
     ("announce", "announce"),
@@ -93,9 +94,10 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("transfer_status", "transferStatus"),
     ("accept_file", "acceptFile"),
     ("reject_file", "rejectFile"),
-    // Constitution
-    ("constitution", "constitutionJSON"),
+    // Constitution & GUI
+    ("constitution", "constitution"),
     ("constitution_json", "constitutionJSON"),
+    ("gui_html", "guiHTML"),
     // Upgrades
     ("check_upgrade", "checkUpgrade"),
     // Presence (extended)

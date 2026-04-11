@@ -305,7 +305,7 @@ struct X0xClientTests {
                 "agent_id": "hex64aaa",
                 "machine_id": "hex64bbb",
                 "user_id": null,
-                "external_addresses": ["203.0.113.5:12000"],
+                "addresses": ["203.0.113.5:12000"],
                 "groups": [{"name": "Team", "invite_link": "x0x://invite/abc"}],
                 "stores": [{"name": "Data", "topic": "store-topic"}],
                 "created_at": 1700000000
@@ -317,6 +317,8 @@ struct X0xClientTests {
         let resp = try JSONDecoder().decode(AgentCardResponse.self, from: data)
         #expect(resp.card.displayName == "Alice")
         #expect(resp.card.agentId == "hex64aaa")
+        #expect(resp.card.addresses?.count == 1)
+        #expect(resp.card.externalAddresses?.first == "203.0.113.5:12000")
         #expect(resp.card.groups?.count == 1)
         #expect(resp.card.groups?[0].inviteLink == "x0x://invite/abc")
         #expect(resp.card.stores?.count == 1)
@@ -415,6 +417,28 @@ struct X0xClientTests {
         #expect(resp.epoch == 7)
     }
 
+    @Test("IntroductionCard decodes trust-gated payload")
+    func introductionCardDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "agent_id": "hex64aaa",
+            "display_name": "Alice",
+            "identity_words": "river meadow lantern star",
+            "services": [
+                {"name": "presence", "description": "Online/offline presence visibility", "min_trust": "unknown"}
+            ]
+        }
+        """
+        let data = Data(json.utf8)
+        let card = try JSONDecoder().decode(IntroductionCard.self, from: data)
+        #expect(card.agentId == "hex64aaa")
+        #expect(card.displayName == "Alice")
+        #expect(card.identityWords == "river meadow lantern star")
+        #expect(card.services.count == 1)
+        #expect(card.services[0].minTrust == "unknown")
+    }
+
     @Test("TrustEvaluation decodes from JSON")
     func trustEvaluationDecoding() throws {
         let json = """
@@ -485,18 +509,41 @@ struct X0xClientTests {
         #expect(resp.currentVersion == "0.11.1")
     }
 
-    @Test("DiscoveredAgentWrapper decodes and converts")
+    @Test("DiscoveredAgentWrapper decodes nested agent payload")
     func discoveredAgentWrapperDecoding() throws {
         let json = """
-        {"ok": true, "agent_id": "hex64", "machine_id": "mhex64", "user_id": null, "addresses": ["1.2.3.4:12000"], "announced_at": 1700000000, "last_seen": 1700000100}
+        {"ok": true, "agent": {"agent_id": "hex64", "machine_id": "mhex64", "user_id": null, "addresses": ["1.2.3.4:12000"], "announced_at": 1700000000, "last_seen": 1700000100}}
         """
         let data = Data(json.utf8)
         let wrapper = try JSONDecoder().decode(DiscoveredAgentWrapper.self, from: data)
-        let agent = wrapper.toDiscoveredAgent()
+        let agent = wrapper.agent
         #expect(agent.agentId == "hex64")
         #expect(agent.machineId == "mhex64")
         #expect(agent.addresses.count == 1)
         #expect(agent.lastSeen == 1700000100)
+    }
+
+    @Test("FileTransferWrapper decodes nested transfer payload")
+    func fileTransferWrapperDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "transfer": {
+                "transfer_id": "tx-001",
+                "direction": "Sending",
+                "remote_agent_id": "agent-x",
+                "filename": "doc.pdf",
+                "total_size": 1024,
+                "bytes_transferred": 512,
+                "status": "InProgress"
+            }
+        }
+        """
+        let data = Data(json.utf8)
+        let wrapper = try JSONDecoder().decode(FileTransferWrapper.self, from: data)
+        #expect(wrapper.transfer.transferId == "tx-001")
+        #expect(wrapper.transfer.remoteAgentId == "agent-x")
+        #expect(wrapper.transfer.status == .inProgress)
     }
 
     @Test("UpdateContactRequest encodes correctly")

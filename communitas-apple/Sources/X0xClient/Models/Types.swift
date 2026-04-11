@@ -193,9 +193,11 @@ public struct CreateTaskListResponse: Codable, Sendable {
 
 public struct AddTaskRequest: Codable, Sendable {
     public let title: String
+    public let description: String?
 
-    public init(title: String) {
+    public init(title: String, description: String? = nil) {
         self.title = title
+        self.description = description
     }
 }
 
@@ -259,13 +261,43 @@ public struct StorePutRequest: Codable, Sendable {
 /// Response from `GET /stores/:id/:key`.
 public struct StoreGetResponse: Codable, Sendable {
     public let ok: Bool?
+    public let key: String?
     public let value: String
     public let contentType: String?
+    public let contentHash: String?
+    public let createdAt: UInt64?
+    public let updatedAt: UInt64?
 
     enum CodingKeys: String, CodingKey {
-        case ok, value
+        case ok, key, value
         case contentType = "content_type"
+        case contentHash = "content_hash"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
+}
+
+/// A key entry returned by `GET /stores/:id/keys`.
+public struct StoreKeyEntry: Codable, Sendable {
+    public let key: String
+    public let contentType: String?
+    public let contentHash: String?
+    public let size: UInt64?
+    public let updatedAt: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case contentType = "content_type"
+        case contentHash = "content_hash"
+        case size
+        case updatedAt = "updated_at"
+    }
+}
+
+/// Wrapper for `GET /stores/:id/keys`.
+public struct StoreKeysResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let keys: [StoreKeyEntry]
 }
 
 // MARK: - Network
@@ -281,20 +313,36 @@ public struct NetworkStatus: Codable, Sendable {
     public let avgRttMs: Double?
     public let canReceiveDirect: Bool?
     public let connectedPeers: UInt64?
+    public let coordinationSessions: UInt64?
     public let directConnections: UInt64?
     public let externalAddrs: [String]?
+    public let hasPublicIP: Bool?
     public let holePunchSuccessRate: Double?
+    public let isCoordinating: Bool?
+    public let isRelaying: Bool?
+    public let localAddr: String?
     public let natType: String?
+    public let relaySessions: UInt64?
+    public let relayedConnections: UInt64?
+    public let uptimeSecs: UInt64?
 
     enum CodingKeys: String, CodingKey {
         case ok
         case avgRttMs = "avg_rtt_ms"
         case canReceiveDirect = "can_receive_direct"
         case connectedPeers = "connected_peers"
+        case coordinationSessions = "coordination_sessions"
         case directConnections = "direct_connections"
         case externalAddrs = "external_addrs"
+        case hasPublicIP = "has_public_ip"
         case holePunchSuccessRate = "hole_punch_success_rate"
+        case isCoordinating = "is_coordinating"
+        case isRelaying = "is_relaying"
+        case localAddr = "local_addr"
         case natType = "nat_type"
+        case relaySessions = "relay_sessions"
+        case relayedConnections = "relayed_connections"
+        case uptimeSecs = "uptime_secs"
     }
 }
 
@@ -432,17 +480,23 @@ public struct AgentCard: Codable, Sendable {
     public let agentId: String
     public let machineId: String
     public let userId: String?
-    public let externalAddresses: [String]?
+    public let addresses: [String]?
     public let groups: [CardGroup]?
     public let stores: [CardStore]?
     public let createdAt: UInt64?
+
+    /// Backward-compatible alias for older call sites that still refer to the
+    /// previous `externalAddresses` name.
+    public var externalAddresses: [String]? {
+        addresses
+    }
 
     enum CodingKeys: String, CodingKey {
         case displayName = "display_name"
         case agentId = "agent_id"
         case machineId = "machine_id"
         case userId = "user_id"
-        case externalAddresses = "external_addresses"
+        case addresses
         case groups, stores
         case createdAt = "created_at"
     }
@@ -489,6 +543,43 @@ public struct ImportCardResponse: Codable, Sendable {
         case displayName = "display_name"
         case trustLevel = "trust_level"
         case groups, stores
+    }
+}
+
+/// A trust-scoped service entry from `GET /introduction`.
+public struct IntroductionService: Codable, Sendable {
+    public let name: String
+    public let description: String
+    public let minTrust: String
+
+    enum CodingKeys: String, CodingKey {
+        case name, description
+        case minTrust = "min_trust"
+    }
+}
+
+/// Trust-gated introduction card returned by `GET /introduction`.
+public struct IntroductionCard: Codable, Sendable {
+    public let ok: Bool?
+    public let agentId: String
+    public let machineId: String?
+    public let userId: String?
+    public let certificate: String?
+    public let displayName: String?
+    public let identityWords: String
+    public let services: [IntroductionService]
+    public let signature: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case agentId = "agent_id"
+        case machineId = "machine_id"
+        case userId = "user_id"
+        case certificate
+        case displayName = "display_name"
+        case identityWords = "identity_words"
+        case services
+        case signature
     }
 }
 
@@ -656,28 +747,7 @@ public struct RejectFileRequest: Codable, Sendable {
 /// Wrapper for `GET /files/transfers/:id` response (single transfer).
 public struct FileTransferWrapper: Codable, Sendable {
     public let ok: Bool?
-    public let transferId: String?
-    public let direction: TransferDirection?
-    public let remoteAgentId: String?
-    public let filename: String?
-    public let totalSize: UInt64?
-    public let bytesTransferred: UInt64?
-    public let status: TransferStatus?
-    public let sha256: String?
-    public let error: String?
-    public let startedAt: UInt64?
-
-    enum CodingKeys: String, CodingKey {
-        case ok
-        case transferId = "transfer_id"
-        case direction
-        case remoteAgentId = "remote_agent_id"
-        case filename
-        case totalSize = "total_size"
-        case bytesTransferred = "bytes_transferred"
-        case status, sha256, error
-        case startedAt = "started_at"
-    }
+    public let transfer: FileTransfer
 }
 
 // MARK: - WebSocket Sessions
@@ -752,37 +822,10 @@ public struct UpgradeStatus: Codable, Sendable {
 
 // MARK: - Discovered Agent (Single)
 
-/// Wrapper for `GET /agents/discovered/:agent_id` response (flattened).
+/// Wrapper for `GET /agents/discovered/:agent_id` response.
 public struct DiscoveredAgentWrapper: Codable, Sendable {
     public let ok: Bool?
-    public let agentId: String
-    public let machineId: String
-    public let userId: String?
-    public let addresses: [String]
-    public let announcedAt: UInt64?
-    public let lastSeen: UInt64?
-
-    enum CodingKeys: String, CodingKey {
-        case ok
-        case agentId = "agent_id"
-        case machineId = "machine_id"
-        case userId = "user_id"
-        case addresses
-        case announcedAt = "announced_at"
-        case lastSeen = "last_seen"
-    }
-
-    /// Convert to a `DiscoveredAgent` value.
-    public func toDiscoveredAgent() -> DiscoveredAgent {
-        DiscoveredAgent(
-            agentId: agentId,
-            machineId: machineId,
-            userId: userId,
-            addresses: addresses,
-            announcedAt: announcedAt,
-            lastSeen: lastSeen
-        )
-    }
+    public let agent: DiscoveredAgent
 }
 
 // MARK: - Presence (Extended)

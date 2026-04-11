@@ -87,6 +87,8 @@ pub struct DiscoveredAgent {
     #[serde(default)]
     pub addresses: Vec<String>,
     #[serde(default)]
+    pub announced_at: Option<u64>,
+    #[serde(default)]
     pub last_seen: Option<u64>,
 }
 
@@ -215,6 +217,33 @@ pub struct AgentCard {
 pub struct AgentCardResponse {
     pub card: AgentCard,
     pub link: String,
+}
+
+/// A trust-scoped service entry from `GET /introduction`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct IntroductionService {
+    pub name: String,
+    pub description: String,
+    pub min_trust: String,
+}
+
+/// Trust-gated introduction card from `GET /introduction`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct IntroductionCard {
+    pub agent_id: String,
+    #[serde(default)]
+    pub machine_id: Option<String>,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    #[serde(default)]
+    pub certificate: Option<String>,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    pub identity_words: String,
+    #[serde(default)]
+    pub services: Vec<IntroductionService>,
+    #[serde(default)]
+    pub signature: Option<String>,
 }
 
 /// Request body for `POST /agent/card/import`.
@@ -884,6 +913,17 @@ pub struct ConstitutionInfo {
     pub status: String,
     /// Full markdown text of the constitution.
     pub content: String,
+}
+
+/// Structured response from `GET /upgrade`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpgradeStatus {
+    #[serde(default)]
+    pub update_available: Option<bool>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub current_version: Option<String>,
 }
 
 // ── WebSocket sessions ──────────────────────────────────────────────────────

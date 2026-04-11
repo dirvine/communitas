@@ -233,8 +233,8 @@ async fn all_targets_expose_core_daemon_surfaces() {
             match client.check_upgrade().await {
                 Ok(upgrade) => {
                     assert!(
-                        upgrade.is_object(),
-                        "{} upgrade response shape",
+                        upgrade.current_version.is_some(),
+                        "{} upgrade response should include current_version",
                         target.summary()
                     );
                 }

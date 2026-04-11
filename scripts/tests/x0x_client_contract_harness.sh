@@ -406,12 +406,18 @@ run_vps_mutation_suite() {
     "cxh-vps-a-$RUN_ID|147.182.234.192|scratch-sfo|SFO3, US"
     "cxh-vps-b-$RUN_ID|116.203.101.172|scratch-nuremberg|Nuremberg, DE"
     "cxh-vps-c-$RUN_ID|149.28.156.231|scratch-singapore|Singapore, SG"
+    "cxh-vps-d-$RUN_ID|142.93.199.50|scratch-nyc|NYC1, US"
+    "cxh-vps-e-$RUN_ID|45.77.176.184|scratch-tokyo|Tokyo, JP"
+    "cxh-vps-f-$RUN_ID|65.21.157.229|scratch-helsinki|Helsinki, FI"
   )
 
   for entry in "${inventory[@]}"; do
     IFS='|' read -r name ip role region <<< "$entry"
     local remote_port
-    remote_port="$(free_remote_port "$ip")"
+    if ! remote_port="$(free_remote_port "$ip" 2>/dev/null)"; then
+      log_warn "Skipping scratch instance $name on $ip: could not allocate remote port"
+      continue
+    fi
     local remote
     if ! remote=$(start_remote_scratch_instance "$name" "$ip" "$role" "$region" "$remote_port" "$bootstrap_peer"); then
       continue
@@ -444,6 +450,10 @@ run_vps_mutation_suite() {
     if [[ -z "$bootstrap_peer" ]]; then
       bootstrap_peer="$(discover_bootstrap_addr "$forwarded_addr" "$token" external "$ip")"
       log_info "Using scratch VPS bootstrap peer $bootstrap_peer"
+    fi
+
+    if [[ ${#specs[@]} -ge 3 ]]; then
+      break
     fi
   done
 

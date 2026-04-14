@@ -47,6 +47,17 @@ final class ChannelManager: ObservableObject {
     /// unknown / legacy daemon) keeps the existing gossip path.
     @Published private(set) var confidentiality: GroupConfidentiality = .mlsEncrypted
 
+    /// IDs of SignedPublic messages already merged into `messages`.
+    /// Bounded on long-running sessions.
+    private var seenSignedIds: Set<String> = []
+
+    /// Task that polls `GET /groups/:id/messages` for SignedPublic
+    /// groups and merges new signed envelopes into the chat view.
+    /// Mirrors the Dioxus poll and the embedded GUI poll so all three
+    /// chat surfaces see cross-peer messages from the same source of
+    /// truth (the daemon's validated cache).
+    private var signedPublicPollTask: Task<Void, Never>?
+
     init(client: X0xClient, groupId: String, groupName: String, agentId: String, displayName: String) {
         self.client = client
         self.groupId = groupId
@@ -55,6 +66,7 @@ final class ChannelManager: ObservableObject {
         self.displayName = displayName
         Task { [weak self] in
             await self?.refreshConfidentiality()
+            await self?.startSignedPublicPollIfNeeded()
         }
     }
 
@@ -68,9 +80,61 @@ final class ChannelManager: ObservableObject {
         }
     }
 
+    private func startSignedPublicPollIfNeeded() async {
+        guard confidentiality == .signedPublic, signedPublicPollTask == nil else { return }
+        signedPublicPollTask = Task { [weak self] in
+            await self?.pollSignedPublicLoop()
+        }
+    }
+
+    /// Poll loop. Runs until the ChannelManager is torn down.
+    private func pollSignedPublicLoop() async {
+        while !Task.isCancelled {
+            await pollSignedPublicOnce()
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
+    /// Single poll tick. Public so the send path can trigger an
+    /// immediate refresh after a successful `POST /send`.
+    func pollSignedPublicOnce() async {
+        guard confidentiality == .signedPublic else { return }
+        guard let list = try? await client.getGroupPublicMessages(groupId: groupId) else {
+            return
+        }
+        for gpm in list {
+            let key = "\(gpm.authorAgentId):\(gpm.timestamp):\(gpm.signature.prefix(12))"
+            if seenSignedIds.contains(key) { continue }
+            seenSignedIds.insert(key)
+            let msg = ChannelChatMessage(
+                id: key,
+                text: gpm.body,
+                senderName: shortenAgentId(gpm.authorAgentId),
+                senderId: gpm.authorAgentId,
+                timestamp: Int64(gpm.timestamp),
+                channel: currentChannel,
+                replyToId: nil
+            )
+            if !messages.contains(where: { $0.id == msg.id }) {
+                let idx = messages.firstIndex(where: { $0.timestamp > msg.timestamp })
+                    ?? messages.endIndex
+                messages.insert(msg, at: idx)
+            }
+        }
+        // Keep the seen set bounded.
+        if seenSignedIds.count > 5000 {
+            seenSignedIds = Set(seenSignedIds.prefix(1000))
+        }
+    }
+
+    private func shortenAgentId(_ id: String) -> String {
+        id.count <= 16 ? id : "\(id.prefix(8))…\(id.suffix(6))"
+    }
+
     deinit {
         listeningTask?.cancel()
         typingCleanupTask?.cancel()
+        signedPublicPollTask?.cancel()
         webSocket?.disconnect()
     }
 
@@ -549,6 +613,11 @@ final class ChannelManager: ObservableObject {
                 body: text,
                 kind: "chat"
             )
+            // Ensure the view updates immediately rather than waiting
+            // for the 5 s background poll.
+            await pollSignedPublicOnce()
+            saveHistory(channel: currentChannel, messages: messages)
+            return
         case .mlsEncrypted:
             let payload = try encodeMessagePayload(msg)
             try await client.publish(
@@ -557,7 +626,9 @@ final class ChannelManager: ObservableObject {
             )
         }
 
-        // Optimistically add to local list
+        // Optimistically add to local list (MlsEncrypted only — the
+        // SignedPublic path above gets the authoritative envelope
+        // back from the daemon via the poll).
         messages.append(msg)
         saveHistory(channel: currentChannel, messages: messages)
     }

@@ -369,6 +369,77 @@ pub fn ChannelChatView(
         });
     }
 
+    // ----- SignedPublic receive poll -----
+    // x0xd publishes signed messages on `x0x.groups.public.{group_id}`,
+    // not the channel topic the WS listener below subscribes to. To
+    // surface cross-peer messages in the chat view we poll
+    // `GET /groups/:id/messages` every 5 s while the component is
+    // mounted for a SignedPublic group. The daemon has already
+    // validated signature + write-access + banned-author before
+    // caching, so we just render.
+    let poll_group_id = group_id.clone();
+    let poll_channel_name = channel_name.clone();
+    use_coroutine(move |_: UnboundedReceiver<()>| {
+        let poll_group_id = poll_group_id.clone();
+        let poll_channel_name = poll_channel_name.clone();
+        async move {
+            let client = communitas_x0x_client::X0xClient::new();
+            let mut seen: HashSet<String> = HashSet::new();
+            loop {
+                if is_signed_public()
+                    && let Ok(list) = client.get_group_public_messages(&poll_group_id).await
+                {
+                    let mut appended = false;
+                    for gpm in &list {
+                        let key = format!(
+                            "{}:{}:{}",
+                            gpm.author_agent_id,
+                            gpm.timestamp,
+                            gpm.signature.chars().take(12).collect::<String>()
+                        );
+                        if !seen.insert(key.clone()) {
+                            continue;
+                        }
+                        let chat = ChatMessage {
+                            id: key,
+                            text: gpm.body.clone(),
+                            sender_name: x0x_contract::fallback_sender_name(
+                                &gpm.author_agent_id,
+                            ),
+                            sender_id: gpm.author_agent_id.clone(),
+                            timestamp: gpm.timestamp,
+                            channel: poll_channel_name.clone(),
+                            thread_root: None,
+                            broadcast: false,
+                            is_deleted: false,
+                            reply_count: 0,
+                            reactions: HashMap::new(),
+                        };
+                        messages.with_mut(|msgs| {
+                            if !msgs.iter().any(|m| m.id == chat.id) {
+                                let pos = msgs
+                                    .partition_point(|m| m.timestamp <= chat.timestamp);
+                                msgs.insert(pos, chat);
+                                if msgs.len() > MAX_MESSAGES {
+                                    msgs.drain(..msgs.len() - MAX_MESSAGES);
+                                }
+                                appended = true;
+                            }
+                        });
+                    }
+                    if seen.len() > 5000 {
+                        // Keep the seen set bounded on long sessions.
+                        // HashSet has no cheap LRU; just truncate.
+                        let keep: Vec<String> = seen.iter().take(1000).cloned().collect();
+                        seen = keep.into_iter().collect();
+                    }
+                    let _ = appended;
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+    });
+
     // ----- history load -----
     // B2: Channel changes are handled by the parent (space_view.rs) which keys
     // ChannelChatView on "{group_id}:{channel_name}", causing a full remount when

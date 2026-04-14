@@ -24,6 +24,8 @@ pub enum SpaceTab {
     Feed,
     Wiki,
     Web,
+    /// Owner/admin panel for policy, roster, and join requests.
+    Manage,
 }
 
 /// Props for the space view.
@@ -46,6 +48,7 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
         Some("feed") => SpaceTab::Feed,
         Some("wiki") => SpaceTab::Wiki,
         Some("web") => SpaceTab::Web,
+        Some("manage") => SpaceTab::Manage,
         _ => SpaceTab::Chat,
     });
 
@@ -159,6 +162,13 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
                     "aria-selected": current_tab == SpaceTab::Web,
                     onclick: move |_| active_tab.set(SpaceTab::Web),
                     "Web"
+                }
+                button {
+                    style: tab_btn(SpaceTab::Manage, "Manage"),
+                    role: "tab",
+                    "aria-selected": current_tab == SpaceTab::Manage,
+                    onclick: move |_| active_tab.set(SpaceTab::Manage),
+                    "Manage"
                 }
             }
 
@@ -340,6 +350,18 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
                         rsx! {
                             crate::components::WebView {
                                 group_id: sid,
+                            }
+                        }
+                    }
+
+                    SpaceTab::Manage => {
+                        let sid = space_id.clone();
+                        rsx! {
+                            div {
+                                style: "flex: 1; overflow: auto;",
+                                components::SpaceAdminPanel {
+                                    space_id: sid,
+                                }
                             }
                         }
                     }

@@ -24,6 +24,7 @@ pub mod create_space_modal;
 pub mod daemon_status;
 pub mod dashboard;
 pub mod detail_panel;
+pub mod discover_view;
 pub mod dm_view;
 pub mod drive;
 pub mod emoji_data;
@@ -49,6 +50,7 @@ pub mod settings;
 pub mod settings_view;
 pub mod sidebar;
 pub mod skeleton;
+pub mod space_admin;
 pub mod space_view;
 pub mod status_bar;
 pub mod swarm_view;
@@ -176,8 +178,10 @@ pub use onboarding_gate::OnboardingGate;
 pub use channel_chat::ChannelChatView;
 pub use channel_sidebar::ChannelSidebar;
 pub use create_channel_modal::CreateChannelModal;
-pub use create_space_modal::{CreateSpaceModal, SpaceModalTab};
+pub use create_space_modal::{CreateSpaceModal, SpaceModalTab, SpacePreset};
 pub use detail_panel::{DetailContent, DetailPanel};
+pub use discover_view::DiscoverView;
+pub use space_admin::SpaceAdminPanel;
 pub use thread_panel::ThreadPanel;
 
 // Re-export new Deep Space components

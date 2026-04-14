@@ -14,6 +14,71 @@ pub enum SpaceModalTab {
     Join,
 }
 
+/// Named preset corresponding to `x0x::groups::GroupPolicyPreset`. Drives
+/// the five-axis policy the daemon applies on `POST /groups`. Keeping
+/// this enum here rather than re-exporting the client enum lets the
+/// modal stay UI-only and dependency-free from the wire types.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SpacePreset {
+    /// Hidden, invite-only, MLS-encrypted, members-only.
+    PrivateSecure,
+    /// Public-directory + request-access + MLS-encrypted + members-only.
+    PublicRequestSecure,
+    /// Public-directory + open-join + signed-public + members-only write.
+    PublicOpen,
+    /// Public-directory + open-join + signed-public + admin-only write.
+    PublicAnnounce,
+}
+
+impl SpacePreset {
+    /// Wire name accepted by `POST /groups` and
+    /// `PATCH /groups/:id/policy`.
+    #[must_use]
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Self::PrivateSecure => "private_secure",
+            Self::PublicRequestSecure => "public_request_secure",
+            Self::PublicOpen => "public_open",
+            Self::PublicAnnounce => "public_announce",
+        }
+    }
+
+    /// Short human label for the preset tile.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::PrivateSecure => "Private",
+            Self::PublicRequestSecure => "Public · request access",
+            Self::PublicOpen => "Public community",
+            Self::PublicAnnounce => "Announcement",
+        }
+    }
+
+    /// One-line explanation shown beneath the label.
+    #[must_use]
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::PrivateSecure => "Hidden, invite-only, end-to-end encrypted.",
+            Self::PublicRequestSecure => {
+                "Discoverable; content stays encrypted until admins approve."
+            }
+            Self::PublicOpen => "Open join, public read, members post.",
+            Self::PublicAnnounce => "Open read; only admins may post.",
+        }
+    }
+
+    /// All presets in display order.
+    #[must_use]
+    pub fn all() -> [Self; 4] {
+        [
+            Self::PrivateSecure,
+            Self::PublicRequestSecure,
+            Self::PublicOpen,
+            Self::PublicAnnounce,
+        ]
+    }
+}
+
 /// Props for the create/join space modal.
 #[derive(Props, Clone, PartialEq)]
 pub struct CreateSpaceModalProps {
@@ -23,6 +88,9 @@ pub struct CreateSpaceModalProps {
     pub space_name: String,
     /// Space description input (Create tab).
     pub space_description: String,
+    /// Selected policy preset for the new space (Create tab). When
+    /// `None`, the daemon applies its default (`private_secure`).
+    pub space_preset: SpacePreset,
     /// Invite link input (Join tab).
     pub invite_link: String,
     /// Display name input (used for both create and join).
@@ -37,6 +105,8 @@ pub struct CreateSpaceModalProps {
     pub on_name_change: EventHandler<String>,
     /// Called when space description changes.
     pub on_description_change: EventHandler<String>,
+    /// Called when the preset selection changes.
+    pub on_preset_change: EventHandler<SpacePreset>,
     /// Called when invite link changes.
     pub on_invite_change: EventHandler<String>,
     /// Called when display name changes.
@@ -239,6 +309,86 @@ pub fn CreateSpaceModal(props: CreateSpaceModalProps) -> Element {
                                 oninput: move |evt: Event<FormData>| props.on_description_change.call(evt.value().to_string()),
                             }
                         }
+
+                        // Policy preset picker. Drives the five-axis group
+                        // policy on `POST /groups`; preset can be changed
+                        // later via `PATCH /groups/:id/policy` (owner only).
+                        div {
+                            style: format!(
+                                "display: flex; \
+                                 flex-direction: column; \
+                                 gap: {};",
+                                spacing::XS,
+                            ),
+
+                            span {
+                                style: format!(
+                                    "font-size: {}; \
+                                     font-weight: {}; \
+                                     color: {};",
+                                    typography::SIZE_SM,
+                                    typography::WEIGHT_MEDIUM,
+                                    semantic::TEXT_PRIMARY,
+                                ),
+                                "Visibility"
+                            }
+
+                            div {
+                                style: format!(
+                                    "display: grid; \
+                                     grid-template-columns: 1fr 1fr; \
+                                     gap: {};",
+                                    spacing::XS,
+                                ),
+                                role: "radiogroup",
+                                aria_label: "Space visibility preset",
+
+                                for preset in SpacePreset::all() {
+                                    {
+                                        let selected = preset == props.space_preset;
+                                        let disabled = props.submitting;
+                                        rsx! {
+                                            button {
+                                                key: "{preset.wire_name()}",
+                                                r#type: "button",
+                                                role: "radio",
+                                                aria_checked: if selected { "true" } else { "false" },
+                                                disabled,
+                                                "data-preset": preset.wire_name(),
+                                                style: preset_tile_style(selected, disabled),
+                                                onclick: move |_| props.on_preset_change.call(preset),
+                                                div {
+                                                    style: format!(
+                                                        "font-size: {}; \
+                                                         font-weight: {}; \
+                                                         color: {};",
+                                                        typography::SIZE_SM,
+                                                        typography::WEIGHT_SEMIBOLD,
+                                                        if selected {
+                                                            semantic::PRIMARY
+                                                        } else {
+                                                            semantic::TEXT_PRIMARY
+                                                        },
+                                                    ),
+                                                    "{preset.label()}"
+                                                }
+                                                div {
+                                                    style: format!(
+                                                        "font-size: {}; \
+                                                         color: {}; \
+                                                         line-height: {};",
+                                                        typography::SIZE_XS,
+                                                        semantic::TEXT_MUTED,
+                                                        typography::LEADING_NORMAL,
+                                                    ),
+                                                    "{preset.description()}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         // Join tab - invite link input
                         label {
@@ -424,6 +574,39 @@ fn cancel_button_style(disabled: bool) -> String {
         spacing::BASE,
         typography::SIZE_SM,
         if disabled { "not-allowed" } else { "pointer" },
+    )
+}
+
+/// Preset radio-tile style. Selected tiles pick up the primary accent.
+fn preset_tile_style(selected: bool, disabled: bool) -> String {
+    format!(
+        "display: flex; \
+         flex-direction: column; \
+         align-items: flex-start; \
+         gap: {}; \
+         padding: {} {}; \
+         border: 1px solid {}; \
+         border-radius: {}; \
+         background: {}; \
+         text-align: left; \
+         cursor: {}; \
+         transition: {};",
+        spacing::XS,
+        spacing::SM,
+        spacing::BASE,
+        if selected {
+            semantic::PRIMARY
+        } else {
+            semantic::BORDER_DEFAULT
+        },
+        radius::LG,
+        if selected {
+            semantic::BG_TERTIARY
+        } else {
+            "transparent"
+        },
+        if disabled { "not-allowed" } else { "pointer" },
+        motion::transition("border-color, background-color"),
     )
 }
 

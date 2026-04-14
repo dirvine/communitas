@@ -29,7 +29,7 @@ use std::sync::{Arc, OnceLock};
 use tracing::{error, info};
 
 use communitas_ui_service::auth::AuthSession;
-use components::{ContactEntry, DetailContent, GroupEntry, SpaceModalTab};
+use components::{ContactEntry, DetailContent, GroupEntry, SpaceModalTab, SpacePreset};
 use tokens::colors;
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
@@ -93,6 +93,8 @@ enum Route {
     SpaceTab { space_id: String, tab: String },
     #[route("/dm/:agent_id")]
     DirectMessage { agent_id: String },
+    #[route("/discover")]
+    Discover {},
     #[route("/people")]
     People {},
     #[route("/network")]
@@ -271,6 +273,7 @@ fn AppShell(children: Element) -> Element {
     let mut space_modal_tab = use_signal(|| SpaceModalTab::Create);
     let mut space_name = use_signal(String::new);
     let mut space_description = use_signal(String::new);
+    let mut space_preset = use_signal(|| SpacePreset::PrivateSecure);
     let mut space_invite_link = use_signal(String::new);
     let mut space_display_name = use_signal(String::new);
     let mut space_submitting = use_signal(|| false);
@@ -429,6 +432,7 @@ fn AppShell(children: Element) -> Element {
                         space_modal_tab.set(SpaceModalTab::Create);
                         space_name.set(String::new());
                         space_description.set(String::new());
+                        space_preset.set(SpacePreset::PrivateSecure);
                         space_invite_link.set(String::new());
                         space_display_name.set(String::new());
                         space_submitting.set(false);
@@ -461,6 +465,7 @@ fn AppShell(children: Element) -> Element {
                 active_tab: space_modal_tab(),
                 space_name: space_name(),
                 space_description: space_description(),
+                space_preset: space_preset(),
                 invite_link: space_invite_link(),
                 display_name: space_display_name(),
                 submitting: space_submitting(),
@@ -468,6 +473,7 @@ fn AppShell(children: Element) -> Element {
                 on_tab_change: move |tab: SpaceModalTab| space_modal_tab.set(tab),
                 on_name_change: move |val: String| space_name.set(val),
                 on_description_change: move |val: String| space_description.set(val),
+                on_preset_change: move |preset: SpacePreset| space_preset.set(preset),
                 on_invite_change: move |val: String| space_invite_link.set(val),
                 on_display_name_change: move |val: String| space_display_name.set(val),
                 on_cancel: move |_| {
@@ -483,13 +489,17 @@ fn AppShell(children: Element) -> Element {
                     }
                     let desc = space_description().trim().to_string();
                     let display = space_display_name().trim().to_string();
+                    let preset = space_preset_to_client(space_preset());
                     space_submitting.set(true);
                     space_error.set(None);
                     spawn(async move {
                         let client = communitas_x0x_client::X0xClient::new();
                         let desc_opt = if desc.is_empty() { None } else { Some(desc.as_str()) };
                         let display_opt = if display.is_empty() { None } else { Some(display.as_str()) };
-                        match client.create_group(&name, desc_opt, display_opt).await {
+                        match client
+                            .create_group_with_preset(&name, desc_opt, display_opt, Some(preset))
+                            .await
+                        {
                             Ok(created) => {
                                 info!(target: "ui.app_shell", "Created space {} ({})", created.name, created.group_id);
                                 show_space_modal.set(false);
@@ -627,6 +637,15 @@ fn DirectMessage(agent_id: String) -> Element {
     rsx! {
         AppShell {
             components::DmView { agent_id: agent_id }
+        }
+    }
+}
+
+#[component]
+fn Discover() -> Element {
+    rsx! {
+        AppShell {
+            components::DiscoverView {}
         }
     }
 }
@@ -893,6 +912,19 @@ pub(crate) async fn create_channel(
     Ok(new_channel)
 }
 
+/// Map the UI-side [`SpacePreset`] to the client's
+/// [`communitas_x0x_client::GroupPolicyPreset`]. Kept as a standalone fn
+/// so the modal component does not need to depend on the client crate.
+fn space_preset_to_client(p: SpacePreset) -> communitas_x0x_client::GroupPolicyPreset {
+    use communitas_x0x_client::GroupPolicyPreset as C;
+    match p {
+        SpacePreset::PrivateSecure => C::PrivateSecure,
+        SpacePreset::PublicRequestSecure => C::PublicRequestSecure,
+        SpacePreset::PublicOpen => C::PublicOpen,
+        SpacePreset::PublicAnnounce => C::PublicAnnounce,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -901,6 +933,27 @@ mod tests {
     fn route_dashboard_is_root() {
         let route = Route::Dashboard {};
         assert_eq!(format!("{route:?}"), "Dashboard");
+    }
+
+    #[test]
+    fn space_preset_maps_to_client_preset() {
+        use communitas_x0x_client::GroupPolicyPreset as C;
+        assert_eq!(
+            space_preset_to_client(SpacePreset::PrivateSecure),
+            C::PrivateSecure
+        );
+        assert_eq!(
+            space_preset_to_client(SpacePreset::PublicRequestSecure),
+            C::PublicRequestSecure
+        );
+        assert_eq!(
+            space_preset_to_client(SpacePreset::PublicOpen),
+            C::PublicOpen
+        );
+        assert_eq!(
+            space_preset_to_client(SpacePreset::PublicAnnounce),
+            C::PublicAnnounce
+        );
     }
 
     #[test]

@@ -266,8 +266,9 @@ pub fn AppSidebar(props: AppSidebarProps) -> Element {
         }
     );
 
-    // System nav items (People, Network, Constitution, Settings, About)
+    // System nav items (Discover, People, Network, Constitution, Settings, About)
     let system_items: &[(&str, &str, &str)] = &[
+        ("Discover", "/discover", "\u{1F50E}"),
         ("People", "/people", "\u{1F465}"),
         ("Network", "/network", "\u{1F310}"),
         ("Constitution", "/constitution", "\u{1F4DC}"),

@@ -1107,6 +1107,454 @@ impl X0xClient {
         let list: UserAgentsList = self.parse(resp).await?;
         Ok(list.agents)
     }
+
+    // ── Named groups: policy + extended surface ─────────────────────────
+
+    /// Create a named group with an optional policy preset.
+    ///
+    /// Equivalent to [`Self::create_group`] but accepts a preset name
+    /// (`"private_secure"`, `"public_request_secure"`, `"public_open"`,
+    /// `"public_announce"`). When `preset` is `None`, x0xd applies
+    /// `private_secure` as default.
+    pub async fn create_group_with_preset(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        display_name: Option<&str>,
+        preset: Option<GroupPolicyPreset>,
+    ) -> Result<CreatedGroup> {
+        let req = CreateNamedGroupRequest {
+            name: name.to_owned(),
+            description: description.map(str::to_owned),
+            display_name: display_name.map(str::to_owned),
+            preset: preset.and_then(|p| {
+                serde_json::to_value(p)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+            }),
+        };
+        let resp = self
+            .client
+            .post(self.url("/groups"))
+            .json(&req)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `PATCH /groups/:id` — update name and/or description (admin+).
+    pub async fn update_named_group(
+        &self,
+        group_id: &str,
+        patch: &UpdateNamedGroupRequest,
+    ) -> Result<()> {
+        self.request_ok(
+            self.client
+                .patch(self.url(&format!("/groups/{group_id}")))
+                .json(patch),
+        )
+        .await
+    }
+
+    /// `PATCH /groups/:id/policy` — update policy axes (owner only).
+    pub async fn update_group_policy(
+        &self,
+        group_id: &str,
+        patch: &UpdateGroupPolicyRequest,
+    ) -> Result<()> {
+        self.request_ok(
+            self.client
+                .patch(self.url(&format!("/groups/{group_id}/policy")))
+                .json(patch),
+        )
+        .await
+    }
+
+    /// `GET /groups/:id/members` — list roster members.
+    pub async fn list_named_group_members(
+        &self,
+        group_id: &str,
+    ) -> Result<Vec<NamedGroupMember>> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/groups/{group_id}/members")))
+            .send()
+            .await?;
+        let list: NamedGroupMembersResponse = self.parse(resp).await?;
+        Ok(list.members)
+    }
+
+    /// `POST /groups/:id/members` — add a member directly (admin+).
+    pub async fn add_named_group_member(
+        &self,
+        group_id: &str,
+        agent_id: &str,
+        display_name: Option<&str>,
+    ) -> Result<()> {
+        #[derive(serde::Serialize)]
+        struct Body<'a> {
+            agent_id: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            display_name: Option<&'a str>,
+        }
+        self.post_ok(
+            &format!("/groups/{group_id}/members"),
+            &Body {
+                agent_id,
+                display_name,
+            },
+        )
+        .await
+    }
+
+    /// `DELETE /groups/:id/members/:agent_id` — remove a member (admin+).
+    pub async fn remove_named_group_member(
+        &self,
+        group_id: &str,
+        agent_id: &str,
+    ) -> Result<()> {
+        self.delete_ok(&format!("/groups/{group_id}/members/{agent_id}"))
+            .await
+    }
+
+    /// `PATCH /groups/:id/members/:agent_id/role` — change role (admin+).
+    pub async fn set_named_group_member_role(
+        &self,
+        group_id: &str,
+        agent_id: &str,
+        role: GroupRole,
+    ) -> Result<()> {
+        self.request_ok(
+            self.client
+                .patch(
+                    self.url(&format!("/groups/{group_id}/members/{agent_id}/role")),
+                )
+                .json(&UpdateMemberRoleRequest { role }),
+        )
+        .await
+    }
+
+    /// `POST /groups/:id/ban/:agent_id` — ban a member (admin+).
+    pub async fn ban_group_member(&self, group_id: &str, agent_id: &str) -> Result<()> {
+        self.request_ok(
+            self.client
+                .post(self.url(&format!("/groups/{group_id}/ban/{agent_id}"))),
+        )
+        .await
+    }
+
+    /// `DELETE /groups/:id/ban/:agent_id` — unban a member (admin+).
+    pub async fn unban_group_member(&self, group_id: &str, agent_id: &str) -> Result<()> {
+        self.delete_ok(&format!("/groups/{group_id}/ban/{agent_id}"))
+            .await
+    }
+
+    // ── Join requests ───────────────────────────────────────────────────
+
+    /// `GET /groups/:id/requests` — list pending join requests (admin+).
+    pub async fn list_join_requests(&self, group_id: &str) -> Result<Vec<JoinRequest>> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/groups/{group_id}/requests")))
+            .send()
+            .await?;
+        let list: JoinRequestListResponse = self.parse(resp).await?;
+        Ok(list.requests)
+    }
+
+    /// `POST /groups/:id/requests` — submit a join request.
+    pub async fn create_join_request(
+        &self,
+        group_id: &str,
+        message: Option<&str>,
+    ) -> Result<JoinRequest> {
+        let body = CreateJoinRequestBody {
+            message: message.map(str::to_owned),
+        };
+        let resp = self
+            .client
+            .post(self.url(&format!("/groups/{group_id}/requests")))
+            .json(&body)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `POST /groups/:id/requests/:request_id/approve` — approve (admin+).
+    pub async fn approve_join_request(
+        &self,
+        group_id: &str,
+        request_id: &str,
+    ) -> Result<()> {
+        self.request_ok(self.client.post(self.url(&format!(
+            "/groups/{group_id}/requests/{request_id}/approve"
+        ))))
+        .await
+    }
+
+    /// `POST /groups/:id/requests/:request_id/reject` — reject (admin+).
+    pub async fn reject_join_request(
+        &self,
+        group_id: &str,
+        request_id: &str,
+    ) -> Result<()> {
+        self.request_ok(self.client.post(self.url(&format!(
+            "/groups/{group_id}/requests/{request_id}/reject"
+        ))))
+        .await
+    }
+
+    /// `DELETE /groups/:id/requests/:request_id` — cancel own request.
+    pub async fn cancel_join_request(
+        &self,
+        group_id: &str,
+        request_id: &str,
+    ) -> Result<()> {
+        self.delete_ok(&format!("/groups/{group_id}/requests/{request_id}"))
+            .await
+    }
+
+    // ── Discovery (Phase C + C.2) ───────────────────────────────────────
+
+    /// `GET /groups/discover?q=<query>` — partition-local search across
+    /// shard-observed + locally-owned discoverable groups.
+    pub async fn discover_groups(&self, query: Option<&str>) -> Result<Vec<GroupCard>> {
+        let mut req = self.client.get(self.url("/groups/discover"));
+        if let Some(q) = query.filter(|s| !s.is_empty()) {
+            req = req.query(&[("q", q)]);
+        }
+        let resp = req.send().await?;
+        let list: GroupCardList = self.parse(resp).await?;
+        Ok(list.groups)
+    }
+
+    /// `GET /groups/discover/nearby` — shard-only witness of
+    /// PublicDirectory groups observable via presence-social browse.
+    pub async fn discover_groups_nearby(&self) -> Result<Vec<GroupCard>> {
+        let resp = self
+            .client
+            .get(self.url("/groups/discover/nearby"))
+            .send()
+            .await?;
+        let list: GroupCardList = self.parse(resp).await?;
+        Ok(list.groups)
+    }
+
+    /// `GET /groups/discover/subscriptions` — list active shard subs.
+    pub async fn list_shard_subscriptions(&self) -> Result<ShardSubscriptionsResponse> {
+        let resp = self
+            .client
+            .get(self.url("/groups/discover/subscriptions"))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `POST /groups/discover/subscribe` — subscribe to a tag/name/id shard.
+    pub async fn subscribe_directory_shard(
+        &self,
+        kind: ShardKind,
+        key: Option<&str>,
+        shard: Option<u32>,
+    ) -> Result<SubscribeShardResponse> {
+        let kind_str = match kind {
+            ShardKind::Tag => "tag",
+            ShardKind::Name => "name",
+            ShardKind::Id => "id",
+        };
+        let body = SubscribeShardRequest {
+            kind: kind_str.to_owned(),
+            key: key.map(str::to_owned),
+            shard,
+        };
+        let resp = self
+            .client
+            .post(self.url("/groups/discover/subscribe"))
+            .json(&body)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `DELETE /groups/discover/subscribe/:kind/:shard` — unsubscribe.
+    pub async fn unsubscribe_directory_shard(
+        &self,
+        kind: ShardKind,
+        shard: u32,
+    ) -> Result<()> {
+        let kind_str = match kind {
+            ShardKind::Tag => "tag",
+            ShardKind::Name => "name",
+            ShardKind::Id => "id",
+        };
+        self.delete_ok(&format!("/groups/discover/subscribe/{kind_str}/{shard}"))
+            .await
+    }
+
+    /// `GET /groups/cards/:id` — fetch a single signed card.
+    pub async fn get_group_card(&self, group_id: &str) -> Result<GroupCard> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/groups/cards/{group_id}")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `POST /groups/cards/import` — import a discovered signed card.
+    pub async fn import_group_card(&self, card: &GroupCard) -> Result<()> {
+        self.post_ok("/groups/cards/import", card).await
+    }
+
+    // ── Public messaging (Phase E) ──────────────────────────────────────
+
+    /// `POST /groups/:id/send` — publish a signed message to a
+    /// SignedPublic group. Fails for MlsEncrypted groups; use
+    /// [`Self::secure_group_encrypt`] + the gossip path for those.
+    pub async fn send_group_public_message(
+        &self,
+        group_id: &str,
+        body: &str,
+        kind: Option<&str>,
+    ) -> Result<GroupPublicMessage> {
+        let req = SendGroupMessageRequest {
+            body: body.to_owned(),
+            kind: kind.map(str::to_owned),
+        };
+        let resp = self
+            .client
+            .post(self.url(&format!("/groups/{group_id}/send")))
+            .json(&req)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `GET /groups/:id/messages` — retrieve cached signed messages.
+    pub async fn get_group_public_messages(
+        &self,
+        group_id: &str,
+    ) -> Result<Vec<GroupPublicMessage>> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/groups/{group_id}/messages")))
+            .send()
+            .await?;
+        let list: GroupMessagesResponse = self.parse(resp).await?;
+        Ok(list.messages)
+    }
+
+    // ── State-commit chain (Phase D.3) ──────────────────────────────────
+
+    /// `GET /groups/:id/state` — inspect the signed state-commit chain.
+    pub async fn get_group_state(&self, group_id: &str) -> Result<serde_json::Value> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/groups/{group_id}/state")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `POST /groups/:id/state/seal` — advance the state chain.
+    pub async fn seal_group_state(&self, group_id: &str) -> Result<()> {
+        self.request_ok(
+            self.client
+                .post(self.url(&format!("/groups/{group_id}/state/seal"))),
+        )
+        .await
+    }
+
+    /// `POST /groups/:id/state/withdraw` — seal a terminal withdrawal.
+    pub async fn withdraw_group_state(&self, group_id: &str) -> Result<()> {
+        self.request_ok(
+            self.client
+                .post(self.url(&format!("/groups/{group_id}/state/withdraw"))),
+        )
+        .await
+    }
+
+    // ── Secure plane (Phase D.2) ────────────────────────────────────────
+
+    /// `POST /groups/:id/secure/encrypt` — AEAD-encrypt with the group's
+    /// shared secret (member-only).
+    pub async fn secure_group_encrypt(
+        &self,
+        group_id: &str,
+        payload: &[u8],
+    ) -> Result<SecureEncryptResponse> {
+        use base64::Engine as _;
+        let body = SecureEncryptRequest {
+            payload_b64: base64::engine::general_purpose::STANDARD.encode(payload),
+        };
+        let resp = self
+            .client
+            .post(self.url(&format!("/groups/{group_id}/secure/encrypt")))
+            .json(&body)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `POST /groups/:id/secure/decrypt` — AEAD-decrypt with epoch match.
+    pub async fn secure_group_decrypt(
+        &self,
+        group_id: &str,
+        ciphertext_b64: &str,
+        nonce_b64: &str,
+        secret_epoch: u64,
+    ) -> Result<Vec<u8>> {
+        use base64::Engine as _;
+        let body = SecureDecryptRequest {
+            ciphertext_b64: ciphertext_b64.to_owned(),
+            nonce_b64: nonce_b64.to_owned(),
+            secret_epoch,
+        };
+        let resp = self
+            .client
+            .post(self.url(&format!("/groups/{group_id}/secure/decrypt")))
+            .json(&body)
+            .send()
+            .await?;
+        let parsed: SecureDecryptResponse = self.parse(resp).await?;
+        base64::engine::general_purpose::STANDARD
+            .decode(parsed.plaintext_b64.as_bytes())
+            .map_err(|e| X0xError::Daemon(format!("bad plaintext_b64: {e}")))
+    }
+
+    /// `POST /groups/:id/secure/reseal` — produce an ML-KEM envelope
+    /// sealed to a recipient member's KEM public key.
+    pub async fn secure_group_reseal(
+        &self,
+        group_id: &str,
+        recipient_agent_id: &str,
+    ) -> Result<SecureShareEnvelope> {
+        let body = SecureResealRequest {
+            recipient: recipient_agent_id.to_owned(),
+        };
+        let resp = self
+            .client
+            .post(self.url(&format!("/groups/{group_id}/secure/reseal")))
+            .json(&body)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// `POST /groups/secure/open-envelope` — adversarial test: attempt
+    /// to open an envelope with this daemon's ML-KEM private key.
+    pub async fn secure_open_envelope(
+        &self,
+        envelope: &SecureShareEnvelope,
+    ) -> Result<serde_json::Value> {
+        let resp = self
+            .client
+            .post(self.url("/groups/secure/open-envelope"))
+            .json(envelope)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
 }
 
 impl Default for X0xClient {

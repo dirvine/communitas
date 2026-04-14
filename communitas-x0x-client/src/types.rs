@@ -1051,3 +1051,494 @@ pub enum WsInbound {
         message: String,
     },
 }
+
+// ─── Named-groups extended surface ─────────────────────────────────────────
+// Mirrors x0x::groups::{policy, member, request, state_commit, directory,
+// public_message, discovery}. Keep field names and snake_case serde forms
+// aligned with those source types — drift breaks the wire format.
+
+/// Controls whether a group is visible to non-members.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupDiscoverability {
+    #[default]
+    Hidden,
+    ListedToContacts,
+    PublicDirectory,
+}
+
+/// Controls how new members are admitted.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupAdmission {
+    #[default]
+    InviteOnly,
+    RequestAccess,
+    OpenJoin,
+}
+
+/// Controls how group content is cryptographically protected.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupConfidentiality {
+    #[default]
+    MlsEncrypted,
+    SignedPublic,
+}
+
+/// Controls who can read group content.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupReadAccess {
+    #[default]
+    MembersOnly,
+    Public,
+}
+
+/// Controls who can write content to the group.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupWriteAccess {
+    #[default]
+    MembersOnly,
+    ModeratedPublic,
+    AdminOnly,
+}
+
+/// Full five-axis group policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupPolicy {
+    pub discoverability: GroupDiscoverability,
+    pub admission: GroupAdmission,
+    pub confidentiality: GroupConfidentiality,
+    pub read_access: GroupReadAccess,
+    pub write_access: GroupWriteAccess,
+}
+
+/// Named preset bundle for common policy shapes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupPolicyPreset {
+    PrivateSecure,
+    PublicRequestSecure,
+    PublicOpen,
+    PublicAnnounce,
+}
+
+impl GroupPolicyPreset {
+    /// Concrete policy axes for a preset.
+    #[must_use]
+    pub fn to_policy(self) -> GroupPolicy {
+        match self {
+            Self::PrivateSecure => GroupPolicy {
+                discoverability: GroupDiscoverability::Hidden,
+                admission: GroupAdmission::InviteOnly,
+                confidentiality: GroupConfidentiality::MlsEncrypted,
+                read_access: GroupReadAccess::MembersOnly,
+                write_access: GroupWriteAccess::MembersOnly,
+            },
+            Self::PublicRequestSecure => GroupPolicy {
+                discoverability: GroupDiscoverability::PublicDirectory,
+                admission: GroupAdmission::RequestAccess,
+                confidentiality: GroupConfidentiality::MlsEncrypted,
+                read_access: GroupReadAccess::MembersOnly,
+                write_access: GroupWriteAccess::MembersOnly,
+            },
+            Self::PublicOpen => GroupPolicy {
+                discoverability: GroupDiscoverability::PublicDirectory,
+                admission: GroupAdmission::OpenJoin,
+                confidentiality: GroupConfidentiality::SignedPublic,
+                read_access: GroupReadAccess::Public,
+                write_access: GroupWriteAccess::MembersOnly,
+            },
+            Self::PublicAnnounce => GroupPolicy {
+                discoverability: GroupDiscoverability::PublicDirectory,
+                admission: GroupAdmission::OpenJoin,
+                confidentiality: GroupConfidentiality::SignedPublic,
+                read_access: GroupReadAccess::Public,
+                write_access: GroupWriteAccess::AdminOnly,
+            },
+        }
+    }
+
+    /// Parse the snake_case/kebab-case name accepted by the daemon.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_lowercase().replace('-', "_").as_str() {
+            "private_secure" => Some(Self::PrivateSecure),
+            "public_request_secure" => Some(Self::PublicRequestSecure),
+            "public_open" => Some(Self::PublicOpen),
+            "public_announce" => Some(Self::PublicAnnounce),
+            _ => None,
+        }
+    }
+}
+
+/// Summarised policy carried in `GroupCard` and `PATCH /groups/:id/policy`
+/// bodies. Structurally identical to `GroupPolicy` — separate for parity
+/// with the x0xd wire type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupPolicySummary {
+    pub discoverability: GroupDiscoverability,
+    pub admission: GroupAdmission,
+    pub confidentiality: GroupConfidentiality,
+    #[serde(default)]
+    pub read_access: GroupReadAccess,
+    #[serde(default)]
+    pub write_access: GroupWriteAccess,
+}
+
+/// Role of a member within a group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupRole {
+    Owner,
+    Admin,
+    Moderator,
+    Member,
+    Guest,
+}
+
+/// Membership lifecycle state.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupMemberState {
+    #[default]
+    Active,
+    Pending,
+    Removed,
+    Banned,
+}
+
+/// Full roster entry. Mirrors `x0x::groups::GroupMember`. The existing
+/// [`GroupMember`] defined for the minimal `GET /groups/:id` shape is
+/// kept for backward compatibility; new code should prefer this.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NamedGroupMember {
+    pub agent_id: String,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    pub role: GroupRole,
+    pub state: GroupMemberState,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    pub joined_at: u64,
+    pub updated_at: u64,
+    #[serde(default)]
+    pub added_by: Option<String>,
+    #[serde(default)]
+    pub removed_by: Option<String>,
+    #[serde(default)]
+    pub kem_public_key_b64: Option<String>,
+}
+
+/// Response from `GET /groups/:id/members`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NamedGroupMembersResponse {
+    #[serde(default)]
+    pub members: Vec<NamedGroupMember>,
+}
+
+/// Status of a join request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JoinRequestStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Cancelled,
+}
+
+/// A join request submitted against a `RequestAccess` group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JoinRequest {
+    pub request_id: String,
+    pub group_id: String,
+    pub requester_agent_id: String,
+    #[serde(default)]
+    pub requester_user_id: Option<String>,
+    pub requested_role: GroupRole,
+    #[serde(default)]
+    pub message: Option<String>,
+    pub created_at: u64,
+    #[serde(default)]
+    pub reviewed_at: Option<u64>,
+    #[serde(default)]
+    pub reviewed_by: Option<String>,
+    pub status: JoinRequestStatus,
+}
+
+/// Response from `GET /groups/:id/requests`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct JoinRequestListResponse {
+    #[serde(default)]
+    pub requests: Vec<JoinRequest>,
+}
+
+/// Kind of a signed public message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GroupPublicMessageKind {
+    Chat,
+    Announcement,
+}
+
+/// Signed message published to a SignedPublic group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupPublicMessage {
+    pub group_id: String,
+    pub state_hash_at_send: String,
+    pub revision_at_send: u64,
+    pub author_agent_id: String,
+    pub author_public_key: String,
+    #[serde(default)]
+    pub author_user_id: Option<String>,
+    #[serde(flatten)]
+    pub kind: GroupPublicMessageKind,
+    pub body: String,
+    pub timestamp: u64,
+    pub signature: String,
+}
+
+/// Request body for `POST /groups/:id/send`.
+#[derive(Debug, Clone, Serialize)]
+pub struct SendGroupMessageRequest {
+    pub body: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+}
+
+/// Response from `GET /groups/:id/messages`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct GroupMessagesResponse {
+    #[serde(default)]
+    pub messages: Vec<GroupPublicMessage>,
+}
+
+/// Immutable genesis record bound to a group's stable id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupGenesis {
+    pub group_id: String,
+    pub creator_agent_id: String,
+    pub created_at: u64,
+    pub creation_nonce: String,
+}
+
+/// Signed commitment to the current valid group state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupStateCommit {
+    pub group_id: String,
+    pub revision: u64,
+    #[serde(default)]
+    pub prev_state_hash: Option<String>,
+    pub roster_root: String,
+    pub policy_hash: String,
+    pub public_meta_hash: String,
+    #[serde(default)]
+    pub security_binding: Option<String>,
+    pub state_hash: String,
+    #[serde(default)]
+    pub withdrawn: bool,
+    pub committed_by: String,
+    pub committed_at: u64,
+    pub signer_public_key: String,
+    pub signature: String,
+}
+
+/// Public-facing signed card for a discoverable group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupCard {
+    pub group_id: String,
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+    #[serde(default)]
+    pub banner_url: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub policy_summary: GroupPolicySummary,
+    pub owner_agent_id: String,
+    pub admin_count: u32,
+    pub member_count: u32,
+    pub created_at: u64,
+    pub updated_at: u64,
+    pub request_access_enabled: bool,
+    #[serde(default)]
+    pub metadata_topic: Option<String>,
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default)]
+    pub state_hash: String,
+    #[serde(default)]
+    pub prev_state_hash: Option<String>,
+    #[serde(default)]
+    pub issued_at: u64,
+    #[serde(default)]
+    pub expires_at: u64,
+    #[serde(default)]
+    pub authority_agent_id: String,
+    #[serde(default)]
+    pub authority_public_key: String,
+    #[serde(default)]
+    pub withdrawn: bool,
+    #[serde(default)]
+    pub signature: String,
+}
+
+/// Response from `GET /groups/discover` and `GET /groups/discover/nearby`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct GroupCardList {
+    #[serde(default)]
+    pub groups: Vec<GroupCard>,
+}
+
+/// Which dimension a directory shard indexes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShardKind {
+    Tag,
+    Name,
+    Id,
+}
+
+/// A single active directory-shard subscription.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubscriptionRecord {
+    pub kind: ShardKind,
+    pub shard: u32,
+    #[serde(default)]
+    pub key: Option<String>,
+    pub subscribed_at: u64,
+}
+
+/// Response from `GET /groups/discover/subscriptions`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ShardSubscriptionsResponse {
+    #[serde(default)]
+    pub count: usize,
+    #[serde(default)]
+    pub subscriptions: Vec<SubscriptionRecord>,
+}
+
+/// Request body for `POST /groups/discover/subscribe`. Either `key` or
+/// `shard` must be set; `key` is normalised by x0xd before being hashed
+/// into a shard id.
+#[derive(Debug, Clone, Serialize)]
+pub struct SubscribeShardRequest {
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shard: Option<u32>,
+}
+
+/// Response from `POST /groups/discover/subscribe`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SubscribeShardResponse {
+    pub newly_added: bool,
+    pub kind: ShardKind,
+    pub shard: u32,
+    pub topic: String,
+}
+
+/// Request body for `PATCH /groups/:id`.
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct UpdateNamedGroupRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// Request body for `PATCH /groups/:id/policy`. Either `preset` alone
+/// or individual axes may be supplied; the daemon applies the preset first
+/// and then overlays any explicit axes.
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct UpdateGroupPolicyRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discoverability: Option<GroupDiscoverability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub admission: Option<GroupAdmission>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidentiality: Option<GroupConfidentiality>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_access: Option<GroupReadAccess>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write_access: Option<GroupWriteAccess>,
+}
+
+/// Request body for `PATCH /groups/:id/members/:agent_id/role`.
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateMemberRoleRequest {
+    pub role: GroupRole,
+}
+
+/// Request body for `POST /groups/:id/requests`.
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct CreateJoinRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Request body for `POST /groups/:id/secure/encrypt`.
+#[derive(Debug, Clone, Serialize)]
+pub struct SecureEncryptRequest {
+    pub payload_b64: String,
+}
+
+/// Response from `POST /groups/:id/secure/encrypt`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SecureEncryptResponse {
+    pub ciphertext_b64: String,
+    pub nonce_b64: String,
+    pub secret_epoch: u64,
+}
+
+/// Request body for `POST /groups/:id/secure/decrypt`.
+#[derive(Debug, Clone, Serialize)]
+pub struct SecureDecryptRequest {
+    pub ciphertext_b64: String,
+    pub nonce_b64: String,
+    pub secret_epoch: u64,
+}
+
+/// Response from `POST /groups/:id/secure/decrypt`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SecureDecryptResponse {
+    pub plaintext_b64: String,
+}
+
+/// Request body for `POST /groups/:id/secure/reseal`.
+#[derive(Debug, Clone, Serialize)]
+pub struct SecureResealRequest {
+    pub recipient: String,
+}
+
+/// Envelope produced by `POST /groups/:id/secure/reseal`. Also accepted by
+/// `POST /groups/secure/open-envelope` (adversarial test).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecureShareEnvelope {
+    pub group_id: String,
+    pub recipient: String,
+    pub secret_epoch: u64,
+    pub kem_ciphertext_b64: String,
+    pub aead_nonce_b64: String,
+    pub aead_ciphertext_b64: String,
+}
+
+/// Extended info from `POST /groups`. Mirrors the daemon response for
+/// newly-created groups with policy presets applied.
+#[derive(Debug, Clone, Serialize)]
+pub struct CreateNamedGroupRequest {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+}
+

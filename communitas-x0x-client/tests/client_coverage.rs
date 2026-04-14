@@ -84,14 +84,54 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("encrypt", "POST", "/mls/groups/:id/encrypt"),
     ("decrypt", "POST", "/mls/groups/:id/decrypt"),
     ("create_mls_welcome", "POST", "/mls/groups/:id/welcome"),
-    // Named Groups
+    // Named Groups — core
     ("create_group", "POST", "/groups"),
+    ("create_group_with_preset", "POST", "/groups"),
     ("list_groups", "GET", "/groups"),
     ("get_group", "GET", "/groups/:id"),
+    ("update_named_group", "PATCH", "/groups/:id"),
     ("invite", "POST", "/groups/:id/invite"),
     ("join_group", "POST", "/groups/join"),
     ("set_group_display_name", "PUT", "/groups/:id/display-name"),
     ("leave_group", "DELETE", "/groups/:id"),
+    // Named Groups — policy, roles, bans
+    ("update_group_policy", "PATCH", "/groups/:id/policy"),
+    ("list_named_group_members", "GET", "/groups/:id/members"),
+    ("add_named_group_member", "POST", "/groups/:id/members"),
+    ("remove_named_group_member", "DELETE", "/groups/:id/members/:agent_id"),
+    ("set_named_group_member_role", "PATCH", "/groups/:id/members/:agent_id/role"),
+    ("ban_group_member", "POST", "/groups/:id/ban/:agent_id"),
+    ("unban_group_member", "DELETE", "/groups/:id/ban/:agent_id"),
+    // Named Groups — join requests
+    ("list_join_requests", "GET", "/groups/:id/requests"),
+    ("create_join_request", "POST", "/groups/:id/requests"),
+    ("approve_join_request", "POST", "/groups/:id/requests/:request_id/approve"),
+    ("reject_join_request", "POST", "/groups/:id/requests/:request_id/reject"),
+    ("cancel_join_request", "DELETE", "/groups/:id/requests/:request_id"),
+    // Named Groups — discovery (C + C.2)
+    ("discover_groups", "GET", "/groups/discover"),
+    ("discover_groups_nearby", "GET", "/groups/discover/nearby"),
+    ("list_shard_subscriptions", "GET", "/groups/discover/subscriptions"),
+    ("subscribe_directory_shard", "POST", "/groups/discover/subscribe"),
+    (
+        "unsubscribe_directory_shard",
+        "DELETE",
+        "/groups/discover/subscribe/:kind/:shard",
+    ),
+    ("get_group_card", "GET", "/groups/cards/:id"),
+    ("import_group_card", "POST", "/groups/cards/import"),
+    // Named Groups — public messaging (Phase E)
+    ("send_group_public_message", "POST", "/groups/:id/send"),
+    ("get_group_public_messages", "GET", "/groups/:id/messages"),
+    // Named Groups — state chain (Phase D.3)
+    ("get_group_state", "GET", "/groups/:id/state"),
+    ("seal_group_state", "POST", "/groups/:id/state/seal"),
+    ("withdraw_group_state", "POST", "/groups/:id/state/withdraw"),
+    // Named Groups — secure plane (Phase D.2)
+    ("secure_group_encrypt", "POST", "/groups/:id/secure/encrypt"),
+    ("secure_group_decrypt", "POST", "/groups/:id/secure/decrypt"),
+    ("secure_group_reseal", "POST", "/groups/:id/secure/reseal"),
+    ("secure_open_envelope", "POST", "/groups/secure/open-envelope"),
     // Task Lists
     ("create_task_list", "POST", "/task-lists"),
     ("list_task_lists", "GET", "/task-lists"),
@@ -191,9 +231,14 @@ fn no_duplicate_endpoints() {
     // Allow intentional shared endpoints:
     // - announce / announce_with_options share POST /announce
     // - claim_task / complete_task share PATCH /task-lists/:id/tasks/:tid (different action param)
+    // - create_group / create_group_with_preset share POST /groups (preset-aware overload)
     let real_dupes: Vec<_> = dupes
         .iter()
-        .filter(|d| !d.contains("announce") && !d.contains("task"))
+        .filter(|d| {
+            !d.contains("announce")
+                && !d.contains("task")
+                && !d.contains("create_group_with_preset")
+        })
         .collect();
     assert!(
         real_dupes.is_empty(),

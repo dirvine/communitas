@@ -1171,10 +1171,7 @@ impl X0xClient {
     }
 
     /// `GET /groups/:id/members` — list roster members.
-    pub async fn list_named_group_members(
-        &self,
-        group_id: &str,
-    ) -> Result<Vec<NamedGroupMember>> {
+    pub async fn list_named_group_members(&self, group_id: &str) -> Result<Vec<NamedGroupMember>> {
         let resp = self
             .client
             .get(self.url(&format!("/groups/{group_id}/members")))
@@ -1208,11 +1205,7 @@ impl X0xClient {
     }
 
     /// `DELETE /groups/:id/members/:agent_id` — remove a member (admin+).
-    pub async fn remove_named_group_member(
-        &self,
-        group_id: &str,
-        agent_id: &str,
-    ) -> Result<()> {
+    pub async fn remove_named_group_member(&self, group_id: &str, agent_id: &str) -> Result<()> {
         self.delete_ok(&format!("/groups/{group_id}/members/{agent_id}"))
             .await
     }
@@ -1226,9 +1219,7 @@ impl X0xClient {
     ) -> Result<()> {
         self.request_ok(
             self.client
-                .patch(
-                    self.url(&format!("/groups/{group_id}/members/{agent_id}/role")),
-                )
+                .patch(self.url(&format!("/groups/{group_id}/members/{agent_id}/role")))
                 .json(&UpdateMemberRoleRequest { role }),
         )
         .await
@@ -1281,35 +1272,25 @@ impl X0xClient {
     }
 
     /// `POST /groups/:id/requests/:request_id/approve` — approve (admin+).
-    pub async fn approve_join_request(
-        &self,
-        group_id: &str,
-        request_id: &str,
-    ) -> Result<()> {
-        self.request_ok(self.client.post(self.url(&format!(
-            "/groups/{group_id}/requests/{request_id}/approve"
-        ))))
+    pub async fn approve_join_request(&self, group_id: &str, request_id: &str) -> Result<()> {
+        self.request_ok(
+            self.client
+                .post(self.url(&format!("/groups/{group_id}/requests/{request_id}/approve"))),
+        )
         .await
     }
 
     /// `POST /groups/:id/requests/:request_id/reject` — reject (admin+).
-    pub async fn reject_join_request(
-        &self,
-        group_id: &str,
-        request_id: &str,
-    ) -> Result<()> {
-        self.request_ok(self.client.post(self.url(&format!(
-            "/groups/{group_id}/requests/{request_id}/reject"
-        ))))
+    pub async fn reject_join_request(&self, group_id: &str, request_id: &str) -> Result<()> {
+        self.request_ok(
+            self.client
+                .post(self.url(&format!("/groups/{group_id}/requests/{request_id}/reject"))),
+        )
         .await
     }
 
     /// `DELETE /groups/:id/requests/:request_id` — cancel own request.
-    pub async fn cancel_join_request(
-        &self,
-        group_id: &str,
-        request_id: &str,
-    ) -> Result<()> {
+    pub async fn cancel_join_request(&self, group_id: &str, request_id: &str) -> Result<()> {
         self.delete_ok(&format!("/groups/{group_id}/requests/{request_id}"))
             .await
     }
@@ -1377,11 +1358,7 @@ impl X0xClient {
     }
 
     /// `DELETE /groups/discover/subscribe/:kind/:shard` — unsubscribe.
-    pub async fn unsubscribe_directory_shard(
-        &self,
-        kind: ShardKind,
-        shard: u32,
-    ) -> Result<()> {
+    pub async fn unsubscribe_directory_shard(&self, kind: ShardKind, shard: u32) -> Result<()> {
         let kind_str = match kind {
             ShardKind::Tag => "tag",
             ShardKind::Name => "name",
@@ -1447,7 +1424,12 @@ impl X0xClient {
     // ── State-commit chain (Phase D.3) ──────────────────────────────────
 
     /// `GET /groups/:id/state` — inspect the signed state-commit chain.
-    pub async fn get_group_state(&self, group_id: &str) -> Result<serde_json::Value> {
+    ///
+    /// Returns the daemon's derived view of the chain (stable `group_id`,
+    /// genesis record if present, current revision, state hash, previous
+    /// hash, and component commitments). Member-only — the daemon returns
+    /// 403 for non-members.
+    pub async fn get_group_state(&self, group_id: &str) -> Result<GroupStateResponse> {
         let resp = self
             .client
             .get(self.url(&format!("/groups/{group_id}/state")))

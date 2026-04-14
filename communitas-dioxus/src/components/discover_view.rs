@@ -55,6 +55,31 @@ enum RequestStatus {
     Failed(String),
 }
 
+/// Apply the outcome of a discover fetch. Sorts on success, records the
+/// error on failure; shared between the typing-driven immediate fetch
+/// and the 10s background refresh.
+fn apply_discovery_result(
+    result: Result<Vec<GroupCard>, communitas_x0x_client::X0xError>,
+    cards: &mut Signal<Vec<GroupCard>>,
+    last_error: &mut Signal<Option<String>>,
+) {
+    match result {
+        Ok(mut list) => {
+            list.sort_by(|a, b| {
+                b.revision
+                    .cmp(&a.revision)
+                    .then_with(|| a.name.cmp(&b.name))
+            });
+            cards.set(list);
+            last_error.set(None);
+        }
+        Err(e) => {
+            warn!(target: "ui.discover", "discover fetch failed: {e}");
+            last_error.set(Some(format!("Discovery failed: {e}")));
+        }
+    }
+}
+
 /// Root view rendered at `/discover`.
 #[component]
 pub fn DiscoverView() -> Element {
@@ -63,14 +88,61 @@ pub fn DiscoverView() -> Element {
     let mut cards = use_signal(Vec::<GroupCard>::new);
     let mut last_error = use_signal(|| None::<String>);
     let request_state = use_signal(std::collections::HashMap::<String, RequestStatus>::new);
+    // Monotonic counter for fetches so stale responses from in-flight
+    // requests can be discarded after the user types or flips modes.
+    let fetch_seq = use_signal(|| 0u64);
 
-    // Poll the daemon so newly-observed cards appear without a manual refresh.
+    // React to query/mode changes: fire an immediate fetch each time the
+    // caller changes the search box or flips the mode tab. `use_effect`
+    // tracks the signals read in the closure and re-runs on change.
+    use_effect(move || {
+        let current_query = query().trim().to_string();
+        let current_mode = mode();
+        let mut seq = fetch_seq;
+        let this_seq = {
+            let mut current = seq.write();
+            *current += 1;
+            *current
+        };
+        spawn(async move {
+            let client = X0xClient::new();
+            let result = match current_mode {
+                DiscoverMode::All => {
+                    let q = if current_query.is_empty() {
+                        None
+                    } else {
+                        Some(current_query.as_str())
+                    };
+                    client.discover_groups(q).await
+                }
+                DiscoverMode::Nearby => client.discover_groups_nearby().await,
+            };
+            // Only apply if no newer fetch has been issued since we
+            // started. Prevents late responses from clobbering the list
+            // the user is actually looking at.
+            if *seq.read() != this_seq {
+                return;
+            }
+            apply_discovery_result(result, &mut cards, &mut last_error);
+        });
+    });
+
+    // Background refresh — keeps new gossip-observed cards flowing in
+    // without the user having to touch the input. Does NOT drive the
+    // typing-responsive path; that's handled by the `use_effect` above.
     use_coroutine({
         move |_: UnboundedReceiver<()>| async move {
             let client = X0xClient::new();
             loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
                 let current_mode = mode();
                 let current_query = query().trim().to_string();
+                let mut seq = fetch_seq;
+                let this_seq = {
+                    let mut current = seq.write();
+                    *current += 1;
+                    *current
+                };
                 let result = match current_mode {
                     DiscoverMode::All => {
                         let q = if current_query.is_empty() {
@@ -82,22 +154,10 @@ pub fn DiscoverView() -> Element {
                     }
                     DiscoverMode::Nearby => client.discover_groups_nearby().await,
                 };
-                match result {
-                    Ok(mut list) => {
-                        list.sort_by(|a, b| {
-                            b.revision
-                                .cmp(&a.revision)
-                                .then_with(|| a.name.cmp(&b.name))
-                        });
-                        cards.set(list);
-                        last_error.set(None);
-                    }
-                    Err(e) => {
-                        warn!(target: "ui.discover", "discover fetch failed: {e}");
-                        last_error.set(Some(format!("Discovery failed: {e}")));
-                    }
+                if *seq.read() != this_seq {
+                    continue;
                 }
-                tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+                apply_discovery_result(result, &mut cards, &mut last_error);
             }
         }
     });

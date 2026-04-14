@@ -1324,6 +1324,29 @@ pub struct GroupGenesis {
     pub creation_nonce: String,
 }
 
+/// Response from `GET /groups/:id/state` — the daemon's rendered view
+/// of the current state-commit chain. All hash fields are hex strings.
+/// `genesis` may be absent on legacy groups that predate Phase D.3.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct GroupStateResponse {
+    pub group_id: String,
+    #[serde(default)]
+    pub mls_group_id: Option<String>,
+    #[serde(default)]
+    pub genesis: Option<GroupGenesis>,
+    pub state_revision: u64,
+    pub state_hash: String,
+    #[serde(default)]
+    pub prev_state_hash: Option<String>,
+    #[serde(default)]
+    pub security_binding: Option<String>,
+    #[serde(default)]
+    pub withdrawn: bool,
+    pub roster_root: String,
+    pub policy_hash: String,
+    pub public_meta_hash: String,
+}
+
 /// Signed commitment to the current valid group state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupStateCommit {
@@ -1541,4 +1564,3 @@ pub struct CreateNamedGroupRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preset: Option<String>,
 }
-

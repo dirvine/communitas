@@ -15,8 +15,8 @@
 
 use communitas_x0x_client::{
     GroupAdmission, GroupConfidentiality, GroupDiscoverability, GroupInfo, GroupPolicyPreset,
-    GroupReadAccess, GroupRole, GroupWriteAccess, JoinRequest, JoinRequestStatus, NamedGroupMember,
-    UpdateGroupPolicyRequest, X0xClient,
+    GroupReadAccess, GroupRole, GroupStateResponse, GroupWriteAccess, JoinRequest,
+    JoinRequestStatus, NamedGroupMember, UpdateGroupPolicyRequest, X0xClient,
 };
 use dioxus::prelude::*;
 use tracing::{info, warn};
@@ -319,15 +319,69 @@ struct StatePanelProps {
 #[component]
 fn StatePanel(props: StatePanelProps) -> Element {
     let mut status = use_signal(|| ActionStatus::Idle);
+    let mut chain = use_signal(|| None::<GroupStateResponse>);
+    let mut chain_error = use_signal(|| None::<String>);
+    // Revision bumps after seal / withdraw so the reader re-fetches
+    // immediately rather than waiting for the next poll.
+    let mut chain_rev = use_signal(|| 0u64);
     let space_id = props.space_id.clone();
     let space_id_seal = space_id.clone();
     let space_id_withdraw = space_id.clone();
+
+    // Inspection loop — polls GET /groups/:id/state so the reader stays
+    // in sync with the daemon. Also refires whenever a local action
+    // bumps `chain_rev`.
+    use_coroutine({
+        let space_id = space_id.clone();
+        move |_: UnboundedReceiver<()>| {
+            let space_id = space_id.clone();
+            async move {
+                let client = X0xClient::new();
+                loop {
+                    // chain_rev() is read to participate in reactivity;
+                    // a bump from seal/withdraw triggers the next poll
+                    // sooner via the inline re-fetch in those handlers.
+                    let _ = chain_rev();
+                    match client.get_group_state(&space_id).await {
+                        Ok(state) => {
+                            chain.set(Some(state));
+                            chain_error.set(None);
+                        }
+                        Err(e) => {
+                            let msg = format!("{e}");
+                            // 403 is normal for non-members; silence it.
+                            if !msg.contains("not a member") {
+                                warn!(target: "ui.space_admin", "state fetch failed: {msg}");
+                                chain_error.set(Some(msg));
+                            }
+                            chain.set(None);
+                        }
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS))
+                        .await;
+                }
+            }
+        }
+    });
 
     rsx! {
         PanelShell {
             title: "State chain (Phase D.3)",
             subtitle: "Signed state-commit chain binds roster, policy, public metadata, and MLS epoch.".to_owned(),
             children: rsx! {
+                if let Some(err) = chain_error() {
+                    ErrorBanner { message: format!("Could not read state: {err}") }
+                }
+
+                match chain() {
+                    Some(state) => rsx! {
+                        StateReadout { state: state.clone() }
+                    },
+                    None => rsx! {
+                        HintLine { message: "Loading state chain…" }
+                    },
+                }
+
                 StatusLine { status: status() }
 
                 if props.caller_is_owner {
@@ -350,6 +404,13 @@ fn StatePanel(props: StatePanelProps) -> Element {
                                             status.set(ActionStatus::Ok(
                                                 "State sealed — new revision published.".into(),
                                             ));
+                                            // Re-read the chain immediately — the
+                                            // poll loop would otherwise take up to
+                                            // REFRESH_INTERVAL_SECS to show it.
+                                            if let Ok(state) = client.get_group_state(&sid).await {
+                                                chain.set(Some(state));
+                                            }
+                                            chain_rev.with_mut(|r| *r += 1);
                                         }
                                         Err(e) => status.set(ActionStatus::Err(format!("{e}"))),
                                     }
@@ -371,6 +432,10 @@ fn StatePanel(props: StatePanelProps) -> Element {
                                             status.set(ActionStatus::Ok(
                                                 "Withdrawal sealed — public card superseded.".into(),
                                             ));
+                                            if let Ok(state) = client.get_group_state(&sid).await {
+                                                chain.set(Some(state));
+                                            }
+                                            chain_rev.with_mut(|r| *r += 1);
                                         }
                                         Err(e) => status.set(ActionStatus::Err(format!("{e}"))),
                                     }
@@ -383,6 +448,129 @@ fn StatePanel(props: StatePanelProps) -> Element {
                     HintLine { message: "Only the owner can seal or withdraw the state chain." }
                 }
             }
+        }
+    }
+}
+
+/// Read-only rendering of the current `GroupStateResponse`.
+#[derive(Props, Clone, PartialEq)]
+struct StateReadoutProps {
+    state: GroupStateResponse,
+}
+
+#[component]
+fn StateReadout(props: StateReadoutProps) -> Element {
+    let s = &props.state;
+    let prev = s
+        .prev_state_hash
+        .clone()
+        .unwrap_or_else(|| "(genesis — no parent)".to_owned());
+    let binding = s
+        .security_binding
+        .clone()
+        .unwrap_or_else(|| "(none)".to_owned());
+    let genesis_display = match &s.genesis {
+        Some(g) => format!(
+            "{} · nonce {} · created {}",
+            shorten(&g.creator_agent_id),
+            shorten(&g.creation_nonce),
+            g.created_at
+        ),
+        None => "(legacy — no genesis record)".to_owned(),
+    };
+    let withdrawn_display = if s.withdrawn {
+        "withdrawn (public card superseded)"
+    } else {
+        "active"
+    };
+    let withdrawn_tone = if s.withdrawn {
+        semantic::ERROR
+    } else {
+        semantic::SUCCESS
+    };
+
+    rsx! {
+        div {
+            style: format!(
+                "display: grid; \
+                 grid-template-columns: max-content 1fr; \
+                 row-gap: {}; \
+                 column-gap: {}; \
+                 font-family: {}; \
+                 font-size: {}; \
+                 color: {};",
+                spacing::XXS,
+                spacing::SM,
+                typography::FONT_MONO,
+                typography::SIZE_XS,
+                semantic::TEXT_SECONDARY,
+            ),
+
+            StateFieldLabel { label: "revision" }
+            span { "{s.state_revision}" }
+
+            StateFieldLabel { label: "status" }
+            span {
+                style: format!("color: {};", withdrawn_tone),
+                "{withdrawn_display}"
+            }
+
+            StateFieldLabel { label: "state_hash" }
+            HashCell { value: s.state_hash.clone() }
+
+            StateFieldLabel { label: "prev_hash" }
+            HashCell { value: prev }
+
+            StateFieldLabel { label: "roster_root" }
+            HashCell { value: s.roster_root.clone() }
+
+            StateFieldLabel { label: "policy_hash" }
+            HashCell { value: s.policy_hash.clone() }
+
+            StateFieldLabel { label: "public_meta" }
+            HashCell { value: s.public_meta_hash.clone() }
+
+            StateFieldLabel { label: "security_binding" }
+            span { "{binding}" }
+
+            StateFieldLabel { label: "genesis" }
+            span { "{genesis_display}" }
+        }
+    }
+}
+
+#[derive(Props, Clone, PartialEq)]
+struct StateFieldLabelProps {
+    label: &'static str,
+}
+
+#[component]
+fn StateFieldLabel(props: StateFieldLabelProps) -> Element {
+    rsx! {
+        span {
+            style: format!(
+                "color: {}; font-weight: {};",
+                semantic::TEXT_MUTED,
+                typography::WEIGHT_MEDIUM,
+            ),
+            "{props.label}"
+        }
+    }
+}
+
+#[derive(Props, Clone, PartialEq)]
+struct HashCellProps {
+    value: String,
+}
+
+#[component]
+fn HashCell(props: HashCellProps) -> Element {
+    // Hashes are long — render them with `word-break: break-all` so
+    // the grid stays readable on narrow viewports.
+    rsx! {
+        span {
+            style: "word-break: break-all; overflow-wrap: anywhere;",
+            "{props.value}"
         }
     }
 }

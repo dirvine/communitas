@@ -436,12 +436,11 @@ pub fn ChannelChatView(
                     } = inbound
                         && msg_topic == topic
                     {
-                        let decoded = match base64::engine::general_purpose::STANDARD
-                            .decode(&payload)
-                        {
-                            Ok(b) => b,
-                            Err(_) => continue,
-                        };
+                        let decoded =
+                            match base64::engine::general_purpose::STANDARD.decode(&payload) {
+                                Ok(b) => b,
+                                Err(_) => continue,
+                            };
                         let gpm: communitas_x0x_client::GroupPublicMessage =
                             match serde_json::from_slice(&decoded) {
                                 Ok(g) => g,
@@ -459,9 +458,7 @@ pub fn ChannelChatView(
                         let chat = ChatMessage {
                             id: key,
                             text: gpm.body.clone(),
-                            sender_name: x0x_contract::fallback_sender_name(
-                                &gpm.author_agent_id,
-                            ),
+                            sender_name: x0x_contract::fallback_sender_name(&gpm.author_agent_id),
                             sender_id: gpm.author_agent_id.clone(),
                             timestamp: gpm.timestamp,
                             channel: push_channel_name.clone(),
@@ -475,8 +472,7 @@ pub fn ChannelChatView(
                         let mut inserted = false;
                         messages.with_mut(|msgs| {
                             if !msgs.iter().any(|m| m.id == chat.id) {
-                                let pos =
-                                    msgs.partition_point(|m| m.timestamp <= chat.timestamp);
+                                let pos = msgs.partition_point(|m| m.timestamp <= chat.timestamp);
                                 msgs.insert(pos, chat);
                                 if msgs.len() > MAX_MESSAGES {
                                     msgs.drain(..msgs.len() - MAX_MESSAGES);
@@ -529,9 +525,7 @@ pub fn ChannelChatView(
                         let chat = ChatMessage {
                             id: key,
                             text: gpm.body.clone(),
-                            sender_name: x0x_contract::fallback_sender_name(
-                                &gpm.author_agent_id,
-                            ),
+                            sender_name: x0x_contract::fallback_sender_name(&gpm.author_agent_id),
                             sender_id: gpm.author_agent_id.clone(),
                             timestamp: gpm.timestamp,
                             channel: poll_channel_name.clone(),
@@ -545,8 +539,7 @@ pub fn ChannelChatView(
                         let mut inserted = false;
                         messages.with_mut(|msgs| {
                             if !msgs.iter().any(|m| m.id == chat.id) {
-                                let pos = msgs
-                                    .partition_point(|m| m.timestamp <= chat.timestamp);
+                                let pos = msgs.partition_point(|m| m.timestamp <= chat.timestamp);
                                 msgs.insert(pos, chat);
                                 if msgs.len() > MAX_MESSAGES {
                                     msgs.drain(..msgs.len() - MAX_MESSAGES);
@@ -967,12 +960,8 @@ pub fn ChannelChatView(
                                     }
                                 }
                             });
-                            x0x_contract::append_channel_history(
-                                &group_id,
-                                &channel_name,
-                                &msg,
-                            )
-                            .await;
+                            x0x_contract::append_channel_history(&group_id, &channel_name, &msg)
+                                .await;
                         }
                     }
                     Err(e) => {

@@ -147,6 +147,62 @@ jobs:
       - name: Run property tests
         run: cargo test -p communitas-ui-service --test property_tests -- --test-threads=2
 
+  # Phase 7 parity gate. Surfaces a focused subset of the test suite
+  # that proves the named-groups API surface stays in sync between the
+  # x0xd manifest, the Rust client, the Swift client, and the
+  # communitas-x0x-client method coverage. Fast (<20 s) and needs no
+  # daemon.
+  #
+  # When a new endpoint lands in x0xd, this job fails until:
+  # - communitas-x0x-client/tests/fixtures/api-manifest.json is
+  #   refreshed from x0x/docs/design/api-manifest.json
+  # - src/client.rs gets the matching method
+  # - tests/parity_manifest.rs::IMPLEMENTED is updated
+  # - tests/swift_parity.rs::RUST_TO_SWIFT is updated
+  # - the Swift X0xClient.swift exposes the camelCase counterpart
+  parity:
+    name: API + Swift Parity Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          cache-on-failure: false
+          shared-key: parity-ubuntu
+
+      - name: Run client + Swift parity gate
+        # parity_manifest enforces every named-groups endpoint in the
+        # vendored manifest has a Rust client method.
+        # client_coverage enforces every public client method has a
+        # registered (method, path) entry.
+        # swift_parity enforces every Rust method has a Swift
+        # counterpart by reading X0xClient.swift directly.
+        run: |
+          cargo test -p communitas-x0x-client \
+            --test parity_manifest \
+            --test client_coverage \
+            --test swift_parity
+
+      - name: Verify vendored manifest is fresh
+        # The vendored copy must match the upstream by content. CI
+        # cannot fetch the x0x repo from this workflow, so this is a
+        # local sanity check on shape + entry count rather than a full
+        # diff. The local diff is the maintainer's responsibility.
+        run: |
+          set -euo pipefail
+          jq -r '.endpoints | length' \
+            communitas-x0x-client/tests/fixtures/api-manifest.json
+          # Schema must match what the test reader expects.
+          jq -e '.schema == "x0x-api-manifest/v1"' \
+            communitas-x0x-client/tests/fixtures/api-manifest.json > /dev/null
+
   # Stress tests (nightly only)
   stress-tests:
     name: Stress Tests

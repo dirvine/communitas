@@ -471,6 +471,8 @@ pub fn ChannelChatView(
                             reply_count: 0,
                             reactions: HashMap::new(),
                         };
+                        let persist_msg = chat.clone();
+                        let mut inserted = false;
                         messages.with_mut(|msgs| {
                             if !msgs.iter().any(|m| m.id == chat.id) {
                                 let pos =
@@ -479,8 +481,20 @@ pub fn ChannelChatView(
                                 if msgs.len() > MAX_MESSAGES {
                                     msgs.drain(..msgs.len() - MAX_MESSAGES);
                                 }
+                                inserted = true;
                             }
                         });
+                        if inserted {
+                            // Persist so a remount of the chat view
+                            // replays SignedPublic messages alongside
+                            // MlsEncrypted ones.
+                            x0x_contract::append_channel_history(
+                                &push_group_id,
+                                &push_channel_name,
+                                &persist_msg,
+                            )
+                            .await;
+                        }
                     }
                 }
                 // recv returned None → reconnect.
@@ -527,6 +541,8 @@ pub fn ChannelChatView(
                             reply_count: 0,
                             reactions: HashMap::new(),
                         };
+                        let persist_msg = chat.clone();
+                        let mut inserted = false;
                         messages.with_mut(|msgs| {
                             if !msgs.iter().any(|m| m.id == chat.id) {
                                 let pos = msgs
@@ -535,8 +551,17 @@ pub fn ChannelChatView(
                                 if msgs.len() > MAX_MESSAGES {
                                     msgs.drain(..msgs.len() - MAX_MESSAGES);
                                 }
+                                inserted = true;
                             }
                         });
+                        if inserted {
+                            x0x_contract::append_channel_history(
+                                &poll_group_id,
+                                &poll_channel_name,
+                                &persist_msg,
+                            )
+                            .await;
+                        }
                     }
                 }
                 // Push path covers real-time; the poll is a backstop.
@@ -920,17 +945,35 @@ pub fn ChannelChatView(
                         );
                         composer_text.set(String::new());
                         reply_to.set(None);
-                        messages.with_mut(|msgs| {
-                            if !msgs.iter().any(|m| m.id == msg.id) {
-                                let pos =
-                                    msgs.partition_point(|m| m.timestamp <= msg.timestamp);
-                                msgs.insert(pos, msg.clone());
-                                if msgs.len() > MAX_MESSAGES {
-                                    msgs.drain(..msgs.len() - MAX_MESSAGES);
+                        // SignedPublic: the authoritative signed
+                        // envelope is delivered back via the public-
+                        // topic WebSocket subscription (and the
+                        // /messages backstop) using the shared
+                        // `(author, timestamp, signature[..12])`
+                        // dedup key. The local optimistic id
+                        // (`msg.id = UUID`) does not match that key,
+                        // so inserting here would cause a
+                        // double-render once the push arrives. Skip
+                        // the local insert and let the receive path
+                        // be authoritative.
+                        if !is_signed_public() {
+                            messages.with_mut(|msgs| {
+                                if !msgs.iter().any(|m| m.id == msg.id) {
+                                    let pos =
+                                        msgs.partition_point(|m| m.timestamp <= msg.timestamp);
+                                    msgs.insert(pos, msg.clone());
+                                    if msgs.len() > MAX_MESSAGES {
+                                        msgs.drain(..msgs.len() - MAX_MESSAGES);
+                                    }
                                 }
-                            }
-                        });
-                        x0x_contract::append_channel_history(&group_id, &channel_name, &msg).await;
+                            });
+                            x0x_contract::append_channel_history(
+                                &group_id,
+                                &channel_name,
+                                &msg,
+                            )
+                            .await;
+                        }
                     }
                     Err(e) => {
                         error!(target: "ui.channel_chat", "Failed to send message: {e}");

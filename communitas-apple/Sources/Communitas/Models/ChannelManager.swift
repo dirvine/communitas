@@ -146,7 +146,9 @@ final class ChannelManager: ObservableObject {
     /// Merge a `GroupPublicMessage` into the chat view, deduped by
     /// `(author, timestamp, signature-prefix)`. Shared between the
     /// WebSocket push path and the poll backstop so neither can
-    /// double-render a message.
+    /// double-render a message. Persists the updated channel history
+    /// on insert so a remount replays SignedPublic messages
+    /// alongside MlsEncrypted ones.
     private func mergeSignedPublicMessage(_ gpm: GroupPublicMessage) {
         let key = "\(gpm.authorAgentId):\(gpm.timestamp):\(gpm.signature.prefix(12))"
         if seenSignedIds.contains(key) { return }
@@ -170,6 +172,7 @@ final class ChannelManager: ObservableObject {
             let idx = messages.firstIndex(where: { $0.timestamp > msg.timestamp })
                 ?? messages.endIndex
             messages.insert(msg, at: idx)
+            saveHistory(channel: currentChannel, messages: messages)
         }
     }
 
@@ -671,10 +674,14 @@ final class ChannelManager: ObservableObject {
                 body: text,
                 kind: "chat"
             )
-            // Ensure the view updates immediately rather than waiting
-            // for the 5 s background poll.
+            // Don't optimistic-insert. The authoritative envelope
+            // arrives via the public-topic WebSocket push and the
+            // /messages poll backstop; `mergeSignedPublicMessage`
+            // inserts it with the signature-prefix dedup key and
+            // persists. Trigger one immediate poll tick so the
+            // sender's own message appears quickly even if the WS
+            // subscribe hasn't fully registered yet.
             await pollSignedPublicOnce()
-            saveHistory(channel: currentChannel, messages: messages)
             return
         case .mlsEncrypted:
             let payload = try encodeMessagePayload(msg)
@@ -684,9 +691,7 @@ final class ChannelManager: ObservableObject {
             )
         }
 
-        // Optimistically add to local list (MlsEncrypted only — the
-        // SignedPublic path above gets the authoritative envelope
-        // back from the daemon via the poll).
+        // Optimistically add to local list (MlsEncrypted only).
         messages.append(msg)
         saveHistory(channel: currentChannel, messages: messages)
     }

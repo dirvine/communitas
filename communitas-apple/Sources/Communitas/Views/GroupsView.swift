@@ -5,7 +5,9 @@ struct GroupsView: View {
     @EnvironmentObject var appState: AppState
     @State private var showCreateSheet = false
     @State private var showJoinSheet = false
+    @State private var showDiscoverSheet = false
     @State private var selectedGroup: GroupSummary?
+    @State private var manageGroup: GroupSummary?
 
     var body: some View {
         Group {
@@ -20,6 +22,13 @@ struct GroupsView: View {
         .navigationTitle("Groups")
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
+                Button {
+                    showDiscoverSheet = true
+                } label: {
+                    Label("Discover", systemImage: "magnifyingglass")
+                }
+                .disabled(appState.daemonState != .running)
+
                 Button {
                     showJoinSheet = true
                 } label: {
@@ -49,6 +58,14 @@ struct GroupsView: View {
             JoinGroupSheet()
                 .environmentObject(appState)
         }
+        .sheet(isPresented: $showDiscoverSheet) {
+            GroupDiscoveryView()
+                .environmentObject(appState)
+        }
+        .sheet(item: $manageGroup) { group in
+            ManageGroupSheet(group: group)
+                .environmentObject(appState)
+        }
     }
 
     private var groupList: some View {
@@ -74,6 +91,9 @@ struct GroupsView: View {
             .padding(.vertical, 4)
             .tag(group)
             .contextMenu {
+                Button("Manage…") {
+                    manageGroup = group
+                }
                 Button("Copy Group ID") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(group.groupId, forType: .string)
@@ -141,6 +161,7 @@ struct CreateGroupSheet: View {
     @State private var name = ""
     @State private var description = ""
     @State private var displayName = ""
+    @State private var preset: GroupPolicyPreset = .privateSecure
     @State private var isCreating = false
     @State private var error: String?
 
@@ -150,9 +171,26 @@ struct CreateGroupSheet: View {
                 .font(.title2)
 
             Form {
-                TextField("Group Name", text: $name)
-                TextField("Description (optional)", text: $description)
-                TextField("Your Display Name (optional)", text: $displayName)
+                Section {
+                    TextField("Group Name", text: $name)
+                    TextField("Description (optional)", text: $description)
+                    TextField("Your Display Name (optional)", text: $displayName)
+                }
+                Section("Visibility") {
+                    Picker("Preset", selection: $preset) {
+                        ForEach(GroupPolicyPreset.allCases, id: \.self) { p in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.label).font(.body)
+                                Text(p.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .tag(p)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
             }
             .formStyle(.grouped)
 
@@ -173,7 +211,7 @@ struct CreateGroupSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(width: 440, height: 520)
     }
 
     private func createGroup() {
@@ -185,10 +223,11 @@ struct CreateGroupSheet: View {
         Task {
             defer { isCreating = false }
             do {
-                _ = try await appState.client.createGroup(
+                _ = try await appState.client.createGroupWithPreset(
                     name: name.trimmingCharacters(in: .whitespaces),
                     description: trimmedDesc.isEmpty ? nil : trimmedDesc,
-                    displayName: trimmedDisplay.isEmpty ? nil : trimmedDisplay
+                    displayName: trimmedDisplay.isEmpty ? nil : trimmedDisplay,
+                    preset: preset
                 )
                 await appState.refresh()
                 dismiss()

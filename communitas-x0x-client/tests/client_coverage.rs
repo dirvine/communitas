@@ -98,21 +98,49 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("update_group_policy", "PATCH", "/groups/:id/policy"),
     ("list_named_group_members", "GET", "/groups/:id/members"),
     ("add_named_group_member", "POST", "/groups/:id/members"),
-    ("remove_named_group_member", "DELETE", "/groups/:id/members/:agent_id"),
-    ("set_named_group_member_role", "PATCH", "/groups/:id/members/:agent_id/role"),
+    (
+        "remove_named_group_member",
+        "DELETE",
+        "/groups/:id/members/:agent_id",
+    ),
+    (
+        "set_named_group_member_role",
+        "PATCH",
+        "/groups/:id/members/:agent_id/role",
+    ),
     ("ban_group_member", "POST", "/groups/:id/ban/:agent_id"),
     ("unban_group_member", "DELETE", "/groups/:id/ban/:agent_id"),
     // Named Groups — join requests
     ("list_join_requests", "GET", "/groups/:id/requests"),
     ("create_join_request", "POST", "/groups/:id/requests"),
-    ("approve_join_request", "POST", "/groups/:id/requests/:request_id/approve"),
-    ("reject_join_request", "POST", "/groups/:id/requests/:request_id/reject"),
-    ("cancel_join_request", "DELETE", "/groups/:id/requests/:request_id"),
+    (
+        "approve_join_request",
+        "POST",
+        "/groups/:id/requests/:request_id/approve",
+    ),
+    (
+        "reject_join_request",
+        "POST",
+        "/groups/:id/requests/:request_id/reject",
+    ),
+    (
+        "cancel_join_request",
+        "DELETE",
+        "/groups/:id/requests/:request_id",
+    ),
     // Named Groups — discovery (C + C.2)
     ("discover_groups", "GET", "/groups/discover"),
     ("discover_groups_nearby", "GET", "/groups/discover/nearby"),
-    ("list_shard_subscriptions", "GET", "/groups/discover/subscriptions"),
-    ("subscribe_directory_shard", "POST", "/groups/discover/subscribe"),
+    (
+        "list_shard_subscriptions",
+        "GET",
+        "/groups/discover/subscriptions",
+    ),
+    (
+        "subscribe_directory_shard",
+        "POST",
+        "/groups/discover/subscribe",
+    ),
     (
         "unsubscribe_directory_shard",
         "DELETE",
@@ -131,7 +159,11 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("secure_group_encrypt", "POST", "/groups/:id/secure/encrypt"),
     ("secure_group_decrypt", "POST", "/groups/:id/secure/decrypt"),
     ("secure_group_reseal", "POST", "/groups/:id/secure/reseal"),
-    ("secure_open_envelope", "POST", "/groups/secure/open-envelope"),
+    (
+        "secure_open_envelope",
+        "POST",
+        "/groups/secure/open-envelope",
+    ),
     // Task Lists
     ("create_task_list", "POST", "/task-lists"),
     ("list_task_lists", "GET", "/task-lists"),

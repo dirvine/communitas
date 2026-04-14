@@ -79,8 +79,7 @@ const IMPLEMENTED: &[(&str, &str)] = &[
 ];
 
 fn load_manifest() -> Manifest {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/api-manifest.json");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/api-manifest.json");
     let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| {
         panic!(
             "failed to read vendored manifest {}: {e}\n\
@@ -106,9 +105,7 @@ fn every_named_group_endpoint_has_a_client_method() {
         .endpoints
         .iter()
         .filter(|e| e.category == "named-groups")
-        .filter(|e| {
-            !implemented.contains(&(e.method.clone(), e.path.clone()))
-        })
+        .filter(|e| !implemented.contains(&(e.method.clone(), e.path.clone())))
         .map(|e| format!("  {} {}", e.method, e.path))
         .collect();
     missing.sort();

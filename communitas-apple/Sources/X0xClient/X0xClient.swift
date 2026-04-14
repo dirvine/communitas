@@ -334,6 +334,249 @@ public final class X0xClient: Sendable {
         let _: Empty = try await put("/groups/\(groupId)/display-name", body: body)
     }
 
+    // MARK: - Named Groups — extended surface (policy, roles, requests, discovery, state, secure plane)
+
+    /// Create a named group with an optional policy preset. `POST /groups`
+    ///
+    /// Mirrors `communitas_x0x_client::X0xClient::create_group_with_preset`.
+    /// Pass `nil` to accept the daemon's default (private_secure).
+    public func createGroupWithPreset(
+        name: String,
+        description: String?,
+        displayName: String?,
+        preset: GroupPolicyPreset?
+    ) async throws -> CreatedGroup {
+        let body = CreateNamedGroupRequest(
+            name: name,
+            description: description,
+            displayName: displayName,
+            preset: preset?.rawValue
+        )
+        return try await post("/groups", body: body)
+    }
+
+    /// Update group name and/or description. `PATCH /groups/:id` (admin+).
+    public func updateNamedGroup(
+        groupId: String,
+        name: String? = nil,
+        description: String? = nil
+    ) async throws {
+        let body = UpdateNamedGroupRequest(name: name, description: description)
+        let _: Empty = try await patch("/groups/\(groupId)", body: body)
+    }
+
+    /// Update group policy axes. `PATCH /groups/:id/policy` (owner only).
+    public func updateGroupPolicy(
+        groupId: String,
+        patch: UpdateGroupPolicyRequest
+    ) async throws {
+        let _: Empty = try await self.patch("/groups/\(groupId)/policy", body: patch)
+    }
+
+    /// List the named-group roster. `GET /groups/:id/members`
+    public func listNamedGroupMembers(groupId: String) async throws -> [NamedGroupMember] {
+        let resp: NamedGroupMembersResponse = try await get("/groups/\(groupId)/members")
+        return resp.members
+    }
+
+    /// Add a member to a named group directly (admin+). `POST /groups/:id/members`
+    public func addNamedGroupMember(
+        groupId: String,
+        agentId: String,
+        displayName: String? = nil
+    ) async throws {
+        let body = AddNamedGroupMemberRequest(agentId: agentId, displayName: displayName)
+        let _: Empty = try await post("/groups/\(groupId)/members", body: body)
+    }
+
+    /// Remove a named-group member (admin+). `DELETE /groups/:id/members/:agent_id`
+    public func removeNamedGroupMember(groupId: String, agentId: String) async throws {
+        let _: Empty = try await delete("/groups/\(groupId)/members/\(agentId)")
+    }
+
+    /// Change a member's role (admin+). `PATCH /groups/:id/members/:agent_id/role`
+    public func setNamedGroupMemberRole(
+        groupId: String,
+        agentId: String,
+        role: GroupRole
+    ) async throws {
+        let body = UpdateMemberRoleRequest(role: role)
+        let _: Empty = try await patch("/groups/\(groupId)/members/\(agentId)/role", body: body)
+    }
+
+    /// Ban a member (admin+). `POST /groups/:id/ban/:agent_id`
+    public func banGroupMember(groupId: String, agentId: String) async throws {
+        let _: Empty = try await postEmpty("/groups/\(groupId)/ban/\(agentId)")
+    }
+
+    /// Unban a member (admin+). `DELETE /groups/:id/ban/:agent_id`
+    public func unbanGroupMember(groupId: String, agentId: String) async throws {
+        let _: Empty = try await delete("/groups/\(groupId)/ban/\(agentId)")
+    }
+
+    /// List pending join requests (admin+). `GET /groups/:id/requests`
+    public func listJoinRequests(groupId: String) async throws -> [JoinRequest] {
+        let resp: JoinRequestListResponse = try await get("/groups/\(groupId)/requests")
+        return resp.requests
+    }
+
+    /// Submit a join request. `POST /groups/:id/requests`
+    public func createJoinRequest(groupId: String, message: String? = nil) async throws -> JoinRequest {
+        let body = CreateJoinRequestBody(message: message)
+        return try await post("/groups/\(groupId)/requests", body: body)
+    }
+
+    /// Approve a pending join request (admin+).
+    public func approveJoinRequest(groupId: String, requestId: String) async throws {
+        let _: Empty = try await postEmpty("/groups/\(groupId)/requests/\(requestId)/approve")
+    }
+
+    /// Reject a pending join request (admin+).
+    public func rejectJoinRequest(groupId: String, requestId: String) async throws {
+        let _: Empty = try await postEmpty("/groups/\(groupId)/requests/\(requestId)/reject")
+    }
+
+    /// Cancel your own pending join request.
+    public func cancelJoinRequest(groupId: String, requestId: String) async throws {
+        let _: Empty = try await delete("/groups/\(groupId)/requests/\(requestId)")
+    }
+
+    /// Search / list locally known discoverable groups. `GET /groups/discover?q=...`
+    public func discoverGroups(query: String? = nil) async throws -> [GroupCard] {
+        var items: [URLQueryItem] = []
+        if let q = query, !q.isEmpty {
+            items.append(URLQueryItem(name: "q", value: q))
+        }
+        let resp: GroupCardListResponse = try await get("/groups/discover", queryItems: items)
+        return resp.groups
+    }
+
+    /// Shard-only witness of PublicDirectory groups. `GET /groups/discover/nearby`
+    public func discoverGroupsNearby() async throws -> [GroupCard] {
+        let resp: GroupCardListResponse = try await get("/groups/discover/nearby")
+        return resp.groups
+    }
+
+    /// List active directory-shard subscriptions. `GET /groups/discover/subscriptions`
+    public func listShardSubscriptions() async throws -> ShardSubscriptionsResponse {
+        try await get("/groups/discover/subscriptions")
+    }
+
+    /// Subscribe to a tag/name/id directory shard. `POST /groups/discover/subscribe`
+    public func subscribeDirectoryShard(
+        kind: ShardKind,
+        key: String? = nil,
+        shard: UInt32? = nil
+    ) async throws -> SubscribeShardResponse {
+        let body = SubscribeShardRequest(kind: kind.rawValue, key: key, shard: shard)
+        return try await post("/groups/discover/subscribe", body: body)
+    }
+
+    /// Unsubscribe from a shard. `DELETE /groups/discover/subscribe/:kind/:shard`
+    public func unsubscribeDirectoryShard(kind: ShardKind, shard: UInt32) async throws {
+        let _: Empty = try await delete("/groups/discover/subscribe/\(kind.rawValue)/\(shard)")
+    }
+
+    /// Fetch a single signed card. `GET /groups/cards/:id`
+    public func getGroupCard(groupId: String) async throws -> GroupCard {
+        try await get("/groups/cards/\(groupId)")
+    }
+
+    /// Import a discovered signed card. `POST /groups/cards/import`
+    public func importGroupCard(card: GroupCard) async throws {
+        let _: Empty = try await post("/groups/cards/import", body: card)
+    }
+
+    /// Publish a signed message to a SignedPublic group. `POST /groups/:id/send`
+    ///
+    /// Fails with 400 for MlsEncrypted groups — use
+    /// ``secureGroupEncrypt(groupId:payload:)`` for those.
+    public func sendGroupPublicMessage(
+        groupId: String,
+        body: String,
+        kind: String? = nil
+    ) async throws -> GroupPublicMessage {
+        let req = SendGroupMessageRequest(body: body, kind: kind)
+        return try await post("/groups/\(groupId)/send", body: req)
+    }
+
+    /// Retrieve the daemon's cached public messages for a group.
+    /// `GET /groups/:id/messages`
+    public func getGroupPublicMessages(groupId: String) async throws -> [GroupPublicMessage] {
+        let resp: GroupMessagesResponse = try await get("/groups/\(groupId)/messages")
+        return resp.messages
+    }
+
+    /// Inspect the signed state-commit chain for a group. `GET /groups/:id/state`
+    public func getGroupState(groupId: String) async throws -> GroupStateResponse {
+        try await get("/groups/\(groupId)/state")
+    }
+
+    /// Advance the state-commit chain (owner only). `POST /groups/:id/state/seal`
+    public func sealGroupState(groupId: String) async throws {
+        let _: Empty = try await postEmpty("/groups/\(groupId)/state/seal")
+    }
+
+    /// Seal a terminal withdrawal commit (owner only).
+    /// `POST /groups/:id/state/withdraw`
+    public func withdrawGroupState(groupId: String) async throws {
+        let _: Empty = try await postEmpty("/groups/\(groupId)/state/withdraw")
+    }
+
+    /// AEAD-encrypt content with the group's shared secret (member only).
+    /// `POST /groups/:id/secure/encrypt`
+    public func secureGroupEncrypt(
+        groupId: String,
+        payload: Data
+    ) async throws -> SecureEncryptResponse {
+        let body = SecureEncryptRequest(payloadB64: payload.base64EncodedString())
+        return try await post("/groups/\(groupId)/secure/encrypt", body: body)
+    }
+
+    /// AEAD-decrypt group shared-secret ciphertext (member only).
+    /// `POST /groups/:id/secure/decrypt`. Returns the raw plaintext bytes.
+    public func secureGroupDecrypt(
+        groupId: String,
+        ciphertextB64: String,
+        nonceB64: String,
+        secretEpoch: UInt64
+    ) async throws -> Data {
+        let body = SecureDecryptRequest(
+            ciphertextB64: ciphertextB64,
+            nonceB64: nonceB64,
+            secretEpoch: secretEpoch
+        )
+        let resp: SecureDecryptResponse = try await post(
+            "/groups/\(groupId)/secure/decrypt",
+            body: body
+        )
+        guard let bytes = Data(base64Encoded: resp.plaintextB64) else {
+            throw X0xError.decodingError(underlying: DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [],
+                    debugDescription: "plaintext_b64 was not valid base64"
+                )
+            ))
+        }
+        return bytes
+    }
+
+    /// Re-seal the current shared secret to a recipient member.
+    /// `POST /groups/:id/secure/reseal` (admin+).
+    public func secureGroupReseal(
+        groupId: String,
+        recipient: String
+    ) async throws -> SecureShareEnvelope {
+        let body = SecureResealRequest(recipient: recipient)
+        return try await post("/groups/\(groupId)/secure/reseal", body: body)
+    }
+
+    /// Adversarial test: attempt to open an envelope with this daemon's
+    /// KEM private key. `POST /groups/secure/open-envelope`
+    public func secureOpenEnvelope(envelope: SecureShareEnvelope) async throws -> Empty {
+        try await post("/groups/secure/open-envelope", body: envelope)
+    }
+
     // MARK: - Network
 
     /// Get network status information. `GET /network/status`

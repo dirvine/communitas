@@ -65,14 +65,50 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("encrypt", "encrypt"),
     ("decrypt", "decrypt"),
     ("create_mls_welcome", "createMlsWelcome"),
-    // Named Groups
+    // Named Groups — core
     ("create_group", "createGroup"),
+    ("create_group_with_preset", "createGroupWithPreset"),
     ("list_groups", "listGroups"),
     ("get_group", "groupInfo"),
+    ("update_named_group", "updateNamedGroup"),
     ("invite", "invite"),
     ("join_group", "joinGroup"),
     ("set_group_display_name", "setGroupDisplayName"),
     ("leave_group", "leaveGroup"),
+    // Named Groups — policy, roles, bans
+    ("update_group_policy", "updateGroupPolicy"),
+    ("list_named_group_members", "listNamedGroupMembers"),
+    ("add_named_group_member", "addNamedGroupMember"),
+    ("remove_named_group_member", "removeNamedGroupMember"),
+    ("set_named_group_member_role", "setNamedGroupMemberRole"),
+    ("ban_group_member", "banGroupMember"),
+    ("unban_group_member", "unbanGroupMember"),
+    // Named Groups — join requests
+    ("list_join_requests", "listJoinRequests"),
+    ("create_join_request", "createJoinRequest"),
+    ("approve_join_request", "approveJoinRequest"),
+    ("reject_join_request", "rejectJoinRequest"),
+    ("cancel_join_request", "cancelJoinRequest"),
+    // Named Groups — discovery (C + C.2)
+    ("discover_groups", "discoverGroups"),
+    ("discover_groups_nearby", "discoverGroupsNearby"),
+    ("list_shard_subscriptions", "listShardSubscriptions"),
+    ("subscribe_directory_shard", "subscribeDirectoryShard"),
+    ("unsubscribe_directory_shard", "unsubscribeDirectoryShard"),
+    ("get_group_card", "getGroupCard"),
+    ("import_group_card", "importGroupCard"),
+    // Named Groups — public messaging (Phase E)
+    ("send_group_public_message", "sendGroupPublicMessage"),
+    ("get_group_public_messages", "getGroupPublicMessages"),
+    // Named Groups — state chain (Phase D.3)
+    ("get_group_state", "getGroupState"),
+    ("seal_group_state", "sealGroupState"),
+    ("withdraw_group_state", "withdrawGroupState"),
+    // Named Groups — secure plane (Phase D.2)
+    ("secure_group_encrypt", "secureGroupEncrypt"),
+    ("secure_group_decrypt", "secureGroupDecrypt"),
+    ("secure_group_reseal", "secureGroupReseal"),
+    ("secure_open_envelope", "secureOpenEnvelope"),
     // Task Lists
     ("create_task_list", "createTaskList"),
     ("list_task_lists", "listTaskLists"),

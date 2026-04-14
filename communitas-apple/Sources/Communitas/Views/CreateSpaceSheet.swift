@@ -16,6 +16,7 @@ struct CreateSpaceSheet: View {
     // Create fields
     @State private var name = ""
     @State private var description = ""
+    @State private var preset: GroupPolicyPreset = .privateSecure
 
     // Join fields
     @State private var inviteLink = ""
@@ -48,6 +49,21 @@ struct CreateSpaceSheet: View {
                     Section {
                         TextField("Space Name", text: $name)
                         TextField("Description (optional)", text: $description)
+                    }
+                    Section("Visibility") {
+                        Picker("Preset", selection: $preset) {
+                            ForEach(GroupPolicyPreset.allCases, id: \.self) { p in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.label).font(.body)
+                                    Text(p.summary)
+                                        .font(.caption)
+                                        .foregroundStyle(DeepSpace.textSecondary)
+                                }
+                                .tag(p)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
                     }
                 case .join:
                     Section {
@@ -84,7 +100,7 @@ struct CreateSpaceSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 440, height: 400)
+        .frame(width: 460, height: 560)
     }
 
     private var isSubmitDisabled: Bool {
@@ -108,10 +124,11 @@ struct CreateSpaceSheet: View {
                 switch selectedTab {
                 case .create:
                     let trimmedDesc = description.trimmingCharacters(in: .whitespaces)
-                    _ = try await appState.client.createGroup(
+                    _ = try await appState.client.createGroupWithPreset(
                         name: name.trimmingCharacters(in: .whitespaces),
                         description: trimmedDesc.isEmpty ? nil : trimmedDesc,
-                        displayName: trimmedDisplay.isEmpty ? nil : trimmedDisplay
+                        displayName: trimmedDisplay.isEmpty ? nil : trimmedDisplay,
+                        preset: preset
                     )
                 case .join:
                     _ = try await appState.client.joinGroup(

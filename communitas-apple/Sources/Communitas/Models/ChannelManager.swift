@@ -48,15 +48,23 @@ final class ChannelManager: ObservableObject {
     @Published private(set) var confidentiality: GroupConfidentiality = .mlsEncrypted
 
     /// IDs of SignedPublic messages already merged into `messages`.
-    /// Bounded on long-running sessions.
+    /// Bounded on long-running sessions. Shared by the WS-push path
+    /// and the poll backstop, so both paths dedupe consistently.
     private var seenSignedIds: Set<String> = []
 
     /// Task that polls `GET /groups/:id/messages` for SignedPublic
     /// groups and merges new signed envelopes into the chat view.
-    /// Mirrors the Dioxus poll and the embedded GUI poll so all three
-    /// chat surfaces see cross-peer messages from the same source of
-    /// truth (the daemon's validated cache).
+    /// Runs every 30 s as a backstop behind the WebSocket push path.
     private var signedPublicPollTask: Task<Void, Never>?
+
+    /// Stable group_id for the public topic subscription. Derived
+    /// from `getGroupState(groupId:)` — differs from `groupId` which
+    /// is the mls_group_id the chat view uses for other calls.
+    private var stableGroupId: String?
+
+    /// Exact public-topic string we have subscribed to, so
+    /// `handleWebSocketMessage` can compare on arrival.
+    private var publicTopic: String?
 
     init(client: X0xClient, groupId: String, groupName: String, agentId: String, displayName: String) {
         self.client = client
@@ -66,7 +74,7 @@ final class ChannelManager: ObservableObject {
         self.displayName = displayName
         Task { [weak self] in
             await self?.refreshConfidentiality()
-            await self?.startSignedPublicPollIfNeeded()
+            await self?.startSignedPublicReceiveIfNeeded()
         }
     }
 
@@ -80,10 +88,36 @@ final class ChannelManager: ObservableObject {
         }
     }
 
-    private func startSignedPublicPollIfNeeded() async {
-        guard confidentiality == .signedPublic, signedPublicPollTask == nil else { return }
-        signedPublicPollTask = Task { [weak self] in
-            await self?.pollSignedPublicLoop()
+    /// For SignedPublic groups:
+    /// 1. Fetch the stable group_id so we know which public topic to
+    ///    subscribe to (the daemon uses the Phase-D.3 stable id, not
+    ///    the mls_group_id we use elsewhere).
+    /// 2. Register a REST `/subscribe` for `x0x.groups.public.{id}`
+    ///    — the existing WebSocket session then streams events for
+    ///    that topic into `handleWebSocketMessage`.
+    /// 3. Start the 30 s poll backstop behind the push path.
+    private func startSignedPublicReceiveIfNeeded() async {
+        guard confidentiality == .signedPublic else { return }
+
+        if stableGroupId == nil,
+           let state = try? await client.getGroupState(groupId: groupId) {
+            stableGroupId = state.groupId
+        }
+        if let stableId = stableGroupId, publicTopic == nil {
+            let topic = "x0x.groups.public.\(stableId)"
+            do {
+                _ = try await client.subscribe(topic: topic)
+                publicTopic = topic
+            } catch {
+                // If the subscribe REST call fails, we still have the
+                // poll backstop. Log and continue.
+                errorMessage = "public topic subscribe failed: \(error.localizedDescription)"
+            }
+        }
+        if signedPublicPollTask == nil {
+            signedPublicPollTask = Task { [weak self] in
+                await self?.pollSignedPublicLoop()
+            }
         }
     }
 
@@ -91,7 +125,9 @@ final class ChannelManager: ObservableObject {
     private func pollSignedPublicLoop() async {
         while !Task.isCancelled {
             await pollSignedPublicOnce()
-            try? await Task.sleep(for: .seconds(5))
+            // Backstop cadence: the WS push path is primary, this
+            // exists to catch messages lost across reconnects.
+            try? await Task.sleep(for: .seconds(30))
         }
     }
 
@@ -103,27 +139,37 @@ final class ChannelManager: ObservableObject {
             return
         }
         for gpm in list {
-            let key = "\(gpm.authorAgentId):\(gpm.timestamp):\(gpm.signature.prefix(12))"
-            if seenSignedIds.contains(key) { continue }
-            seenSignedIds.insert(key)
-            let msg = ChannelChatMessage(
-                id: key,
-                text: gpm.body,
-                senderName: shortenAgentId(gpm.authorAgentId),
-                senderId: gpm.authorAgentId,
-                timestamp: Int64(gpm.timestamp),
-                channel: currentChannel,
-                replyToId: nil
-            )
-            if !messages.contains(where: { $0.id == msg.id }) {
-                let idx = messages.firstIndex(where: { $0.timestamp > msg.timestamp })
-                    ?? messages.endIndex
-                messages.insert(msg, at: idx)
-            }
+            mergeSignedPublicMessage(gpm)
         }
-        // Keep the seen set bounded.
+    }
+
+    /// Merge a `GroupPublicMessage` into the chat view, deduped by
+    /// `(author, timestamp, signature-prefix)`. Shared between the
+    /// WebSocket push path and the poll backstop so neither can
+    /// double-render a message.
+    private func mergeSignedPublicMessage(_ gpm: GroupPublicMessage) {
+        let key = "\(gpm.authorAgentId):\(gpm.timestamp):\(gpm.signature.prefix(12))"
+        if seenSignedIds.contains(key) { return }
+        seenSignedIds.insert(key)
+
+        // Keep the seen set bounded for long-running sessions.
         if seenSignedIds.count > 5000 {
             seenSignedIds = Set(seenSignedIds.prefix(1000))
+        }
+
+        let msg = ChannelChatMessage(
+            id: key,
+            text: gpm.body,
+            senderName: shortenAgentId(gpm.authorAgentId),
+            senderId: gpm.authorAgentId,
+            timestamp: Int64(gpm.timestamp),
+            channel: currentChannel,
+            replyToId: nil
+        )
+        if !messages.contains(where: { $0.id == msg.id }) {
+            let idx = messages.firstIndex(where: { $0.timestamp > msg.timestamp })
+                ?? messages.endIndex
+            messages.insert(msg, at: idx)
         }
     }
 
@@ -419,6 +465,18 @@ final class ChannelManager: ObservableObject {
         guard let event = try? JSONDecoder().decode(GossipEvent.self, from: data),
               let payload = event.payload,
               let payloadData = Data(base64Encoded: payload) else {
+            return
+        }
+
+        // SignedPublic push path: messages on
+        // `x0x.groups.public.{stable_group_id}` are JSON-encoded
+        // GroupPublicMessage envelopes. The daemon has already
+        // validated signature + write-access + banned-author before
+        // publishing, so we just render.
+        if let publicTopic, event.topic == publicTopic {
+            if let gpm = try? JSONDecoder().decode(GroupPublicMessage.self, from: payloadData) {
+                mergeSignedPublicMessage(gpm)
+            }
             return
         }
 

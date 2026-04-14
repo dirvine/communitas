@@ -369,27 +369,139 @@ pub fn ChannelChatView(
         });
     }
 
-    // ----- SignedPublic receive poll -----
-    // x0xd publishes signed messages on `x0x.groups.public.{group_id}`,
-    // not the channel topic the WS listener below subscribes to. To
-    // surface cross-peer messages in the chat view we poll
-    // `GET /groups/:id/messages` every 5 s while the component is
-    // mounted for a SignedPublic group. The daemon has already
-    // validated signature + write-access + banned-author before
-    // caching, so we just render.
+    // ----- SignedPublic receive -----
+    // x0xd publishes signed messages on `x0x.groups.public.{stable_group_id}`,
+    // not the channel topic. We need sub-second latency on SignedPublic
+    // groups, so we do two things:
+    //   1. WebSocket push: subscribe to the public topic via a second
+    //      X0xWebSocket connection, decode each `GroupPublicMessage`,
+    //      merge into the chat view on arrival.
+    //   2. Poll backstop: every 30 s call `GET /groups/:id/messages`
+    //      to catch anything missed by a WS reconnect / drop. Same
+    //      dedup key as the push path, so no double-render.
+    // The daemon has already validated signature + write-access +
+    // banned-author before caching, so we just render.
+    //
+    // Dedup key: (author_agent_id, timestamp, signature[0..12])
+    let seen_signed: Signal<HashSet<String>> = use_signal(HashSet::new);
+
+    let push_group_id = group_id.clone();
+    let push_channel_name = channel_name.clone();
+    use_coroutine(move |_: UnboundedReceiver<()>| {
+        let push_group_id = push_group_id.clone();
+        let push_channel_name = push_channel_name.clone();
+        let mut seen_signed = seen_signed;
+        async move {
+            // Gate the subscription on the component actually being
+            // SignedPublic. Loop on failure so a brief daemon blip
+            // doesn't permanently disable the push path.
+            loop {
+                if !is_signed_public() {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    continue;
+                }
+                let client = communitas_x0x_client::X0xClient::new();
+                let state = match client.get_group_state(&push_group_id).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        warn!(
+                            target: "ui.channel_chat",
+                            "get_group_state failed for public WS: {e}"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        continue;
+                    }
+                };
+                let topic = format!("x0x.groups.public.{}", state.group_id);
+                let mut ws = match X0xWebSocket::connect().await {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        warn!(target: "ui.channel_chat", "public WS connect failed: {e}");
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        continue;
+                    }
+                };
+                if let Err(e) = ws.subscribe(vec![topic.clone()]) {
+                    warn!(target: "ui.channel_chat", "public WS subscribe failed: {e}");
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    continue;
+                }
+                info!(target: "ui.channel_chat", "Subscribed to public topic: {topic}");
+
+                while let Some(inbound) = ws.recv().await {
+                    if let communitas_x0x_client::WsInbound::Message {
+                        topic: msg_topic,
+                        payload,
+                        ..
+                    } = inbound
+                        && msg_topic == topic
+                    {
+                        let decoded = match base64::engine::general_purpose::STANDARD
+                            .decode(&payload)
+                        {
+                            Ok(b) => b,
+                            Err(_) => continue,
+                        };
+                        let gpm: communitas_x0x_client::GroupPublicMessage =
+                            match serde_json::from_slice(&decoded) {
+                                Ok(g) => g,
+                                Err(_) => continue,
+                            };
+                        let key = format!(
+                            "{}:{}:{}",
+                            gpm.author_agent_id,
+                            gpm.timestamp,
+                            gpm.signature.chars().take(12).collect::<String>()
+                        );
+                        if !seen_signed.write().insert(key.clone()) {
+                            continue;
+                        }
+                        let chat = ChatMessage {
+                            id: key,
+                            text: gpm.body.clone(),
+                            sender_name: x0x_contract::fallback_sender_name(
+                                &gpm.author_agent_id,
+                            ),
+                            sender_id: gpm.author_agent_id.clone(),
+                            timestamp: gpm.timestamp,
+                            channel: push_channel_name.clone(),
+                            thread_root: None,
+                            broadcast: false,
+                            is_deleted: false,
+                            reply_count: 0,
+                            reactions: HashMap::new(),
+                        };
+                        messages.with_mut(|msgs| {
+                            if !msgs.iter().any(|m| m.id == chat.id) {
+                                let pos =
+                                    msgs.partition_point(|m| m.timestamp <= chat.timestamp);
+                                msgs.insert(pos, chat);
+                                if msgs.len() > MAX_MESSAGES {
+                                    msgs.drain(..msgs.len() - MAX_MESSAGES);
+                                }
+                            }
+                        });
+                    }
+                }
+                // recv returned None → reconnect.
+                warn!(target: "ui.channel_chat", "public WS closed; reconnecting");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        }
+    });
+
     let poll_group_id = group_id.clone();
     let poll_channel_name = channel_name.clone();
     use_coroutine(move |_: UnboundedReceiver<()>| {
         let poll_group_id = poll_group_id.clone();
         let poll_channel_name = poll_channel_name.clone();
+        let mut seen_signed = seen_signed;
         async move {
             let client = communitas_x0x_client::X0xClient::new();
-            let mut seen: HashSet<String> = HashSet::new();
             loop {
                 if is_signed_public()
                     && let Ok(list) = client.get_group_public_messages(&poll_group_id).await
                 {
-                    let mut appended = false;
                     for gpm in &list {
                         let key = format!(
                             "{}:{}:{}",
@@ -397,7 +509,7 @@ pub fn ChannelChatView(
                             gpm.timestamp,
                             gpm.signature.chars().take(12).collect::<String>()
                         );
-                        if !seen.insert(key.clone()) {
+                        if !seen_signed.write().insert(key.clone()) {
                             continue;
                         }
                         let chat = ChatMessage {
@@ -423,19 +535,12 @@ pub fn ChannelChatView(
                                 if msgs.len() > MAX_MESSAGES {
                                     msgs.drain(..msgs.len() - MAX_MESSAGES);
                                 }
-                                appended = true;
                             }
                         });
                     }
-                    if seen.len() > 5000 {
-                        // Keep the seen set bounded on long sessions.
-                        // HashSet has no cheap LRU; just truncate.
-                        let keep: Vec<String> = seen.iter().take(1000).cloned().collect();
-                        seen = keep.into_iter().collect();
-                    }
-                    let _ = appended;
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                // Push path covers real-time; the poll is a backstop.
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             }
         }
     });

@@ -40,12 +40,32 @@ final class ChannelManager: ObservableObject {
     /// Using a Task instead of Timer avoids non-Sendable RunLoop timer threading concerns.
     private var typingCleanupTask: Task<Void, Never>?
 
+    /// Confidentiality of the underlying group, fetched lazily from
+    /// `GET /groups/:id`. SignedPublic groups are routed through
+    /// `POST /groups/:id/send` so the daemon ML-DSA-signs the body
+    /// and binds it to the current state-hash. MlsEncrypted (or
+    /// unknown / legacy daemon) keeps the existing gossip path.
+    @Published private(set) var confidentiality: GroupConfidentiality = .mlsEncrypted
+
     init(client: X0xClient, groupId: String, groupName: String, agentId: String, displayName: String) {
         self.client = client
         self.groupId = groupId
         self.groupName = groupName
         self.agentId = agentId
         self.displayName = displayName
+        Task { [weak self] in
+            await self?.refreshConfidentiality()
+        }
+    }
+
+    /// Refresh the cached `confidentiality` from the daemon. Idempotent
+    /// and safe to call repeatedly. Errors and missing-policy
+    /// responses leave the field at its current value.
+    func refreshConfidentiality() async {
+        if let info = try? await client.groupInfo(groupId: groupId),
+           let policy = info.policy {
+            self.confidentiality = policy.confidentiality
+        }
     }
 
     deinit {
@@ -503,6 +523,14 @@ final class ChannelManager: ObservableObject {
     // MARK: - Sending Messages
 
     /// Send a message to the current channel, optionally quoting/replying to another message.
+    ///
+    /// Routes based on the group's confidentiality (Phase E):
+    /// - `SignedPublic` → `POST /groups/:id/send` so the daemon
+    ///   ML-DSA-signs the body and binds it to the current state-hash.
+    ///   The daemon publishes the signed envelope on its own public
+    ///   topic; we do not also publish to the gossip channel topic
+    ///   for these groups.
+    /// - `MlsEncrypted` (default) → existing gossip path, unchanged.
     func sendMessage(text: String, replyToId: String? = nil) async throws {
         let msg = ChannelChatMessage(
             id: UUID().uuidString,
@@ -514,8 +542,20 @@ final class ChannelManager: ObservableObject {
             replyToId: replyToId
         )
 
-        let payload = try encodeMessagePayload(msg)
-        try await client.publish(topic: channelTopic(name: currentChannel), payload: payload)
+        switch confidentiality {
+        case .signedPublic:
+            _ = try await client.sendGroupPublicMessage(
+                groupId: groupId,
+                body: text,
+                kind: "chat"
+            )
+        case .mlsEncrypted:
+            let payload = try encodeMessagePayload(msg)
+            try await client.publish(
+                topic: channelTopic(name: currentChannel),
+                payload: payload
+            )
+        }
 
         // Optimistically add to local list
         messages.append(msg)

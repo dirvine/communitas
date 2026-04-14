@@ -259,6 +259,7 @@ fn fallback_group_info(summary: &GroupSummary) -> GroupInfo {
         chat_topic: Some(x0x_contract::channel_topic(&summary.group_id, "general")),
         metadata_topic: None,
         members: Vec::new(),
+        policy: None,
     }
 }
 

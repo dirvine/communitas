@@ -346,6 +346,29 @@ pub fn ChannelChatView(
     let mut own_agent_id = use_signal(|| Option::<String>::None);
     let mut own_sender_name = use_signal(|| Option::<String>::None);
 
+    // ----- group confidentiality (Phase 7 routing) -----
+    // SignedPublic groups must publish via `POST /groups/:id/send`
+    // so the daemon authority-signs the message. MlsEncrypted (or
+    // unknown / legacy daemon) keeps the existing gossip path.
+    let mut is_signed_public = use_signal(|| false);
+    {
+        let policy_group_id = group_id.clone();
+        use_future(move || {
+            let policy_group_id = policy_group_id.clone();
+            async move {
+                let client = communitas_x0x_client::X0xClient::new();
+                if let Ok(info) = client.get_group(&policy_group_id).await
+                    && let Some(policy) = info.policy
+                {
+                    is_signed_public.set(matches!(
+                        policy.confidentiality,
+                        communitas_x0x_client::GroupConfidentiality::SignedPublic
+                    ));
+                }
+            }
+        });
+    }
+
     // ----- history load -----
     // B2: Channel changes are handled by the parent (space_view.rs) which keys
     // ChannelChatView on "{group_id}:{channel_name}", causing a full remount when
@@ -684,36 +707,57 @@ pub fn ChannelChatView(
                     reactions: HashMap::new(),
                 };
 
-                match serde_json::to_vec(&msg) {
-                    Ok(json_bytes) => {
-                        let client = shared_client.read().clone();
-                        if let Err(e) = client.publish(&topic, &json_bytes).await {
-                            error!(target: "ui.channel_chat", "Failed to publish message: {e}");
-                            // B4: Send failed — restore composer text so the user doesn't lose it.
-                            composer_text.set(msg.text.clone());
-                            reply_to.set(reply_to_snapshot);
-                        } else {
-                            info!(target: "ui.channel_chat", "Message published to {topic}");
-                            // B4: Only clear after confirmed send.
-                            composer_text.set(String::new());
-                            reply_to.set(None);
-                            // B3: Apply locally only after network confirmation.
-                            messages.with_mut(|msgs| {
-                                if !msgs.iter().any(|m| m.id == msg.id) {
-                                    let pos =
-                                        msgs.partition_point(|m| m.timestamp <= msg.timestamp);
-                                    msgs.insert(pos, msg.clone());
-                                    if msgs.len() > MAX_MESSAGES {
-                                        msgs.drain(..msgs.len() - MAX_MESSAGES);
-                                    }
+                let client = shared_client.read().clone();
+                let send_result: Result<(), String> = if is_signed_public() {
+                    // SignedPublic (Phase E): the daemon ML-DSA-signs
+                    // the body, attaches the state-hash binding,
+                    // publishes to `x0x.groups.public.{group_id}`,
+                    // and caches it locally. We don't need to publish
+                    // a separate gossip envelope — the daemon's
+                    // signed message is the authoritative version.
+                    match client
+                        .send_group_public_message(&group_id, &msg.text, Some("chat"))
+                        .await
+                    {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(format!("{e}")),
+                    }
+                } else {
+                    // MlsEncrypted (default) — keep the existing
+                    // gossip path so MLS-encrypted-chat receivers
+                    // continue to work.
+                    match serde_json::to_vec(&msg) {
+                        Ok(json_bytes) => match client.publish(&topic, &json_bytes).await {
+                            Ok(()) => Ok(()),
+                            Err(e) => Err(format!("{e}")),
+                        },
+                        Err(e) => Err(format!("serialize: {e}")),
+                    }
+                };
+
+                match send_result {
+                    Ok(()) => {
+                        info!(
+                            target: "ui.channel_chat",
+                            "Message sent (signed_public={}) to {topic}",
+                            is_signed_public()
+                        );
+                        composer_text.set(String::new());
+                        reply_to.set(None);
+                        messages.with_mut(|msgs| {
+                            if !msgs.iter().any(|m| m.id == msg.id) {
+                                let pos =
+                                    msgs.partition_point(|m| m.timestamp <= msg.timestamp);
+                                msgs.insert(pos, msg.clone());
+                                if msgs.len() > MAX_MESSAGES {
+                                    msgs.drain(..msgs.len() - MAX_MESSAGES);
                                 }
-                            });
-                            x0x_contract::append_channel_history(&group_id, &channel_name, &msg)
-                                .await;
-                        }
+                            }
+                        });
+                        x0x_contract::append_channel_history(&group_id, &channel_name, &msg).await;
                     }
                     Err(e) => {
-                        error!(target: "ui.channel_chat", "Failed to serialize message: {e}");
+                        error!(target: "ui.channel_chat", "Failed to send message: {e}");
                         composer_text.set(msg.text.clone());
                         reply_to.set(reply_to_snapshot);
                     }

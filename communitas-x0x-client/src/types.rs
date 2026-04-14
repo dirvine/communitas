@@ -623,6 +623,11 @@ pub struct GroupInfo {
     pub metadata_topic: Option<String>,
     #[serde(default)]
     pub members: Vec<GroupMember>,
+    /// Full five-axis policy returned by `GET /groups/:id`. May be
+    /// absent on legacy daemon responses; callers should treat
+    /// `None` as "assume MlsEncrypted defaults".
+    #[serde(default)]
+    pub policy: Option<GroupPolicy>,
 }
 
 /// A member within a named group.

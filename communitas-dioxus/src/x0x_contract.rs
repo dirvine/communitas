@@ -422,6 +422,7 @@ mod tests {
                 agent_id: "agent-1".to_string(),
                 display_name: None,
             }],
+            policy: None,
         }
     }
 

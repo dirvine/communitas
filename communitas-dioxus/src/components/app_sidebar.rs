@@ -125,6 +125,7 @@ async fn fetch_channels_for_group(group_id: &str) -> Vec<ChannelMeta> {
                 chat_topic: Some(x0x_contract::channel_topic(group_id, "general")),
                 metadata_topic: None,
                 members: Vec::new(),
+                policy: None,
             }
         }
     };

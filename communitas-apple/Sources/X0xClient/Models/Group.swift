@@ -76,10 +76,14 @@ public struct GroupInfo: Codable, Sendable {
     public let chatTopic: String?
     public let metadataTopic: String?
     public let members: [GroupMember]?
+    /// Full five-axis policy returned by `GET /groups/:id`. May be
+    /// absent on legacy daemon responses; callers should treat
+    /// `nil` as "assume MlsEncrypted defaults".
+    public let policy: GroupPolicy?
 
     enum CodingKeys: String, CodingKey {
         case groupId = "group_id"
-        case name, description, creator, members
+        case name, description, creator, members, policy
         case createdAt = "created_at"
         case memberCount = "member_count"
         case chatTopic = "chat_topic"

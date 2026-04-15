@@ -223,6 +223,15 @@ impl UiServices {
         &self.storage
     }
 
+    /// Wait until background services have processed their initial state.
+    ///
+    /// Call this after changing auth state (e.g., `auth().enable_demo_mode()`)
+    /// to ensure all services have reinitialized before executing commands.
+    /// Replaces fragile `tokio::time::sleep` workarounds in tests.
+    pub async fn wait_ready(&self) {
+        self.kanban.wait_ready().await;
+    }
+
     /// Authentication/session controller.
     pub fn auth(&self) -> Arc<AuthController> {
         self.auth.clone()

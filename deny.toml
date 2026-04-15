@@ -55,11 +55,16 @@ ignore = [
     "RUSTSEC-2024-0411",  # gtk — unmaintained
     "RUSTSEC-2024-0412",  # pango — unmaintained
     "RUSTSEC-2024-0413",  # atk — unmaintained
+    "RUSTSEC-2024-0414",  # gtk-rs GTK3 bindings — unmaintained (same reason as above)
     "RUSTSEC-2024-0415",  # gdk-sys — unmaintained
     "RUSTSEC-2024-0416",  # atk-sys — unmaintained
     "RUSTSEC-2024-0418",  # gio — unmaintained
     "RUSTSEC-2024-0419",  # glib — unmaintained
     "RUSTSEC-2024-0420",  # cairo-rs — unmaintained
+    # rand 0.7/0.8 unsound-aliasing — not exploitable: advisory requires a
+    # custom logger reentrantly calling rand::rng(), which communitas does not
+    # install. rand 0.9 path already patched to 0.9.4.
+    "RUSTSEC-2026-0097",
 ]
 
 [sources]

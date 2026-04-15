@@ -38,7 +38,6 @@ pub struct Session {
 pub enum AuthMethod {
     Local,
     Password,
-    PasswordOnly, // Familiar device login
     Passkey,
     Combined, // Password + Passkey
 }
@@ -77,17 +76,6 @@ impl Session {
             expires_at: now + timeout_seconds,
             auth_method: AuthMethod::Local,
         }
-    }
-
-    /// Create a password-only session (familiar device)
-    pub fn new_password_only(
-        four_words: String,
-        display_name: String,
-        timeout_seconds: u64,
-    ) -> Self {
-        let mut session = Self::new(four_words, display_name, timeout_seconds);
-        session.auth_method = AuthMethod::PasswordOnly;
-        session
     }
 
     /// Set the pubkey_hex on an existing session

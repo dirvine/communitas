@@ -50,23 +50,6 @@ impl KeyManager {
         .map_err(|e| anyhow::anyhow!("Failed to derive key: {}", e))?
     }
 
-    /// Hash password for lookup (different from key derivation)
-    pub async fn hash_password(&self, password: &str) -> Result<Vec<u8>> {
-        let password = password.to_string();
-
-        tokio::task::spawn_blocking(move || {
-            use blake3::Hasher;
-
-            let mut hasher = Hasher::new();
-            hasher.update(b"communitas:password:v1:");
-            hasher.update(password.as_bytes());
-
-            Ok(hasher.finalize().as_bytes().to_vec())
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to hash password: {}", e))?
-    }
-
     /// Store key in platform keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)
     pub async fn store_in_keyring(&self, four_words: &str, key: &[u8]) -> Result<()> {
         if !self.use_keyring {
@@ -245,21 +228,6 @@ mod tests {
         // Wrong key should fail
         let wrong_key = vec![1u8; 32];
         assert!(manager.decrypt(&wrong_key, &ciphertext).is_err());
-    }
-
-    #[tokio::test]
-    async fn test_password_hashing() {
-        let manager = KeyManager::new(1000, false).await.unwrap();
-
-        let hash1 = manager.hash_password("test_password").await.unwrap();
-        let hash2 = manager.hash_password("test_password").await.unwrap();
-
-        // Same password should produce same hash
-        assert_eq!(hash1, hash2);
-
-        // Different password should produce different hash
-        let hash3 = manager.hash_password("different_password").await.unwrap();
-        assert_ne!(hash1, hash3);
     }
 
     #[tokio::test]

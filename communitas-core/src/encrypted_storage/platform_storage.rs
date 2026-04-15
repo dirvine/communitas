@@ -6,20 +6,20 @@
 //! - macOS: Keychain Services
 //! - Windows: DPAPI (Data Protection API)
 //! - Linux: Secret Service API
+//!
+//! SECURITY: Vault authentication uses four-word address + password for key
+//! derivation only. Password hashes are never stored or used as lookup keys.
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tokio::sync::RwLock;
 
 use crate::encrypted_storage::VaultInfo;
 
 /// Platform-specific storage manager
 pub struct PlatformStorage {
     base_path: PathBuf,
-    password_locators: RwLock<HashMap<Vec<u8>, String>>, // password_hash -> four_words
     platform_type: PlatformType,
 }
 
@@ -41,13 +41,8 @@ impl PlatformStorage {
         // Ensure base directory exists
         std::fs::create_dir_all(base_path)?;
 
-        // Create platform-specific subdirectories
-        let locator_path = base_path.join("locators");
-        std::fs::create_dir_all(&locator_path)?;
-
         Ok(Self {
             base_path: base_path.clone(),
-            password_locators: RwLock::new(Self::load_locators(&locator_path)?),
             platform_type,
         })
     }
@@ -56,37 +51,6 @@ impl PlatformStorage {
     pub async fn vault_exists(&self, four_words: &str) -> Result<bool> {
         let vault_path = self.base_path.join(four_words);
         Ok(vault_path.join("vault.meta").exists())
-    }
-
-    /// Store a password locator for password-only login
-    pub async fn store_password_locator(
-        &self,
-        password_hash: &[u8],
-        four_words: &str,
-    ) -> Result<()> {
-        let mut locators = self.password_locators.write().await;
-        locators.insert(password_hash.to_vec(), four_words.to_string());
-
-        // Persist to disk
-        self.save_locators(&locators).await?;
-
-        // Platform-specific secure storage
-        self.store_platform_specific(four_words, password_hash)
-            .await?;
-
-        Ok(())
-    }
-
-    /// Find vault by password hash
-    pub async fn find_vault_by_password_hash(&self, password_hash: &[u8]) -> Result<String> {
-        // Check in-memory cache first
-        let locators = self.password_locators.read().await;
-        if let Some(four_words) = locators.get(password_hash) {
-            return Ok(four_words.clone());
-        }
-
-        // Try platform-specific lookup
-        self.lookup_platform_specific(password_hash).await
     }
 
     /// List all available vaults
@@ -191,47 +155,6 @@ impl PlatformStorage {
         return PlatformType::Linux; // Default to Linux for unknown platforms
     }
 
-    fn load_locators(locator_path: &Path) -> Result<HashMap<Vec<u8>, String>> {
-        let locator_file = locator_path.join("password_locators.enc");
-        if !locator_file.exists() {
-            return Ok(HashMap::new());
-        }
-
-        let data = std::fs::read(&locator_file)?;
-        // In production, this should be encrypted
-        let locators: HashMap<String, String> = serde_json::from_slice(&data)?;
-
-        // Convert from hex strings to bytes
-        let mut result = HashMap::new();
-        for (hash_hex, four_words) in locators {
-            if let Ok(hash_bytes) = hex::decode(&hash_hex) {
-                result.insert(hash_bytes, four_words);
-            }
-        }
-
-        Ok(result)
-    }
-
-    async fn save_locators(&self, locators: &HashMap<Vec<u8>, String>) -> Result<()> {
-        let locator_path = self.base_path.join("locators");
-        let locator_file = locator_path.join("password_locators.enc");
-
-        // Convert to hex strings for JSON serialization
-        let mut hex_locators = HashMap::new();
-        for (hash_bytes, four_words) in locators {
-            hex_locators.insert(hex::encode(hash_bytes), four_words.clone());
-        }
-
-        // In production, this should be encrypted
-        let data = serde_json::to_vec(&hex_locators)?;
-        fs::write(&locator_file, data).await?;
-
-        // Secure the file
-        self.secure_file(&locator_file).await?;
-
-        Ok(())
-    }
-
     async fn load_vault_info(&self, vault_path: &PathBuf) -> Result<VaultInfo> {
         let metadata_path = vault_path.join("vault.meta");
         let metadata_json = fs::read(&metadata_path).await?;
@@ -268,81 +191,6 @@ impl PlatformStorage {
         })
     }
 
-    // Platform-specific implementations
-
-    #[cfg(target_os = "macos")]
-    async fn store_platform_specific(&self, four_words: &str, password_hash: &[u8]) -> Result<()> {
-        // Store in macOS Keychain
-        use keyring::Entry;
-
-        let service = "com.saorsalabs.communitas.locator";
-        let account = hex::encode(password_hash);
-
-        let entry = Entry::new(service, &account)?;
-        entry.set_password(four_words)?;
-
-        Ok(())
-    }
-
-    #[cfg(target_os = "windows")]
-    async fn store_platform_specific(&self, four_words: &str, password_hash: &[u8]) -> Result<()> {
-        // Store using Windows Credential Manager
-        use windows_sys::Win32::Security::Credentials::*;
-
-        // Implementation would use CredWrite here
-        // For now, use file-based storage
-        let secure_path = self.get_secure_path(four_words);
-        fs::create_dir_all(&secure_path).await?;
-
-        let locator_file = secure_path.join("locator.dat");
-        fs::write(&locator_file, password_hash).await?;
-
-        Ok(())
-    }
-
-    #[cfg(target_os = "linux")]
-    async fn store_platform_specific(&self, four_words: &str, password_hash: &[u8]) -> Result<()> {
-        // Store using Secret Service API (libsecret)
-        // For now, use XDG directory with proper permissions
-        let secure_path = self.get_secure_path(four_words);
-        fs::create_dir_all(&secure_path).await?;
-
-        let locator_file = secure_path.join("locator.dat");
-        fs::write(&locator_file, password_hash).await?;
-
-        // Set restrictive permissions
-        self.secure_file(&locator_file).await?;
-
-        Ok(())
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    async fn store_platform_specific(
-        &self,
-        _four_words: &str,
-        _password_hash: &[u8],
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    #[cfg(target_os = "macos")]
-    async fn lookup_platform_specific(&self, password_hash: &[u8]) -> Result<String> {
-        use keyring::Entry;
-
-        let service = "com.saorsalabs.communitas.locator";
-        let account = hex::encode(password_hash);
-
-        let entry = Entry::new(service, &account)?;
-        let four_words = entry.get_password()?;
-
-        Ok(four_words)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    async fn lookup_platform_specific(&self, _password_hash: &[u8]) -> Result<String> {
-        Err(anyhow::anyhow!("No vault found for this password"))
-    }
-
     #[cfg(windows)]
     /// Windows-specific file security (reserved for future Windows DPAPI integration)
     #[allow(dead_code)]
@@ -374,23 +222,13 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_platform_storage() {
+    async fn test_platform_storage_vault_exists() {
         let temp_dir = TempDir::new().unwrap();
         let storage = PlatformStorage::new(&temp_dir.path().to_path_buf()).unwrap();
 
-        // Test password locator
-        let password_hash = blake3::hash(b"test_password");
-        storage
-            .store_password_locator(password_hash.as_bytes(), "test-vault-words")
-            .await
-            .unwrap();
-
-        let found = storage
-            .find_vault_by_password_hash(password_hash.as_bytes())
-            .await
-            .unwrap();
-
-        assert_eq!(found, "test-vault-words");
+        // Non-existent vault should return false
+        let exists = storage.vault_exists("no-such-vault").await.unwrap();
+        assert!(!exists);
     }
 
     #[test]

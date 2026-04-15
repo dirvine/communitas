@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 /// Embedded release signing public key (ML-DSA-65).
 ///
 /// This key is used to verify signatures on released binaries.

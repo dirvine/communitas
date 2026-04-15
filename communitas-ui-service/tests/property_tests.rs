@@ -39,11 +39,11 @@ async fn make_authenticated_services(temp: &TempDir) -> UiServices {
     );
     let services = UiServices::new(storage, app).unwrap();
     services.auth().enable_demo_mode();
-    // Allow the background auth watcher to reinitialize CoreKanbanService
+    // Wait for background auth watcher to reinitialize with authenticated peer_id.
     // with the authenticated peer_id. Without this yield, the old anonymous
     // CoreKanbanService may be replaced between create_board and create_column
     // calls, causing BoardNotFound errors.
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    services.wait_ready().await;
     services
 }
 

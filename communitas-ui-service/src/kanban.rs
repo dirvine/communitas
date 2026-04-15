@@ -158,6 +158,8 @@ pub struct KanbanService {
     current_entity_id: Arc<RwLock<Option<String>>>,
     /// Currently subscribed board ID for CRDT live updates.
     current_board_id: Arc<RwLock<Option<String>>>,
+    /// Signalled after the auth watcher processes its initial state.
+    ready: Arc<tokio::sync::Notify>,
 }
 
 impl KanbanService {
@@ -179,6 +181,8 @@ impl KanbanService {
         let current_entity_id = Arc::new(RwLock::new(None));
         let current_board_id = Arc::new(RwLock::new(None));
 
+        let ready = Arc::new(tokio::sync::Notify::new());
+
         let service = Self {
             auth,
             app,
@@ -188,12 +192,22 @@ impl KanbanService {
             rx,
             current_entity_id,
             current_board_id,
+            ready,
         };
 
         // Spawn auth state watcher using a weak reference to avoid reference cycles
         service.spawn_auth_watcher();
 
         service
+    }
+
+    /// Wait until the auth watcher has processed its initial state.
+    ///
+    /// Call this after changing auth state (e.g., `enable_demo_mode()`) to ensure
+    /// the CRDT backend has been reinitialized with the authenticated peer_id
+    /// before executing commands.
+    pub async fn wait_ready(&self) {
+        self.ready.notified().await;
     }
 
     /// Spawn a background task to watch authentication state changes.
@@ -205,11 +219,13 @@ impl KanbanService {
         let mut auth_rx = self.auth.subscribe();
         let core = Arc::downgrade(&self.core);
         let tx = self.tx.clone();
+        let ready = self.ready.clone();
 
         tokio::spawn(async move {
             // Process the initial state (clone to avoid holding borrow across await)
             let initial_state = auth_rx.borrow().clone();
             Self::handle_auth_change(&initial_state, &core, &tx).await;
+            ready.notify_waiters();
 
             // Watch for changes
             loop {

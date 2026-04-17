@@ -32,8 +32,10 @@ dirs-next = "2"
 # Logging
 tracing = { workspace = true }
 
+# sha2 is runtime for post-install binary verification (daemon::verify_installed_binary).
+sha2 = "0.10"
+hex = { workspace = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 tempfile = "3"
-sha2 = "0.10"
-hex = { workspace = true }

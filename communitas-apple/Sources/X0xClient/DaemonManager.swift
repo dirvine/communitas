@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Manages the lifecycle of the x0x daemon process.
 public final class DaemonManager: Sendable {
@@ -98,6 +99,83 @@ public final class DaemonManager: Sendable {
         case .notRunning, .starting, .error:
             try await start()
         }
+    }
+
+    /// Verify the installed `x0x` binary matches the SHA-256 published in the
+    /// signed release manifest at
+    /// `https://github.com/saorsa-labs/x0x/releases/latest/download/release-manifest.json`.
+    ///
+    /// Throws ``X0xError.daemonStartFailed`` with a descriptive reason when
+    /// the manifest cannot be fetched, the platform is unknown, or the hash
+    /// does not match. Mirrors the Rust-side `DaemonManager::verify_installed_binary`
+    /// in `communitas-x0x-client`.
+    public func verifyInstalledBinary() async throws {
+        guard let path = binaryPath() else {
+            throw X0xError.daemonNotInstalled
+        }
+        guard let target = Self.currentPlatformTarget() else {
+            throw X0xError.daemonStartFailed(reason: "no platform mapping for current OS/arch")
+        }
+        let manifestURL = URL(string: "https://github.com/saorsa-labs/x0x/releases/latest/download/release-manifest.json")!
+        let (data, response) = try await URLSession.shared.data(from: manifestURL)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw X0xError.daemonStartFailed(reason: "release manifest fetch returned HTTP \(http.statusCode)")
+        }
+
+        struct ManifestLite: Decodable {
+            struct Asset: Decodable {
+                let target: String
+                let archive_sha256: String
+            }
+            let assets: [Asset]
+        }
+        let manifest: ManifestLite
+        do {
+            manifest = try JSONDecoder().decode(ManifestLite.self, from: data)
+        } catch {
+            throw X0xError.daemonStartFailed(reason: "manifest JSON parse failed: \(error.localizedDescription)")
+        }
+        guard let asset = manifest.assets.first(where: { $0.target == target }) else {
+            throw X0xError.daemonStartFailed(reason: "manifest has no asset for target \(target)")
+        }
+
+        let expected = asset.archive_sha256.lowercased()
+        let actual = try Self.sha256Hex(atPath: path)
+        guard actual == expected else {
+            throw X0xError.daemonStartFailed(
+                reason: "x0x binary SHA-256 mismatch: expected \(expected), got \(actual) (target \(target))"
+            )
+        }
+    }
+
+    /// Map the current host to the release manifest's target-triple identifier.
+    static func currentPlatformTarget() -> String? {
+        #if os(macOS) && arch(arm64)
+        return "aarch64-apple-darwin"
+        #elseif os(macOS) && arch(x86_64)
+        return "x86_64-apple-darwin"
+        #elseif os(Linux) && arch(arm64)
+        return "aarch64-unknown-linux-gnu"
+        #elseif os(Linux) && arch(x86_64)
+        return "x86_64-unknown-linux-gnu"
+        #else
+        return nil
+        #endif
+    }
+
+    /// Stream a file through CryptoKit's SHA256 and return the hex digest.
+    static func sha256Hex(atPath path: String) throws -> String {
+        guard let handle = FileHandle(forReadingAtPath: path) else {
+            throw X0xError.daemonStartFailed(reason: "cannot open \(path)")
+        }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            let chunk = handle.readData(ofLength: 64 * 1024)
+            if chunk.isEmpty { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     /// Configure x0x to start automatically on boot/login.

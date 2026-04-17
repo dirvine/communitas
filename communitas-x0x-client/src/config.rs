@@ -32,27 +32,19 @@ pub struct X0xConfig {
 /// | Linux    | `~/.local/share/x0x` |
 /// | Windows  | `%APPDATA%\x0x` |
 ///
+/// If `X0X_INSTANCE` is set (e.g. `X0X_INSTANCE=alice`), the directory name
+/// becomes `x0x-{instance}` instead of `x0x`. This allows connecting to a
+/// named daemon started with `x0xd --name alice` without manually copying
+/// config files.
+///
 /// Returns `None` if the home/data directory cannot be determined.
 pub fn x0x_data_dir() -> Option<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        // ~/Library/Application Support/x0x
-        dirs_next::data_dir().map(|d| d.join("x0x"))
-    }
-    #[cfg(target_os = "linux")]
-    {
-        // ~/.local/share/x0x
-        dirs_next::data_dir().map(|d| d.join("x0x"))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        // %APPDATA%\x0x
-        dirs_next::data_dir().map(|d| d.join("x0x"))
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    {
-        dirs_next::data_dir().map(|d| d.join("x0x"))
-    }
+    let dir_name = match std::env::var("X0X_INSTANCE") {
+        Ok(name) if !name.is_empty() => format!("x0x-{name}"),
+        _ => "x0x".to_owned(),
+    };
+
+    dirs_next::data_dir().map(|d| d.join(dir_name))
 }
 
 /// Read the API address from the x0x `api.port` file.

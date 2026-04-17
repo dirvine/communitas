@@ -584,6 +584,12 @@ public final class X0xClient: Sendable {
         try await get("/network/status")
     }
 
+    /// Connectivity diagnostics: NAT type, relay, mDNS, port mapping, etc.
+    /// `GET /diagnostics/connectivity`
+    public func diagnosticsConnectivity() async throws -> ConnectivityDiagnostics {
+        try await get("/diagnostics/connectivity")
+    }
+
     /// List connected peers. `GET /peers`
     /// Returns wrapped: `{"ok":true,"peers":["peer1","peer2"]}`
     public func peers() async throws -> [PeerInfo] {

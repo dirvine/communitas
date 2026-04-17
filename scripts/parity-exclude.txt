@@ -1,0 +1,111 @@
+# Methods on X0xClient that are intentionally unused in both apps.
+# One method name (snake_case) per line. Blank lines and `#` comments OK.
+#
+# Only add entries here when there is a real reason — a corresponding
+# feature is owned by a different layer, superseded by another API call,
+# or deliberately hidden from end users. Each entry should have an inline
+# rationale. Entries marked (GAP) are real parity debt tracked elsewhere.
+
+# ── WebSocket-replaced REST endpoints ────────────────────────────────────
+# Covered by WebSocket /ws/direct — communitas never calls REST /direct/events.
+direct_events
+
+# SSE for upgrade events — communitas polls /upgrade instead.
+upgrade_events
+
+# ── Lower-level primitives superseded by managers ────────────────────────
+# UI subscribes via higher-level managers, not the raw subscribe call.
+unsubscribe
+
+# Request cancellation primitive; UI reuses create_join_request + reject.
+cancel_join_request
+
+# ── Admin / dev only ─────────────────────────────────────────────────────
+# Deliberately absent from end-user UI (admin-only).
+shutdown
+
+# Dev endpoint — the GUI is mounted at `/gui`, we never proxy it through
+# the communitas apps.
+gui_html
+
+# ── Naming aliases ───────────────────────────────────────────────────────
+# Dioxus uses `get`/`put` (store-scoped KV primitives) and the Swift mirror
+# exposes the same endpoint as `storeGet`/`storePut`. They are the same
+# endpoint; don't double-count.
+get
+put
+delete_key
+list_keys
+
+# Dioxus calls `transfers` while Swift calls `listTransfers`. Same endpoint.
+transfers
+
+# Dioxus calls `get_group` while Swift calls `groupInfo`. Same endpoint.
+get_group
+
+# ── Tracked parity gaps (both apps missing) ──────────────────────────────
+# Everything below is a real gap that should be closed in Phase 2.3.
+# Listed here only so `just parity` stays green while we land UI work.
+# Each line has a Jira-style tag to make the backlog trivially greppable.
+
+# (GAP-MACHINES) Contact machine pinning & revocation UI.
+add_machine
+remove_machine
+pin_machine
+unpin_machine
+list_machines
+revocations
+
+# (GAP-GROUP-MEMBERS) Named group add/remove-member flow.
+add_named_group_member
+remove_named_group_member
+update_named_group
+
+# (GAP-MLS) MLS-encrypted group management — new feature, no UI yet.
+add_mls_member
+remove_mls_member
+create_mls_group
+create_mls_welcome
+list_mls_groups
+get_mls_group
+encrypt
+decrypt
+
+# (GAP-SECURE) Post-quantum secure envelope operations.
+secure_group_encrypt
+secure_group_decrypt
+secure_group_reseal
+secure_open_envelope
+
+# (GAP-DIR-SHARDS) Directory shard subscriptions for group discovery.
+subscribe_directory_shard
+unsubscribe_directory_shard
+list_shard_subscriptions
+
+# (GAP-PRESENCE) Presence online/FOAF/find. Already landed in x0x GUI;
+# not yet surfaced in the desktop apps.
+presence_online
+presence_foaf
+presence_find
+
+# (GAP-AGENT-DIR) Agent directory browsing & card import.
+announce
+announce_with_options
+agent_user_id
+discovered_agent
+user_agents
+get_group_card
+import_group_card
+introduction
+evaluate_trust
+
+# Markdown-format constitution. Dioxus uses constitution_json; Swift has
+# both methods but only uses the JSON one. The markdown endpoint is the
+# canonical human-readable source and not consumed by UI.
+constitution
+
+# (GAP-MISC) Small one-off endpoints pending UI.
+join_store
+list_task_lists
+transfer_status
+create_group

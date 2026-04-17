@@ -303,6 +303,66 @@ jobs:
           echo "Generated update.json:"
           cat ./release/update.json
 
+      - name: Install x0x-keygen (ML-DSA-65 signer)
+        run: |
+          cargo install --locked \
+            --git https://github.com/saorsa-labs/x0x \
+            --tag v0.17.4 \
+            --bin x0x-keygen \
+            x0x
+          x0x-keygen --help
+
+      - name: Sign update.json with ML-DSA-65
+        env:
+          COMMUNITAS_ML_DSA_SECRET: ${{ secrets.COMMUNITAS_ML_DSA_SECRET }}
+        run: |
+          if [ -z "$COMMUNITAS_ML_DSA_SECRET" ]; then
+            echo "::warning::COMMUNITAS_ML_DSA_SECRET not set — skipping ML-DSA signing." \
+              "Dioxus updater will only accept unsigned feeds (development only)."
+            exit 0
+          fi
+
+          # Decode the GH secret (base64) to a secret-key file.
+          printf '%s' "$COMMUNITAS_ML_DSA_SECRET" | base64 -d > /tmp/communitas.secret
+          chmod 600 /tmp/communitas.secret
+
+          # Sign the update feed under the communitas release context.
+          x0x-keygen sign \
+            --key /tmp/communitas.secret \
+            --input ./release/update.json \
+            --output ./release/update.json.sig \
+            --context communitas-release-v1
+
+          echo "Produced update.json.sig ($(stat -f%z ./release/update.json.sig 2>/dev/null || stat -c%s ./release/update.json.sig) bytes)"
+
+          # Immediately shred the secret from the runner filesystem.
+          shred -u /tmp/communitas.secret 2>/dev/null || rm -f /tmp/communitas.secret
+
+      - name: Extract embedded ML-DSA-65 public key
+        if: hashFiles('./release/update.json.sig') != ''
+        run: |
+          # Parse release_signing_key.rs → /tmp/communitas.pub (binary).
+          python3 - <<'PY'
+          import re, pathlib, sys
+          src = pathlib.Path("communitas-dioxus/src/release_signing_key.rs").read_text()
+          nums = re.findall(r"0x([0-9a-fA-F]{2})", src)
+          if not nums:
+              sys.exit("no embedded key bytes found")
+          data = bytes(int(n, 16) for n in nums)
+          pathlib.Path("/tmp/communitas.pub").write_bytes(data)
+          print(f"Wrote {len(data)}-byte public key")
+          PY
+
+      - name: Verify update.json.sig (dry-run against embedded pubkey)
+        if: hashFiles('./release/update.json.sig') != ''
+        run: |
+          x0x-keygen verify \
+            --key /tmp/communitas.pub \
+            --input ./release/update.json \
+            --signature ./release/update.json.sig \
+            --context communitas-release-v1
+          rm -f /tmp/communitas.pub
+
       - name: Create pre-release
         uses: softprops/action-gh-release@v1
         with:
@@ -336,6 +396,7 @@ jobs:
           files: |
             ./release/${{ needs.build-macos.outputs.dmg_name }}
             ./release/update.json
+            ./release/update.json.sig
           draft: false
           prerelease: true
         env:

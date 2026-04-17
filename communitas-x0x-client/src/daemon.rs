@@ -290,9 +290,9 @@ impl DaemonManager {
     }
 
     async fn fetch_release_manifest(url: &str) -> Result<ReleaseManifestLite> {
-        let resp = reqwest::get(url).await.map_err(|e| {
-            X0xError::Daemon(format!("failed to fetch release manifest: {e}"))
-        })?;
+        let resp = reqwest::get(url)
+            .await
+            .map_err(|e| X0xError::Daemon(format!("failed to fetch release manifest: {e}")))?;
         if !resp.status().is_success() {
             return Err(X0xError::Daemon(format!(
                 "release manifest fetch returned HTTP {}",

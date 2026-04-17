@@ -148,6 +148,41 @@ pub struct NetworkStatus {
     pub uptime_secs: Option<u64>,
 }
 
+/// Response from `GET /diagnostics/connectivity`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConnectivityDiagnostics {
+    #[serde(default)]
+    pub avg_rtt_ms: Option<u64>,
+    #[serde(default)]
+    pub can_receive_direct: bool,
+    #[serde(default)]
+    pub connections: serde_json::Value,
+    #[serde(default)]
+    pub coordinator: serde_json::Value,
+    #[serde(default)]
+    pub direct_reachability_scope: Option<String>,
+    #[serde(default)]
+    pub external_addrs: Vec<String>,
+    #[serde(default)]
+    pub has_global_address: bool,
+    #[serde(default)]
+    pub local_addr: Option<String>,
+    #[serde(default)]
+    pub mdns: serde_json::Value,
+    #[serde(default)]
+    pub nat_type: Option<String>,
+    #[serde(default)]
+    pub peer_id: Option<String>,
+    #[serde(default)]
+    pub port_mapping: serde_json::Value,
+    #[serde(default)]
+    pub relay: serde_json::Value,
+    #[serde(default)]
+    pub services: serde_json::Value,
+    #[serde(default)]
+    pub uptime_s: Option<u64>,
+}
+
 /// Response from `GET /network/bootstrap-cache`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct BootstrapCacheStatus {

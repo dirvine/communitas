@@ -333,6 +333,16 @@ impl X0xClient {
         self.parse(resp).await
     }
 
+    /// Connectivity diagnostics: NAT type, relay, mDNS, port mapping, etc.
+    pub async fn diagnostics_connectivity(&self) -> Result<ConnectivityDiagnostics> {
+        let resp = self
+            .client
+            .get(self.url("/diagnostics/connectivity"))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
     /// Bootstrap cache and currently connected peers.
     pub async fn bootstrap_cache(&self) -> Result<BootstrapCacheStatus> {
         let resp = self

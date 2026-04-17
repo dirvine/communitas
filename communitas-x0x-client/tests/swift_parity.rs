@@ -32,6 +32,8 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("presence", "presence"),
     ("network_status", "networkStatus"),
     ("bootstrap_cache", "bootstrapCache"),
+    // Diagnostics
+    ("diagnostics_connectivity", "diagnosticsConnectivity"),
     // Gossip
     ("publish", "publish"),
     ("subscribe", "subscribe"),

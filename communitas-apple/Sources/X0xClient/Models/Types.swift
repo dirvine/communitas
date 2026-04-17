@@ -346,6 +346,33 @@ public struct NetworkStatus: Codable, Sendable {
     }
 }
 
+/// Response from `GET /diagnostics/connectivity`.
+public struct ConnectivityDiagnostics: Codable, Sendable {
+    public let ok: Bool?
+    public let avgRttMs: UInt64?
+    public let canReceiveDirect: Bool?
+    public let directReachabilityScope: String?
+    public let externalAddrs: [String]?
+    public let hasGlobalAddress: Bool?
+    public let localAddr: String?
+    public let natType: String?
+    public let peerId: String?
+    public let uptimeS: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case avgRttMs = "avg_rtt_ms"
+        case canReceiveDirect = "can_receive_direct"
+        case directReachabilityScope = "direct_reachability_scope"
+        case externalAddrs = "external_addrs"
+        case hasGlobalAddress = "has_global_address"
+        case localAddr = "local_addr"
+        case natType = "nat_type"
+        case peerId = "peer_id"
+        case uptimeS = "uptime_s"
+    }
+}
+
 /// Response from `GET /peers` - wrapped: `{"ok":true,"peers":[{"id":"hex"}]}`.
 public struct PeerListResponse: Codable, Sendable {
     public let ok: Bool?

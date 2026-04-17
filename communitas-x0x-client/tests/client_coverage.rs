@@ -35,6 +35,12 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("presence", "GET", "/presence"),
     ("network_status", "GET", "/network/status"),
     ("bootstrap_cache", "GET", "/network/bootstrap-cache"),
+    // Diagnostics
+    (
+        "diagnostics_connectivity",
+        "GET",
+        "/diagnostics/connectivity",
+    ),
     // Gossip Pub/Sub
     ("publish", "POST", "/publish"),
     ("subscribe", "POST", "/subscribe"),

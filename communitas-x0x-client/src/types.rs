@@ -69,6 +69,54 @@ pub struct PeerInfo {
     pub id: String,
 }
 
+/// PubSub drop-detection counter set (x0x 0.18+).
+#[derive(Debug, Clone, Deserialize)]
+pub struct GossipStats {
+    pub publish_total: u64,
+    pub publish_failed: u64,
+    pub incoming_total: u64,
+    pub incoming_decoded: u64,
+    pub incoming_decode_failed: u64,
+    pub delivered_to_subscriber: u64,
+    pub subscriber_channel_closed: u64,
+    pub in_flight_decode: i64,
+    pub decode_to_delivery_drops: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct GossipStatsWrapper {
+    #[allow(dead_code)]
+    pub ok: bool,
+    pub stats: GossipStats,
+}
+
+/// Response from `POST /peers/:peer_id/probe` — active-liveness probe result.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProbePeerResult {
+    pub ok: bool,
+    #[serde(default)]
+    pub rtt_ms: Option<u64>,
+    #[serde(default)]
+    pub rtt_us: Option<u64>,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// Response from `GET /peers/:peer_id/health`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PeerHealth {
+    pub ok: bool,
+    #[serde(default)]
+    pub peer_id: Option<String>,
+    /// Opaque Debug rendering of ant-quic `ConnectionHealth`.
+    #[serde(default)]
+    pub health: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
 /// Response from `GET /peers`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PeerList {

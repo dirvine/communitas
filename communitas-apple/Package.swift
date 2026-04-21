@@ -21,5 +21,11 @@ let package = Package(
         ),
         .target(name: "X0xClient"),
         .testTarget(name: "X0xClientTests", dependencies: ["X0xClient"]),
+        // XCUITest target — UI-level golden paths driven via XCUIApplication.
+        // Run with `xcodebuild -scheme Communitas -destination 'platform=macOS'
+        // -only-testing:CommunitasUITests test` against an Xcode-generated
+        // project. `swift test` cannot host XCUITest (no app host), but the
+        // target compiles so the assertions stay in the package.
+        .testTarget(name: "CommunitasUITests", dependencies: ["X0xClient"]),
     ]
 )

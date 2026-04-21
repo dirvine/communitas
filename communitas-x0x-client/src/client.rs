@@ -343,6 +343,52 @@ impl X0xClient {
         self.parse(resp).await
     }
 
+    /// PubSub drop-detection counters (x0x 0.18+).
+    ///
+    /// Returns the 9 atomic counters that `x0xd` tracks across the publish
+    /// → transport → incoming → decode → deliver pipeline. A zero
+    /// `decode_to_delivery_drops` proves no messages were lost inside the
+    /// local pipeline since the daemon started.
+    pub async fn gossip_stats(&self) -> Result<GossipStats> {
+        let resp = self
+            .client
+            .get(self.url("/diagnostics/gossip"))
+            .send()
+            .await?;
+        let wrapper: GossipStatsWrapper = self.parse(resp).await?;
+        Ok(wrapper.stats)
+    }
+
+    /// Active-liveness probe against a peer (ant-quic 0.27.2 `probe_peer`).
+    ///
+    /// `peer_id_hex` is the 32-byte peer id in hex (== MachineId). Returns
+    /// measured round-trip time. The `timeout_ms` argument is clamped by
+    /// x0xd to `[100, 30_000]` ms.
+    pub async fn probe_peer(
+        &self,
+        peer_id_hex: &str,
+        timeout_ms: u64,
+    ) -> Result<ProbePeerResult> {
+        let url = self.url(&format!("/peers/{peer_id_hex}/probe"));
+        let resp = self
+            .client
+            .post(url)
+            .query(&[("timeout_ms", timeout_ms)])
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Connection health snapshot for a peer (ant-quic 0.27.1 #170).
+    pub async fn peer_health(&self, peer_id_hex: &str) -> Result<PeerHealth> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/peers/{peer_id_hex}/health")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
     // ── Gossip pub/sub ──────────────────────────────────────────────────
 
     /// Publish a payload to a gossip topic.

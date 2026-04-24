@@ -804,10 +804,8 @@ pub fn ChannelChatView(
                                 MSG_TYPE_PIN => {
                                     if let Some((message_id, action)) = payload.pin_fields() {
                                         pinned_message_ids.with_mut(|pins| match action.as_str() {
-                                            "pin" => {
-                                                if !pins.contains(&message_id) {
-                                                    pins.push(message_id);
-                                                }
+                                            "pin" if !pins.contains(&message_id) => {
+                                                pins.push(message_id);
                                             }
                                             "unpin" => pins.retain(|id| id != &message_id),
                                             _ => {}

@@ -817,7 +817,7 @@ impl AuthService for AuthController {
             })
             .collect();
 
-        vault_infos.sort_by(|a, b| b.last_accessed.cmp(&a.last_accessed));
+        vault_infos.sort_by_key(|vault| std::cmp::Reverse(vault.last_accessed));
 
         Ok(vault_infos)
     }

@@ -528,12 +528,10 @@ impl EntityService {
                                 deleted_by_role = candidate_role;
                                 break;
                             }
-                            Some(_) => {
-                                if deleted_by_role.is_none() {
-                                    deleted_by_role = candidate_role;
-                                }
+                            Some(_) if deleted_by_role.is_none() => {
+                                deleted_by_role = candidate_role;
                             }
-                            None => {}
+                            Some(_) | None => {}
                         }
                     }
                 }

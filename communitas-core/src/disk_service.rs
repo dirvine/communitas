@@ -272,11 +272,7 @@ impl TransferState {
 
     /// Get the number of chunks completed
     pub fn chunks_completed(&self) -> u64 {
-        if self.chunk_size == 0 {
-            0
-        } else {
-            self.bytes_written / self.chunk_size
-        }
+        self.bytes_written.checked_div(self.chunk_size).unwrap_or(0)
     }
 
     /// Get the total number of chunks

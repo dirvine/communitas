@@ -269,14 +269,14 @@ impl PresenceCache {
     /// Get all records sorted by freshness (most recent first)
     pub fn get_all_sorted_by_freshness(&self) -> Vec<&CachedPresence> {
         let mut records: Vec<_> = self.records.values().collect();
-        records.sort_by(|a, b| b.record.timestamp.cmp(&a.record.timestamp));
+        records.sort_by_key(|record| std::cmp::Reverse(record.record.timestamp));
         records
     }
 
     /// Get all viable records sorted by freshness (most recent first)
     pub fn get_viable_sorted_by_freshness(&self) -> Vec<&CachedPresence> {
         let mut records: Vec<_> = self.records.values().filter(|cp| cp.is_viable()).collect();
-        records.sort_by(|a, b| b.record.timestamp.cmp(&a.record.timestamp));
+        records.sort_by_key(|record| std::cmp::Reverse(record.record.timestamp));
         records
     }
 

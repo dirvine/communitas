@@ -240,7 +240,7 @@ impl AppConfigManager {
         // Keep only 10 most recent
         self.config
             .recent_identities
-            .sort_by(|a, b| b.last_used.cmp(&a.last_used));
+            .sort_by_key(|identity| std::cmp::Reverse(identity.last_used));
         self.config.recent_identities.truncate(10);
 
         self.save().await

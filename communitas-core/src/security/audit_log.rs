@@ -512,7 +512,7 @@ impl AuditLog {
         }
 
         // Sort by timestamp ascending
-        events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        events.sort_by_key(|event| event.timestamp);
         Ok(events)
     }
 }

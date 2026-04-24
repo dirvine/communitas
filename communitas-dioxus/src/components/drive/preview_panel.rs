@@ -94,7 +94,7 @@ impl PreviewCache {
             .iter()
             .map(|(k, v)| (k.clone(), v.access_count))
             .collect();
-        sorted.sort_by(|a, b| a.1.cmp(&b.1));
+        sorted.sort_by_key(|entry| entry.1);
 
         for (key, _) in sorted.into_iter().take(to_remove) {
             debug!(target: "ui.drive.preview", key = %key, "Evicting preview from cache");

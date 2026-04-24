@@ -364,11 +364,7 @@ impl X0xClient {
     /// `peer_id_hex` is the 32-byte peer id in hex (== MachineId). Returns
     /// measured round-trip time. The `timeout_ms` argument is clamped by
     /// x0xd to `[100, 30_000]` ms.
-    pub async fn probe_peer(
-        &self,
-        peer_id_hex: &str,
-        timeout_ms: u64,
-    ) -> Result<ProbePeerResult> {
+    pub async fn probe_peer(&self, peer_id_hex: &str, timeout_ms: u64) -> Result<ProbePeerResult> {
         let url = self.url(&format!("/peers/{peer_id_hex}/probe"));
         let resp = self
             .client

@@ -1097,7 +1097,7 @@ impl KanbanService {
         }
 
         // Sort by timestamp (most recent first)
-        activity.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        activity.sort_by_key(|item| std::cmp::Reverse(item.timestamp));
 
         // Build comment views (resolve names via loop since map can't be async)
         let mut comment_views: Vec<CommentView> = Vec::with_capacity(comments.len());

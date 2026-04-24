@@ -121,12 +121,10 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
                 }
             }
             // Delete/Backspace to remove selected elements
-            Key::Delete | Key::Backspace => {
-                if !ctrl_or_meta {
-                    evt.prevent_default();
-                    if let Some(handler) = &on_delete_selected {
-                        handler.call(());
-                    }
+            Key::Delete | Key::Backspace if !ctrl_or_meta => {
+                evt.prevent_default();
+                if let Some(handler) = &on_delete_selected {
+                    handler.call(());
                 }
             }
             _ => {}

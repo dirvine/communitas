@@ -68,7 +68,7 @@ pub fn LayerPanel(props: LayerPanelProps) -> Element {
 
     // Sort layers by z_index (highest first for visual stacking)
     let mut sorted_layers = props.layers.clone();
-    sorted_layers.sort_by(|a, b| b.z_index.cmp(&a.z_index));
+    sorted_layers.sort_by_key(|layer| std::cmp::Reverse(layer.z_index));
 
     rsx! {
         div {

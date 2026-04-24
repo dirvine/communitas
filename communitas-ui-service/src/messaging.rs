@@ -2104,7 +2104,7 @@ fn apply_pagination(messages: &mut Vec<Message>, limit: usize, before: Option<u6
     }
 
     // Sort by timestamp descending (newest first)
-    messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    messages.sort_by_key(|message| std::cmp::Reverse(message.timestamp));
 
     // Apply limit
     messages.truncate(limit);

@@ -550,12 +550,12 @@ struct X0xClientTests {
     @Test("UpgradeStatus decodes from JSON")
     func upgradeStatusDecoding() throws {
         let json = """
-        {"ok": true, "update_available": true, "version": "0.12.0", "current_version": "0.11.1"}
+        {"ok": true, "update_available": true, "version": "0.12.1", "current_version": "0.11.1"}
         """
         let data = Data(json.utf8)
         let resp = try JSONDecoder().decode(UpgradeStatus.self, from: data)
         #expect(resp.updateAvailable == true)
-        #expect(resp.version == "0.12.0")
+        #expect(resp.version == "0.12.1")
         #expect(resp.currentVersion == "0.11.1")
     }
 

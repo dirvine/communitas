@@ -1,6 +1,11 @@
 import SwiftUI
 import X0xClient
 
+private struct PeerDiagnostic {
+    let health: String
+    let probe: String
+}
+
 /// Network view showing connection stats, external addresses, and connected peers.
 struct NetworkView: View {
     @EnvironmentObject var appState: AppState
@@ -13,6 +18,8 @@ struct NetworkView: View {
     @State private var bootstrapCache: BootstrapCacheStatus?
     @State private var webSocketSessions: WsSessionList?
     @State private var upgradeStatus: UpgradeStatus?
+    @State private var gossipStats: GossipStats?
+    @State private var peerDiagnostics: [String: PeerDiagnostic] = [:]
     @State private var isRefreshing = false
 
     private let statsColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
@@ -298,6 +305,16 @@ struct NetworkView: View {
                     statRow(label: "Shared Topic Subs", value: "\(shared.count)")
                 }
 
+                if let stats = gossipStats {
+                    statRow(label: "Gossip Published", value: "\(stats.publishTotal)")
+                    statRow(label: "Gossip Incoming", value: "\(stats.incomingTotal)")
+                    statRow(label: "Gossip Delivered", value: "\(stats.deliveredToSubscriber)")
+                    statRow(
+                        label: "Decode to Delivery Drops",
+                        value: "\(stats.decodeToDeliveryDrops)"
+                    )
+                }
+
                 if let available = upgradeStatus?.updateAvailable {
                     if available {
                         statRow(label: "Upgrade", value: "Update available: \(upgradeStatus?.version ?? "unknown")")
@@ -306,7 +323,7 @@ struct NetworkView: View {
                     }
                 }
 
-                if bootstrapCache == nil && webSocketSessions == nil && upgradeStatus == nil {
+                if bootstrapCache == nil && webSocketSessions == nil && upgradeStatus == nil && gossipStats == nil {
                     Text("No extended diagnostics available")
                         .font(.caption)
                         .foregroundStyle(DeepSpace.textMuted)
@@ -333,6 +350,10 @@ struct NetworkView: View {
                     HStack {
                         Text("Peer ID")
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Health")
+                            .frame(width: 180, alignment: .leading)
+                        Text("Probe")
+                            .frame(width: 96, alignment: .leading)
                     }
                     .font(.caption2)
                     .fontWeight(.semibold)
@@ -353,6 +374,18 @@ struct NetworkView: View {
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(DeepSpace.textPrimary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .lineLimit(1)
+                            let diagnostics = peerDiagnostics[peer.peerId]
+                            Text(diagnostics?.health ?? "Not checked")
+                                .font(.caption)
+                                .foregroundStyle(DeepSpace.textSecondary)
+                                .frame(width: 180, alignment: .leading)
+                                .lineLimit(1)
+                                .help(diagnostics?.health ?? "Not checked")
+                            Text(diagnostics?.probe ?? "-")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(DeepSpace.cyan)
+                                .frame(width: 96, alignment: .leading)
                                 .lineLimit(1)
                             Button {
                                 NSPasteboard.general.clearContents()
@@ -444,6 +477,29 @@ struct NetworkView: View {
         return "\(seconds / 86400)d \((seconds % 86400) / 3600)h"
     }
 
+    private func formatPeerHealth(_ health: PeerHealth) -> String {
+        if let snapshot = health.health, !snapshot.isEmpty {
+            return snapshot
+        }
+        if let error = health.error, !error.isEmpty {
+            return error
+        }
+        return (health.ok ?? false) ? "Healthy" : "Unknown"
+    }
+
+    private func formatProbeResult(_ result: ProbePeerResult) -> String {
+        if let ms = result.rttMs {
+            return "\(ms) ms"
+        }
+        if let us = result.rttUs {
+            return "\(us) us"
+        }
+        if let error = result.error, !error.isEmpty {
+            return error
+        }
+        return (result.ok ?? false) ? "OK" : "No RTT"
+    }
+
     private func pollData() async {
         isRefreshing = true
         defer { isRefreshing = false }
@@ -457,9 +513,32 @@ struct NetworkView: View {
         }
 
         do {
-            peers = try await appState.client.peers()
+            let currentPeers = try await appState.client.peers()
+            peers = currentPeers
+            var diagnostics: [String: PeerDiagnostic] = [:]
+            for peer in currentPeers {
+                let health: String
+                do {
+                    let snapshot = try await appState.client.peerHealth(peerId: peer.peerId)
+                    health = formatPeerHealth(snapshot)
+                } catch {
+                    health = "Unavailable: \(error.localizedDescription)"
+                }
+
+                let probe: String
+                do {
+                    let result = try await appState.client.probePeer(peerId: peer.peerId)
+                    probe = formatProbeResult(result)
+                } catch {
+                    probe = "Probe failed"
+                }
+
+                diagnostics[peer.peerId] = PeerDiagnostic(health: health, probe: probe)
+            }
+            peerDiagnostics = diagnostics
         } catch {
             peers = []
+            peerDiagnostics = [:]
         }
 
         do {
@@ -490,6 +569,12 @@ struct NetworkView: View {
             webSocketSessions = try await appState.client.wsSessions()
         } catch {
             webSocketSessions = nil
+        }
+
+        do {
+            gossipStats = try await appState.client.gossipStats()
+        } catch {
+            gossipStats = nil
         }
 
         do {

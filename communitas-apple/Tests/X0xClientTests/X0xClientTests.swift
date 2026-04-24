@@ -226,6 +226,56 @@ struct X0xClientTests {
         #expect(resp.peerInfos[0].peerId == "peer1")
     }
 
+    @Test("GossipStatsResponse decodes diagnostics wrapper")
+    func gossipStatsDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "stats": {
+                "publish_total": 13,
+                "publish_failed": 0,
+                "incoming_total": 12,
+                "incoming_decoded": 12,
+                "incoming_decode_failed": 0,
+                "delivered_to_subscriber": 12,
+                "subscriber_channel_closed": 0,
+                "in_flight_decode": 0,
+                "decode_to_delivery_drops": 0
+            }
+        }
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(GossipStatsResponse.self, from: data)
+        #expect(resp.stats.publishTotal == 13)
+        #expect(resp.stats.deliveredToSubscriber == 12)
+        #expect(resp.stats.decodeToDeliveryDrops == 0)
+    }
+
+    @Test("Peer diagnostics decode flat responses")
+    func peerDiagnosticsDecoding() throws {
+        let probeJson = """
+        {
+            "ok": true,
+            "rtt_ms": 17,
+            "rtt_us": 17321,
+            "timeout_ms": 1000
+        }
+        """
+        let healthJson = """
+        {
+            "ok": true,
+            "peer_id": "peer1",
+            "health": "ConnectionHealth { rtt: 17ms }"
+        }
+        """
+        let probe = try JSONDecoder().decode(ProbePeerResult.self, from: Data(probeJson.utf8))
+        let health = try JSONDecoder().decode(PeerHealth.self, from: Data(healthJson.utf8))
+        #expect(probe.rttMs == 17)
+        #expect(probe.timeoutMs == 1000)
+        #expect(health.peerId == "peer1")
+        #expect(health.health?.contains("ConnectionHealth") == true)
+    }
+
     @Test("ChatMessage creates from gossip payload")
     func chatMessageFromGossip() {
         let payload = Data("Hello, world!".utf8).base64EncodedString()

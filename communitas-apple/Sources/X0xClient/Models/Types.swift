@@ -371,6 +371,66 @@ public struct PeerInfo: Codable, Sendable, Identifiable {
     }
 }
 
+/// PubSub drop-detection counters from `GET /diagnostics/gossip`.
+public struct GossipStats: Codable, Sendable {
+    public let publishTotal: UInt64
+    public let publishFailed: UInt64
+    public let incomingTotal: UInt64
+    public let incomingDecoded: UInt64
+    public let incomingDecodeFailed: UInt64
+    public let deliveredToSubscriber: UInt64
+    public let subscriberChannelClosed: UInt64
+    public let inFlightDecode: Int64
+    public let decodeToDeliveryDrops: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case publishTotal = "publish_total"
+        case publishFailed = "publish_failed"
+        case incomingTotal = "incoming_total"
+        case incomingDecoded = "incoming_decoded"
+        case incomingDecodeFailed = "incoming_decode_failed"
+        case deliveredToSubscriber = "delivered_to_subscriber"
+        case subscriberChannelClosed = "subscriber_channel_closed"
+        case inFlightDecode = "in_flight_decode"
+        case decodeToDeliveryDrops = "decode_to_delivery_drops"
+    }
+}
+
+/// Response wrapper from `GET /diagnostics/gossip`.
+public struct GossipStatsResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let stats: GossipStats
+}
+
+/// Active-liveness probe result from `POST /peers/:peer_id/probe`.
+public struct ProbePeerResult: Codable, Sendable {
+    public let ok: Bool?
+    public let rttMs: UInt64?
+    public let rttUs: UInt64?
+    public let timeoutMs: UInt64?
+    public let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, error
+        case rttMs = "rtt_ms"
+        case rttUs = "rtt_us"
+        case timeoutMs = "timeout_ms"
+    }
+}
+
+/// Connection health snapshot from `GET /peers/:peer_id/health`.
+public struct PeerHealth: Codable, Sendable {
+    public let ok: Bool?
+    public let peerId: String?
+    public let health: String?
+    public let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, health, error
+        case peerId = "peer_id"
+    }
+}
+
 /// Response from `GET /agents/discovered` - wrapped: `{"ok":true,"agents":[...]}`.
 public struct DiscoveredAgentsResponse: Codable, Sendable {
     public let ok: Bool?

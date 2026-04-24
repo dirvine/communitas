@@ -4,7 +4,7 @@
 //!
 //! Shows network status, peer list, NAT info, external addresses.
 
-use communitas_x0x_client::X0xClient;
+use communitas_x0x_client::{GossipStats, X0xClient};
 use dioxus::prelude::*;
 
 use crate::tokens::{colors, radius, spacing, typography};
@@ -41,13 +41,15 @@ struct NetworkData {
     external_addrs: Vec<String>,
     agent_id: String,
     machine_id: String,
+    gossip_stats: Option<GossipStats>,
     peers: Vec<PeerRow>,
 }
 
 #[derive(Clone, PartialEq)]
 struct PeerRow {
     peer_id: String,
-    address: String,
+    health: String,
+    probe: String,
 }
 
 /// Network diagnostics page.
@@ -87,13 +89,48 @@ pub fn NetworkView() -> Element {
                 }
 
                 if let Ok(peers) = client.peers().await {
-                    d.peers = peers
-                        .into_iter()
-                        .map(|p| PeerRow {
-                            peer_id: p.id.clone(),
-                            address: String::new(),
-                        })
-                        .collect();
+                    let mut rows = Vec::with_capacity(peers.len());
+                    for peer in peers {
+                        let peer_id = peer.id;
+                        let health = match client.peer_health(&peer_id).await {
+                            Ok(snapshot) => {
+                                snapshot.health.or(snapshot.error).unwrap_or_else(|| {
+                                    if snapshot.ok {
+                                        "Healthy".to_string()
+                                    } else {
+                                        "Unknown".to_string()
+                                    }
+                                })
+                            }
+                            Err(err) => format!("Unavailable: {err}"),
+                        };
+                        let probe = match client.probe_peer(&peer_id, 1_000).await {
+                            Ok(result) => {
+                                if let Some(ms) = result.rtt_ms {
+                                    format!("{ms} ms")
+                                } else if let Some(us) = result.rtt_us {
+                                    format!("{us} us")
+                                } else if let Some(err) = result.error {
+                                    err
+                                } else if result.ok {
+                                    "OK".to_string()
+                                } else {
+                                    "No RTT".to_string()
+                                }
+                            }
+                            Err(err) => format!("Probe failed: {err}"),
+                        };
+                        rows.push(PeerRow {
+                            peer_id,
+                            health,
+                            probe,
+                        });
+                    }
+                    d.peers = rows;
+                }
+
+                if let Ok(stats) = client.gossip_stats().await {
+                    d.gossip_stats = Some(stats);
                 }
 
                 error.set(None);
@@ -244,6 +281,66 @@ pub fn NetworkView() -> Element {
                 }
             }
 
+            // Gossip diagnostics
+            if let Some(stats) = &d.gossip_stats {
+                div {
+                    style: "{card_style}",
+                    div {
+                        style: format!("font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+                            typography::TEXT_SM, colors::TEXT_PRIMARY, spacing::SM),
+                        "Gossip Pipeline"
+                    }
+                    div {
+                        style: "display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;",
+                        div {
+                            div { style: "{stat_value_style}", "{stats.publish_total}" }
+                            div { style: "{stat_label_style}", "Published" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{stats.incoming_total}" }
+                            div { style: "{stat_label_style}", "Incoming" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{stats.delivered_to_subscriber}" }
+                            div { style: "{stat_label_style}", "Delivered" }
+                        }
+                        div {
+                            div {
+                                style: format!(
+                                    "font-size: {}; font-weight: 700; color: {};",
+                                    typography::TEXT_2XL,
+                                    if stats.decode_to_delivery_drops == 0 { colors::SUCCESS } else { colors::DANGER },
+                                ),
+                                "{stats.decode_to_delivery_drops}"
+                            }
+                            div { style: "{stat_label_style}", "Drops" }
+                        }
+                    }
+                    div {
+                        style: format!(
+                            "display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: {};",
+                            spacing::SM,
+                        ),
+                        div {
+                            div { style: "{stat_value_style}", "{stats.publish_failed}" }
+                            div { style: "{stat_label_style}", "Publish Failed" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{stats.incoming_decoded}" }
+                            div { style: "{stat_label_style}", "Decoded" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{stats.incoming_decode_failed}" }
+                            div { style: "{stat_label_style}", "Decode Failed" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{stats.in_flight_decode}" }
+                            div { style: "{stat_label_style}", "In Flight" }
+                        }
+                    }
+                }
+            }
+
             // Identity card
             div {
                 style: "{card_style}",
@@ -327,18 +424,20 @@ pub fn NetworkView() -> Element {
                     }
                 } else {
                     div {
-                        style: format!("display: grid; grid-template-columns: 1fr 1fr; {table_header_style}"),
+                        style: format!("display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; {table_header_style}"),
                         span { "Peer ID" }
-                        span { "Address" }
+                        span { "Health" }
+                        span { "Probe RTT" }
                     }
                     for peer in &d.peers {
                         {
                             let pid = peer.peer_id.clone();
-                            let addr = peer.address.clone();
+                            let health = peer.health.clone();
+                            let probe = peer.probe.clone();
                             rsx! {
                                 div {
                                     key: "{pid}",
-                                    style: format!("display: grid; grid-template-columns: 1fr 1fr; {table_row_style}"),
+                                    style: format!("display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; {table_row_style}"),
                                     span {
                                         style: format!(
                                             "font-family: {}; font-size: {}; color: {};",
@@ -348,10 +447,18 @@ pub fn NetworkView() -> Element {
                                     }
                                     span {
                                         style: format!(
-                                            "font-family: {}; font-size: {}; color: {};",
-                                            typography::FONT_MONO, typography::TEXT_XS, colors::TEXT_SECONDARY,
+                                            "font-size: {}; color: {}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                                            typography::TEXT_XS, colors::TEXT_SECONDARY,
                                         ),
-                                        "{addr}"
+                                        title: "{health}",
+                                        "{health}"
+                                    }
+                                    span {
+                                        style: format!(
+                                            "font-family: {}; font-size: {}; color: {};",
+                                            typography::FONT_MONO, typography::TEXT_XS, colors::PRIMARY,
+                                        ),
+                                        "{probe}"
                                     }
                                 }
                             }

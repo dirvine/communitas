@@ -591,6 +591,23 @@ public final class X0xClient: Sendable {
         return resp.peerInfos
     }
 
+    /// Get gossip drop-detection counters. `GET /diagnostics/gossip`
+    public func gossipStats() async throws -> GossipStats {
+        let resp: GossipStatsResponse = try await get("/diagnostics/gossip")
+        return resp.stats
+    }
+
+    /// Run an active liveness probe against a connected peer.
+    /// `POST /peers/:peer_id/probe`
+    public func probePeer(peerId: String, timeoutMs: UInt64 = 1_000) async throws -> ProbePeerResult {
+        try await postEmpty("/peers/\(peerId)/probe?timeout_ms=\(timeoutMs)")
+    }
+
+    /// Get connection health for a connected peer. `GET /peers/:peer_id/health`
+    public func peerHealth(peerId: String) async throws -> PeerHealth {
+        try await get("/peers/\(peerId)/health")
+    }
+
     /// List discovered agents on the network. `GET /agents/discovered`
     /// Returns wrapped: `{"ok":true,"agents":[...]}`
     public func discoveredAgents() async throws -> [DiscoveredAgent] {
@@ -1105,4 +1122,3 @@ public final class X0xClient: Sendable {
         }
     }
 }
-

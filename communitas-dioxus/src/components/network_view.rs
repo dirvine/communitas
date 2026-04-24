@@ -4,7 +4,7 @@
 //!
 //! Shows network status, peer list, NAT info, external addresses.
 
-use communitas_x0x_client::{GossipStats, X0xClient};
+use communitas_x0x_client::{ConnectivityDiagnostics, DiscoveredMachine, GossipStats, X0xClient};
 use dioxus::prelude::*;
 
 use crate::tokens::{colors, radius, spacing, typography};
@@ -42,6 +42,10 @@ struct NetworkData {
     agent_id: String,
     machine_id: String,
     gossip_stats: Option<GossipStats>,
+    connectivity: Option<ConnectivityDiagnostics>,
+    discovered_machines: Vec<DiscoveredMachine>,
+    agent_machine: Option<DiscoveredMachine>,
+    user_machine_count: Option<usize>,
     peers: Vec<PeerRow>,
 }
 
@@ -58,6 +62,7 @@ pub fn NetworkView() -> Element {
     let mut data = use_signal(NetworkData::default);
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| None::<String>);
+    let action_message = use_signal(|| None::<String>);
 
     use_coroutine(move |_: UnboundedReceiver<()>| async move {
         let client = X0xClient::new();
@@ -84,8 +89,31 @@ pub fn NetworkView() -> Element {
 
             if !had_error {
                 if let Ok(agent) = client.agent().await {
+                    if let Ok(agent_machine) = client.machine_for_agent(&agent.agent_id).await {
+                        d.agent_machine = Some(agent_machine.machine);
+                    }
+                    if let Some(user_id) = &agent.user_id
+                        && let Ok(user_machines) = client.machines_by_user(user_id).await
+                    {
+                        d.user_machine_count = Some(user_machines.machines.len());
+                    }
                     d.agent_id = agent.agent_id;
                     d.machine_id = agent.machine_id;
+                }
+
+                if let Ok(connectivity) = client.connectivity_diagnostics().await {
+                    d.connectivity = Some(connectivity);
+                }
+
+                if let Ok(machines) = client.discovered_machines(false).await {
+                    if d.agent_machine.is_none()
+                        && let Some(first) = machines.first()
+                        && let Ok(detail) =
+                            client.discovered_machine(&first.machine_id, false).await
+                    {
+                        d.agent_machine = Some(detail);
+                    }
+                    d.discovered_machines = machines;
                 }
 
                 if let Ok(peers) = client.peers().await {
@@ -146,6 +174,7 @@ pub fn NetworkView() -> Element {
     let d = data.read().clone();
     let is_loading = *loading.read();
     let current_error = error.read().clone();
+    let current_action_message = action_message.read().clone();
 
     let page_style = format!(
         "padding: {}; display: flex; flex-direction: column; gap: {}; \
@@ -231,6 +260,16 @@ pub fn NetworkView() -> Element {
                     "{err}"
                 }
             }
+            if let Some(msg) = current_action_message.as_ref() {
+                div {
+                    style: format!(
+                        "background-color: rgba(51, 204, 153, 0.1); border: 1px solid {}; \
+                         border-radius: {}; padding: {}; color: {}; font-size: {};",
+                        colors::SUCCESS, radius::MD, spacing::MD, colors::SUCCESS, typography::TEXT_SM,
+                    ),
+                    "{msg}"
+                }
+            }
 
             // Stats grid
             div {
@@ -277,6 +316,37 @@ pub fn NetworkView() -> Element {
                     div {
                         style: format!("font-size: {}; color: {};", typography::TEXT_2XL, colors::SUCCESS),
                         {format!("{:.1}%", rate * 100.0)}
+                    }
+                }
+            }
+
+            // Connectivity snapshot
+            if let Some(snapshot) = &d.connectivity {
+                div {
+                    style: "{card_style}",
+                    div {
+                        style: format!("font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+                            typography::TEXT_SM, colors::TEXT_PRIMARY, spacing::SM),
+                        "Connectivity Snapshot"
+                    }
+                    div {
+                        style: "display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;",
+                        div {
+                            div { style: "{stat_value_style}", "{snapshot.connections.connected_peers}" }
+                            div { style: "{stat_label_style}", "Node Peers" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{snapshot.connections.direct}" }
+                            div { style: "{stat_label_style}", "Direct Paths" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{snapshot.mdns.discovered_peers}" }
+                            div { style: "{stat_label_style}", "mDNS Peers" }
+                        }
+                        div {
+                            div { style: "{stat_value_style}", "{snapshot.services.relay_enabled}" }
+                            div { style: "{stat_label_style}", "Relay Service" }
+                        }
                     }
                 }
             }
@@ -403,6 +473,88 @@ pub fn NetworkView() -> Element {
                                 typography::FONT_MONO, typography::TEXT_XS, colors::TEXT_SECONDARY,
                             ),
                             "{addr}"
+                        }
+                    }
+                }
+            }
+
+            // Discovered machine endpoints
+            div {
+                style: "{card_style}",
+                div {
+                    style: format!("font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+                        typography::TEXT_SM, colors::TEXT_PRIMARY, spacing::SM),
+                    "Discovered Machines"
+                }
+
+                if let Some(machine) = &d.agent_machine {
+                    div {
+                        style: format!("font-size: {}; color: {}; margin-bottom: {};",
+                            typography::TEXT_XS, colors::TEXT_SECONDARY, spacing::SM),
+                        "Current agent machine: {short_id(&machine.machine_id)}"
+                    }
+                }
+
+                if let Some(count) = d.user_machine_count {
+                    div {
+                        style: format!("font-size: {}; color: {}; margin-bottom: {};",
+                            typography::TEXT_XS, colors::TEXT_SECONDARY, spacing::SM),
+                        "Machines for current user: {count}"
+                    }
+                }
+
+                if d.discovered_machines.is_empty() {
+                    div {
+                        style: format!("color: {}; font-size: {};", colors::TEXT_MUTED, typography::TEXT_SM),
+                        "No machine announcements discovered."
+                    }
+                } else {
+                    div {
+                        style: format!("display: grid; grid-template-columns: 1fr 1fr 96px; gap: 12px; {table_header_style}"),
+                        span { "Machine ID" }
+                        span { "Addresses" }
+                        span { "Action" }
+                    }
+                    for machine in &d.discovered_machines {
+                        {
+                            let machine_id = machine.machine_id.clone();
+                            let address_count = machine.addresses.len();
+                            let mut action_message = action_message;
+                            rsx! {
+                                div {
+                                    key: "{machine_id}",
+                                    style: format!("display: grid; grid-template-columns: 1fr 1fr 96px; gap: 12px; align-items: center; {table_row_style}"),
+                                    span {
+                                        style: format!(
+                                            "font-family: {}; font-size: {}; color: {};",
+                                            typography::FONT_MONO, typography::TEXT_XS, colors::PRIMARY,
+                                        ),
+                                        "{short_id(&machine_id)}"
+                                    }
+                                    span {
+                                        style: format!("font-size: {}; color: {};", typography::TEXT_XS, colors::TEXT_SECONDARY),
+                                        "{address_count}"
+                                    }
+                                    button {
+                                        style: format!(
+                                            "border: 1px solid {}; border-radius: {}; background: {}; color: {}; padding: 4px 8px; cursor: pointer;",
+                                            colors::BORDER_DEFAULT, radius::SM, colors::SURFACE_CARD, colors::TEXT_PRIMARY,
+                                        ),
+                                        onclick: move |_| {
+                                            let machine_id = machine_id.clone();
+                                            spawn(async move {
+                                                let client = X0xClient::new();
+                                                let msg = match client.connect_machine(&machine_id).await {
+                                                    Ok(result) => format!("{}: {}", short_id(&machine_id), result.outcome),
+                                                    Err(err) => format!("{}: {err}", short_id(&machine_id)),
+                                                };
+                                                action_message.set(Some(msg));
+                                            });
+                                        },
+                                        "Connect"
+                                    }
+                                }
+                            }
                         }
                     }
                 }

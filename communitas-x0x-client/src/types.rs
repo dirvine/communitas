@@ -155,6 +155,56 @@ pub(crate) struct DiscoveredAgentWrapper {
     pub agent: DiscoveredAgent,
 }
 
+/// A single discovered machine endpoint from `GET /machines/discovered`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscoveredMachine {
+    pub machine_id: String,
+    #[serde(default)]
+    pub addresses: Vec<String>,
+    #[serde(default)]
+    pub announced_at: u64,
+    #[serde(default)]
+    pub last_seen: u64,
+    #[serde(default)]
+    pub nat_type: Option<String>,
+    #[serde(default)]
+    pub can_receive_direct: Option<bool>,
+    #[serde(default)]
+    pub is_relay: Option<bool>,
+    #[serde(default)]
+    pub is_coordinator: Option<bool>,
+    #[serde(default)]
+    pub agent_ids: Vec<String>,
+    #[serde(default)]
+    pub user_ids: Vec<String>,
+}
+
+/// Response wrapper for `GET /machines/discovered`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscoveredMachineList {
+    pub machines: Vec<DiscoveredMachine>,
+}
+
+/// Response wrapper for discovered-machine endpoints returning one machine.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscoveredMachineWrapper {
+    pub machine: DiscoveredMachine,
+}
+
+/// Response from `GET /agents/:agent_id/machine`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AgentMachine {
+    pub agent_id: String,
+    pub machine: DiscoveredMachine,
+}
+
+/// Response from `GET /users/:user_id/machines`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserMachineList {
+    pub user_id: String,
+    pub machines: Vec<DiscoveredMachine>,
+}
+
 /// Response wrapper for `GET /presence`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PresenceList {
@@ -203,6 +253,97 @@ pub struct BootstrapCacheStatus {
     pub connected_peers: Vec<String>,
     #[serde(default)]
     pub connection_count: u32,
+}
+
+/// Response from `GET /diagnostics/connectivity`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConnectivityDiagnostics {
+    pub peer_id: String,
+    pub local_addr: String,
+    #[serde(default)]
+    pub external_addrs: Vec<String>,
+    pub nat_type: String,
+    #[serde(default)]
+    pub can_receive_direct: bool,
+    pub direct_reachability_scope: String,
+    #[serde(default)]
+    pub has_global_address: bool,
+    #[serde(default)]
+    pub port_mapping: PortMappingDiagnostics,
+    #[serde(default)]
+    pub mdns: MdnsDiagnostics,
+    #[serde(default)]
+    pub services: ServiceDiagnostics,
+    #[serde(default)]
+    pub connections: ConnectionDiagnostics,
+    #[serde(default)]
+    pub relay: RelayDiagnostics,
+    #[serde(default)]
+    pub coordinator: CoordinatorDiagnostics,
+    #[serde(default)]
+    pub avg_rtt_ms: u64,
+    #[serde(default)]
+    pub uptime_s: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PortMappingDiagnostics {
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub external_addr: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct MdnsDiagnostics {
+    #[serde(default)]
+    pub browsing: bool,
+    #[serde(default)]
+    pub advertising: bool,
+    #[serde(default)]
+    pub discovered_peers: usize,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ServiceDiagnostics {
+    #[serde(default)]
+    pub relay_enabled: bool,
+    #[serde(default)]
+    pub coordinator_enabled: bool,
+    #[serde(default)]
+    pub bootstrap_enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ConnectionDiagnostics {
+    #[serde(default)]
+    pub connected_peers: usize,
+    #[serde(default)]
+    pub active: usize,
+    #[serde(default)]
+    pub direct: usize,
+    #[serde(default)]
+    pub relayed: usize,
+    #[serde(default)]
+    pub hole_punch_success_rate: f64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RelayDiagnostics {
+    #[serde(default)]
+    pub is_relaying: bool,
+    #[serde(default)]
+    pub sessions: usize,
+    #[serde(default)]
+    pub bytes_forwarded: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CoordinatorDiagnostics {
+    #[serde(default)]
+    pub is_coordinating: bool,
+    #[serde(default)]
+    pub sessions: usize,
 }
 
 /// Request body for `POST /announce`.
@@ -338,6 +479,20 @@ pub struct ConnectRequest {
     pub agent_id: String,
 }
 
+/// Request body for `POST /machines/connect`.
+#[derive(Debug, Serialize)]
+pub struct ConnectMachineRequest {
+    pub machine_id: String,
+}
+
+/// Response from `POST /machines/connect`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConnectMachineResponse {
+    pub outcome: String,
+    #[serde(default)]
+    pub addr: Option<String>,
+}
+
 /// Request body for `POST /direct/send`.
 #[derive(Debug, Serialize)]
 pub struct DirectSendRequest {
@@ -372,6 +527,14 @@ pub struct DirectMessage {
     pub payload: String, // base64
     #[serde(default)]
     pub received_at: Option<u64>,
+}
+
+/// Payload carried by `/peers/events` SSE frames.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PeerLifecycleEvent {
+    pub peer_id: String,
+    pub event: String,
+    pub at_ms: u64,
 }
 
 /// Envelope carried by `/events` SSE frames.

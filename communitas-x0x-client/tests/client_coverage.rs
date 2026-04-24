@@ -32,15 +32,32 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("peers", "GET", "/peers"),
     ("discovered_agents", "GET", "/agents/discovered"),
     ("discovered_agent", "GET", "/agents/discovered/:agent_id"),
+    ("machine_for_agent", "GET", "/agents/:agent_id/machine"),
+    ("discovered_machines", "GET", "/machines/discovered"),
+    (
+        "discovered_machine",
+        "GET",
+        "/machines/discovered/:machine_id",
+    ),
+    ("machines_by_user", "GET", "/users/:user_id/machines"),
     ("presence", "GET", "/presence"),
     ("network_status", "GET", "/network/status"),
     ("bootstrap_cache", "GET", "/network/bootstrap-cache"),
+    (
+        "connectivity_diagnostics",
+        "GET",
+        "/diagnostics/connectivity",
+    ),
+    ("gossip_stats", "GET", "/diagnostics/gossip"),
+    ("probe_peer", "POST", "/peers/:peer_id/probe"),
+    ("peer_health", "GET", "/peers/:peer_id/health"),
     // Gossip Pub/Sub
     ("publish", "POST", "/publish"),
     ("subscribe", "POST", "/subscribe"),
     ("unsubscribe", "DELETE", "/subscribe/:id"),
     // Direct Messaging
     ("connect_agent", "POST", "/agents/connect"),
+    ("connect_machine", "POST", "/machines/connect"),
     ("send_direct", "POST", "/direct/send"),
     ("direct_connections", "GET", "/direct/connections"),
     // Contacts
@@ -226,6 +243,7 @@ const COVERED_SSE: &[&str] = &[
     "connect",
     "connect_direct",
     "connect_presence",
+    "connect_peer_events",
     "connect_to",
     "connect_with_token",
     "recv",
@@ -320,8 +338,8 @@ fn coverage_count_is_correct() {
         COVERED_WS.len()
     );
     assert!(
-        COVERED_SSE.len() >= 6,
-        "Expected at least 6 SSE methods, got {}",
+        COVERED_SSE.len() >= 7,
+        "Expected at least 7 SSE methods, got {}",
         COVERED_SSE.len()
     );
 }
@@ -378,6 +396,7 @@ fn coverage_matches_x0x_registry_when_available() {
         ("GET".to_string(), "/events".to_string()),
         ("GET".to_string(), "/direct/events".to_string()),
         ("GET".to_string(), "/presence/events".to_string()),
+        ("GET".to_string(), "/peers/events".to_string()),
         ("GET".to_string(), "/ws".to_string()),
         ("GET".to_string(), "/ws/direct".to_string()),
     ]);

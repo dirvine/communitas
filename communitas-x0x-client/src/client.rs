@@ -320,6 +320,54 @@ impl X0xClient {
         Ok(wrapper.agent)
     }
 
+    /// Current discovered machine endpoint for an agent.
+    pub async fn machine_for_agent(&self, agent_id: &str) -> Result<AgentMachine> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/agents/{agent_id}/machine")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// All discovered machine endpoints on the network.
+    pub async fn discovered_machines(&self, unfiltered: bool) -> Result<Vec<DiscoveredMachine>> {
+        let mut req = self.client.get(self.url("/machines/discovered"));
+        if unfiltered {
+            req = req.query(&[("unfiltered", "true")]);
+        }
+        let resp = req.send().await?;
+        let list: DiscoveredMachineList = self.parse(resp).await?;
+        Ok(list.machines)
+    }
+
+    /// Details for a specific discovered machine endpoint.
+    pub async fn discovered_machine(
+        &self,
+        machine_id: &str,
+        wait: bool,
+    ) -> Result<DiscoveredMachine> {
+        let mut req = self
+            .client
+            .get(self.url(&format!("/machines/discovered/{machine_id}")));
+        if wait {
+            req = req.query(&[("wait", "true")]);
+        }
+        let resp = req.send().await?;
+        let wrapper: DiscoveredMachineWrapper = self.parse(resp).await?;
+        Ok(wrapper.machine)
+    }
+
+    /// Discovered machine endpoints associated with a user identity.
+    pub async fn machines_by_user(&self, user_id: &str) -> Result<UserMachineList> {
+        let resp = self
+            .client
+            .get(self.url(&format!("/users/{user_id}/machines")))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
     /// Online agent ids from `GET /presence`.
     pub async fn presence(&self) -> Result<Vec<String>> {
         let resp = self.client.get(self.url("/presence")).send().await?;
@@ -338,6 +386,16 @@ impl X0xClient {
         let resp = self
             .client
             .get(self.url("/network/bootstrap-cache"))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Full ant-quic connectivity diagnostic snapshot.
+    pub async fn connectivity_diagnostics(&self) -> Result<ConnectivityDiagnostics> {
+        let resp = self
+            .client
+            .get(self.url("/diagnostics/connectivity"))
             .send()
             .await?;
         self.parse(resp).await
@@ -425,6 +483,20 @@ impl X0xClient {
             agent_id: agent_id.to_owned(),
         };
         self.post_ok("/agents/connect", &req).await
+    }
+
+    /// Establish a QUIC connection to a discovered machine endpoint.
+    pub async fn connect_machine(&self, machine_id: &str) -> Result<ConnectMachineResponse> {
+        let req = ConnectMachineRequest {
+            machine_id: machine_id.to_owned(),
+        };
+        let resp = self
+            .client
+            .post(self.url("/machines/connect"))
+            .json(&req)
+            .send()
+            .await?;
+        self.parse(resp).await
     }
 
     /// Send a direct (point-to-point) message.

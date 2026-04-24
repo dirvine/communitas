@@ -19,6 +19,11 @@ struct NetworkView: View {
     @State private var webSocketSessions: WsSessionList?
     @State private var upgradeStatus: UpgradeStatus?
     @State private var gossipStats: GossipStats?
+    @State private var connectivityDiagnostics: ConnectivityDiagnostics?
+    @State private var discoveredMachines: [DiscoveredMachine] = []
+    @State private var agentMachine: AgentMachine?
+    @State private var userMachines: UserMachineList?
+    @State private var connectMachineResult: ConnectMachineResponse?
     @State private var peerDiagnostics: [String: PeerDiagnostic] = [:]
     @State private var isRefreshing = false
 
@@ -32,6 +37,7 @@ struct NetworkView: View {
                 externalAddressesSection
                 networkStatsSection
                 diagnosticsSection
+                discoveredMachinesSection
                 peersTable
             }
             .padding(24)
@@ -297,6 +303,13 @@ struct NetworkView: View {
                     statRow(label: "Bootstrap Cache", value: "\(bootstrapCount) connected")
                 }
 
+                if let diagnostics = connectivityDiagnostics {
+                    statRow(label: "Connectivity Peer", value: truncatedId(diagnostics.peerId))
+                    statRow(label: "mDNS Peers", value: "\(diagnostics.mdns.discoveredPeers)")
+                    statRow(label: "Relay Enabled", value: diagnostics.services.relayEnabled ? "Yes" : "No")
+                    statRow(label: "Coordinator Enabled", value: diagnostics.services.coordinatorEnabled ? "Yes" : "No")
+                }
+
                 if let sessions = webSocketSessions?.sessions.count {
                     statRow(label: "WebSocket Sessions", value: "\(sessions)")
                 }
@@ -323,7 +336,11 @@ struct NetworkView: View {
                     }
                 }
 
-                if bootstrapCache == nil && webSocketSessions == nil && upgradeStatus == nil && gossipStats == nil {
+                if bootstrapCache == nil
+                    && connectivityDiagnostics == nil
+                    && webSocketSessions == nil
+                    && upgradeStatus == nil
+                    && gossipStats == nil {
                     Text("No extended diagnostics available")
                         .font(.caption)
                         .foregroundStyle(DeepSpace.textMuted)
@@ -333,6 +350,67 @@ struct NetworkView: View {
             .padding(4)
         } label: {
             Label("Daemon Diagnostics", systemImage: "stethoscope")
+                .foregroundStyle(DeepSpace.textPrimary)
+        }
+        .backgroundStyle(DeepSpace.surface1)
+    }
+
+    // MARK: - Discovered Machines
+
+    private var discoveredMachinesSection: some View {
+        GroupBox {
+            if discoveredMachines.isEmpty {
+                emptyState(icon: "network.slash", message: "No machine announcements discovered")
+            } else {
+                VStack(spacing: 0) {
+                    if let agentMachine {
+                        statRow(
+                            label: "Current Agent Machine",
+                            value: truncatedId(agentMachine.machine.machineId)
+                        )
+                    }
+
+                    if let userMachines {
+                        statRow(label: "Machines for User", value: "\(userMachines.machines.count)")
+                    }
+
+                    if let connectMachineResult {
+                        statRow(label: "Last Connect", value: connectMachineResult.outcome)
+                    }
+
+                    Divider()
+                        .background(DeepSpace.border)
+                        .padding(.vertical, 6)
+
+                    ForEach(discoveredMachines) { machine in
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(truncatedId(machine.machineId))
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(DeepSpace.textPrimary)
+                                Text("\(machine.addresses.count) addresses")
+                                    .font(.caption2)
+                                    .foregroundStyle(DeepSpace.textMuted)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                Task { await connect(machine: machine) }
+                            } label: {
+                                Image(systemName: "link")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Connect")
+                        }
+                        .padding(.vertical, 5)
+                    }
+                }
+                .padding(4)
+            }
+        } label: {
+            Label("Discovered Machines", systemImage: "network")
                 .foregroundStyle(DeepSpace.textPrimary)
         }
         .backgroundStyle(DeepSpace.surface1)
@@ -513,6 +591,42 @@ struct NetworkView: View {
         }
 
         do {
+            connectivityDiagnostics = try await appState.client.connectivityDiagnostics()
+        } catch {
+            connectivityDiagnostics = nil
+        }
+
+        do {
+            let machines = try await appState.client.discoveredMachines()
+            discoveredMachines = machines
+            if let first = machines.first {
+                _ = try? await appState.client.discoveredMachine(machineId: first.machineId)
+            }
+        } catch {
+            discoveredMachines = []
+        }
+
+        do {
+            if let agentId = appState.agentIdentity?.agentId {
+                agentMachine = try await appState.client.machineForAgent(agentId: agentId)
+            } else {
+                agentMachine = nil
+            }
+        } catch {
+            agentMachine = nil
+        }
+
+        do {
+            if let userId = appState.agentIdentity?.userId {
+                userMachines = try await appState.client.machinesByUser(userId: userId)
+            } else {
+                userMachines = nil
+            }
+        } catch {
+            userMachines = nil
+        }
+
+        do {
             let currentPeers = try await appState.client.peers()
             peers = currentPeers
             var diagnostics: [String: PeerDiagnostic] = [:]
@@ -581,6 +695,14 @@ struct NetworkView: View {
             upgradeStatus = try await appState.client.checkUpgrade()
         } catch {
             upgradeStatus = nil
+        }
+    }
+
+    private func connect(machine: DiscoveredMachine) async {
+        do {
+            connectMachineResult = try await appState.client.connectMachine(machineId: machine.machineId)
+        } catch {
+            connectMachineResult = ConnectMachineResponse(ok: false, outcome: "Failed", addr: nil)
         }
     }
 

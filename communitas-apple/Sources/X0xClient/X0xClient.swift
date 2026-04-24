@@ -584,6 +584,11 @@ public final class X0xClient: Sendable {
         try await get("/network/status")
     }
 
+    /// Get full ant-quic connectivity diagnostics. `GET /diagnostics/connectivity`
+    public func connectivityDiagnostics() async throws -> ConnectivityDiagnostics {
+        try await get("/diagnostics/connectivity")
+    }
+
     /// List connected peers. `GET /peers`
     /// Returns wrapped: `{"ok":true,"peers":["peer1","peer2"]}`
     public func peers() async throws -> [PeerInfo] {
@@ -619,6 +624,45 @@ public final class X0xClient: Sendable {
     public func discoveredAgent(agentId: String) async throws -> DiscoveredAgent {
         let resp: DiscoveredAgentWrapper = try await get("/agents/discovered/\(agentId)")
         return resp.agent
+    }
+
+    /// Resolve an agent to its current discovered machine endpoint. `GET /agents/:agent_id/machine`
+    public func machineForAgent(agentId: String) async throws -> AgentMachine {
+        try await get("/agents/\(agentId)/machine")
+    }
+
+    /// List discovered machine endpoints. `GET /machines/discovered`
+    public func discoveredMachines(unfiltered: Bool = false) async throws -> [DiscoveredMachine] {
+        let queryItems = unfiltered
+            ? [URLQueryItem(name: "unfiltered", value: "true")]
+            : []
+        let resp: DiscoveredMachinesResponse = try await get(
+            "/machines/discovered",
+            queryItems: queryItems
+        )
+        return resp.machines
+    }
+
+    /// Get details for a specific discovered machine endpoint. `GET /machines/discovered/:machine_id`
+    public func discoveredMachine(machineId: String, wait: Bool = false) async throws -> DiscoveredMachine {
+        let queryItems = wait
+            ? [URLQueryItem(name: "wait", value: "true")]
+            : []
+        let resp: DiscoveredMachineWrapper = try await get(
+            "/machines/discovered/\(machineId)",
+            queryItems: queryItems
+        )
+        return resp.machine
+    }
+
+    /// List discovered machine endpoints associated with a user. `GET /users/:user_id/machines`
+    public func machinesByUser(userId: String) async throws -> UserMachineList {
+        try await get("/users/\(userId)/machines")
+    }
+
+    /// Establish a QUIC connection to a discovered machine endpoint. `POST /machines/connect`
+    public func connectMachine(machineId: String) async throws -> ConnectMachineResponse {
+        try await post("/machines/connect", body: ConnectMachineRequest(machineId: machineId))
     }
 
     /// Fetch online presence. `GET /presence`

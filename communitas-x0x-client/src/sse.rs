@@ -75,6 +75,19 @@ impl X0xSseStream {
         }
     }
 
+    /// Connect to the daemon's peer-lifecycle SSE endpoint (`/peers/events`).
+    pub async fn connect_peer_events() -> Result<Self> {
+        match crate::config::discover() {
+            Ok(cfg) => Self::connect_with_config(&cfg, "/peers/events").await,
+            Err(e) => {
+                tracing::debug!(
+                    "x0x config discovery failed ({e}); falling back to http://127.0.0.1:12700/peers/events with no auth"
+                );
+                Self::connect_to("http://127.0.0.1:12700/peers/events").await
+            }
+        }
+    }
+
     /// Connect to a custom SSE URL with no authentication.
     pub async fn connect_to(url: &str) -> Result<Self> {
         Self::connect_with_client(reqwest::Client::new(), url).await

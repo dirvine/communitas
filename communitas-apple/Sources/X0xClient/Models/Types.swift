@@ -431,6 +431,110 @@ public struct PeerHealth: Codable, Sendable {
     }
 }
 
+/// Full ant-quic connectivity snapshot from `GET /diagnostics/connectivity`.
+public struct ConnectivityDiagnostics: Codable, Sendable {
+    public let ok: Bool?
+    public let peerId: String
+    public let localAddr: String
+    public let externalAddrs: [String]
+    public let natType: String
+    public let canReceiveDirect: Bool
+    public let directReachabilityScope: String
+    public let hasGlobalAddress: Bool
+    public let portMapping: PortMappingDiagnostics
+    public let mdns: MdnsDiagnostics
+    public let services: ServiceDiagnostics
+    public let connections: ConnectionDiagnostics
+    public let relay: RelayDiagnostics
+    public let coordinator: CoordinatorDiagnostics
+    public let avgRttMs: UInt64
+    public let uptimeS: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case peerId = "peer_id"
+        case localAddr = "local_addr"
+        case externalAddrs = "external_addrs"
+        case natType = "nat_type"
+        case canReceiveDirect = "can_receive_direct"
+        case directReachabilityScope = "direct_reachability_scope"
+        case hasGlobalAddress = "has_global_address"
+        case portMapping = "port_mapping"
+        case mdns, services, connections, relay, coordinator
+        case avgRttMs = "avg_rtt_ms"
+        case uptimeS = "uptime_s"
+    }
+}
+
+public struct PortMappingDiagnostics: Codable, Sendable {
+    public let active: Bool
+    public let externalAddr: String?
+
+    enum CodingKeys: String, CodingKey {
+        case active
+        case externalAddr = "external_addr"
+    }
+}
+
+public struct MdnsDiagnostics: Codable, Sendable {
+    public let browsing: Bool
+    public let advertising: Bool
+    public let discoveredPeers: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case browsing, advertising
+        case discoveredPeers = "discovered_peers"
+    }
+}
+
+public struct ServiceDiagnostics: Codable, Sendable {
+    public let relayEnabled: Bool
+    public let coordinatorEnabled: Bool
+    public let bootstrapEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case relayEnabled = "relay_enabled"
+        case coordinatorEnabled = "coordinator_enabled"
+        case bootstrapEnabled = "bootstrap_enabled"
+    }
+}
+
+public struct ConnectionDiagnostics: Codable, Sendable {
+    public let connectedPeers: UInt64
+    public let active: UInt64
+    public let direct: UInt64
+    public let relayed: UInt64
+    public let holePunchSuccessRate: Double
+
+    enum CodingKeys: String, CodingKey {
+        case connectedPeers = "connected_peers"
+        case active, direct, relayed
+        case holePunchSuccessRate = "hole_punch_success_rate"
+    }
+}
+
+public struct RelayDiagnostics: Codable, Sendable {
+    public let isRelaying: Bool
+    public let sessions: UInt64
+    public let bytesForwarded: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case isRelaying = "is_relaying"
+        case sessions
+        case bytesForwarded = "bytes_forwarded"
+    }
+}
+
+public struct CoordinatorDiagnostics: Codable, Sendable {
+    public let isCoordinating: Bool
+    public let sessions: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case isCoordinating = "is_coordinating"
+        case sessions
+    }
+}
+
 /// Response from `GET /agents/discovered` - wrapped: `{"ok":true,"agents":[...]}`.
 public struct DiscoveredAgentsResponse: Codable, Sendable {
     public let ok: Bool?
@@ -464,6 +568,98 @@ public struct DiscoveredAgent: Codable, Sendable, Identifiable {
         self.addresses = addresses
         self.announcedAt = announcedAt
         self.lastSeen = lastSeen
+    }
+}
+
+/// Response from `GET /machines/discovered` - wrapped: `{"ok":true,"machines":[...]}`.
+public struct DiscoveredMachinesResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let machines: [DiscoveredMachine]
+}
+
+/// A discovered machine endpoint entry from x0x machine announcements.
+public struct DiscoveredMachine: Codable, Sendable, Identifiable {
+    public var id: String { machineId }
+    public let machineId: String
+    public let addresses: [String]
+    public let announcedAt: UInt64
+    public let lastSeen: UInt64
+    public let natType: String?
+    public let canReceiveDirect: Bool?
+    public let isRelay: Bool?
+    public let isCoordinator: Bool?
+    public let agentIds: [String]
+    public let userIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case machineId = "machine_id"
+        case addresses
+        case announcedAt = "announced_at"
+        case lastSeen = "last_seen"
+        case natType = "nat_type"
+        case canReceiveDirect = "can_receive_direct"
+        case isRelay = "is_relay"
+        case isCoordinator = "is_coordinator"
+        case agentIds = "agent_ids"
+        case userIds = "user_ids"
+    }
+}
+
+/// Wrapper for `GET /machines/discovered/:machine_id`.
+public struct DiscoveredMachineWrapper: Codable, Sendable {
+    public let ok: Bool?
+    public let machine: DiscoveredMachine
+}
+
+/// Response from `GET /agents/:agent_id/machine`.
+public struct AgentMachine: Codable, Sendable {
+    public let ok: Bool?
+    public let agentId: String
+    public let machine: DiscoveredMachine
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case agentId = "agent_id"
+        case machine
+    }
+}
+
+/// Response from `GET /users/:user_id/machines`.
+public struct UserMachineList: Codable, Sendable {
+    public let ok: Bool?
+    public let userId: String
+    public let machines: [DiscoveredMachine]
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case userId = "user_id"
+        case machines
+    }
+}
+
+/// Request body for `POST /machines/connect`.
+public struct ConnectMachineRequest: Codable, Sendable {
+    public let machineId: String
+
+    enum CodingKeys: String, CodingKey {
+        case machineId = "machine_id"
+    }
+
+    public init(machineId: String) {
+        self.machineId = machineId
+    }
+}
+
+/// Response from `POST /machines/connect`.
+public struct ConnectMachineResponse: Codable, Sendable {
+    public let ok: Bool?
+    public let outcome: String
+    public let addr: String?
+
+    public init(ok: Bool? = nil, outcome: String, addr: String? = nil) {
+        self.ok = ok
+        self.outcome = outcome
+        self.addr = addr
     }
 }
 

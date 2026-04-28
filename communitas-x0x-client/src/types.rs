@@ -110,11 +110,39 @@ pub struct PeerHealth {
     pub ok: bool,
     #[serde(default)]
     pub peer_id: Option<String>,
-    /// Opaque Debug rendering of ant-quic `ConnectionHealth`.
+    /// Legacy: opaque Debug rendering of ant-quic `ConnectionHealth`.
+    /// New code should prefer `snapshot`. Retained for daemons < 0.19.7.
     #[serde(default)]
     pub health: Option<String>,
+    /// Structured connection-health snapshot (x0xd ≥ 0.19.7).
+    #[serde(default)]
+    pub snapshot: Option<PeerHealthSnapshot>,
     #[serde(default)]
     pub error: Option<String>,
+}
+
+/// Structured peer connection-health snapshot (x0xd ≥ 0.19.7).
+///
+/// Mirrors ant-quic `ConnectionHealth` with `Instant`-typed fields
+/// converted to elapsed-millisecond deltas so the wire format stays
+/// calendar-agnostic.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PeerHealthSnapshot {
+    pub connected: bool,
+    #[serde(default)]
+    pub generation: Option<u64>,
+    #[serde(default)]
+    pub reader_task_active: Option<bool>,
+    #[serde(default)]
+    pub last_received_ms_ago: Option<u64>,
+    #[serde(default)]
+    pub last_sent_ms_ago: Option<u64>,
+    #[serde(default)]
+    pub idle_ms: Option<u64>,
+    /// Most-recent close reason as a Debug string (no canonical Serialize
+    /// upstream yet).
+    #[serde(default)]
+    pub close_reason: Option<String>,
 }
 
 /// Response from `GET /peers`.

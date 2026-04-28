@@ -644,4 +644,216 @@ struct X0xClientTests {
         #expect(jsonStr.contains("\"ciphertext\":\"Y2lwaGVy\""))
         #expect(jsonStr.contains("\"epoch\":5"))
     }
+
+    // MARK: - 0.27.x peer-lifecycle wire shapes (x0xd ≥ 0.19.6 / 0.19.7)
+
+    @Test("PeerHealth decodes legacy health-only response")
+    func peerHealthLegacyDecoding() throws {
+        // Daemons < 0.19.7 emit only the Debug-string `health` field.
+        let json = """
+        {
+            "ok": true,
+            "peer_id": "57ae036829ecbcb5d851b0554de7841a7a5232337172471d9c2e04871582440f",
+            "health": "ConnectionHealth { connected: true, generation: Some(4), reader_task_active: Some(true), idle_for: Some(31.24875ms), close_reason: None }"
+        }
+        """
+        let data = Data(json.utf8)
+        let health = try JSONDecoder().decode(PeerHealth.self, from: data)
+        #expect(health.ok == true)
+        #expect(health.health?.contains("connected: true") == true)
+        #expect(health.snapshot == nil)
+    }
+
+    @Test("PeerHealth decodes structured snapshot response")
+    func peerHealthSnapshotDecoding() throws {
+        // Daemons ≥ 0.19.7 emit both `health` and the structured `snapshot`.
+        let json = """
+        {
+            "ok": true,
+            "peer_id": "57ae036829ecbcb5d851b0554de7841a7a5232337172471d9c2e04871582440f",
+            "health": "ConnectionHealth { connected: true, ... }",
+            "snapshot": {
+                "connected": true,
+                "generation": 4,
+                "reader_task_active": true,
+                "last_received_ms_ago": 31,
+                "last_sent_ms_ago": 14,
+                "idle_ms": 31,
+                "close_reason": null
+            }
+        }
+        """
+        let data = Data(json.utf8)
+        let health = try JSONDecoder().decode(PeerHealth.self, from: data)
+        #expect(health.snapshot?.connected == true)
+        #expect(health.snapshot?.generation == 4)
+        #expect(health.snapshot?.readerTaskActive == true)
+        #expect(health.snapshot?.idleMs == 31)
+        #expect(health.snapshot?.closeReason == nil)
+        #expect(health.health?.contains("connected: true") == true)
+    }
+
+    @Test("PeerHealth snapshot decodes a closed-with-reason response")
+    func peerHealthSnapshotClosedDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "peer_id": "deadbeef",
+            "snapshot": {
+                "connected": false,
+                "generation": 5,
+                "reader_task_active": false,
+                "last_received_ms_ago": null,
+                "last_sent_ms_ago": null,
+                "idle_ms": null,
+                "close_reason": "Superseded"
+            }
+        }
+        """
+        let data = Data(json.utf8)
+        let health = try JSONDecoder().decode(PeerHealth.self, from: data)
+        #expect(health.snapshot?.connected == false)
+        #expect(health.snapshot?.closeReason == "Superseded")
+        #expect(health.snapshot?.idleMs == nil)
+    }
+
+    @Test("ProbePeerResult decodes successful probe")
+    func probePeerResultDecoding() throws {
+        let json = """
+        {
+            "ok": true,
+            "rtt_ms": 0,
+            "rtt_us": 209,
+            "timeout_ms": 3000
+        }
+        """
+        let data = Data(json.utf8)
+        let probe = try JSONDecoder().decode(ProbePeerResult.self, from: data)
+        #expect(probe.ok == true)
+        #expect(probe.rttUs == 209)
+        #expect(probe.timeoutMs == 3000)
+    }
+
+    @Test("ProbePeerResult decodes a failed probe")
+    func probePeerResultErrorDecoding() throws {
+        let json = """
+        {
+            "ok": false,
+            "error": "no live connection",
+            "timeout_ms": 1000
+        }
+        """
+        let data = Data(json.utf8)
+        let probe = try JSONDecoder().decode(ProbePeerResult.self, from: data)
+        #expect(probe.ok == false)
+        #expect(probe.error == "no live connection")
+    }
+
+    @Test("DirectSendResponse decodes ACK round-trip")
+    func directSendResponseAckDecoding() throws {
+        // POST /direct/send with require_ack_ms=3000 — peer ACK round-trip
+        // arrives in `require_ack`.
+        let json = """
+        {
+            "ok": true,
+            "path": "gossip_inbox",
+            "request_id": "614d0f48011c0cf1df6f97f9f9658705",
+            "require_ack": {
+                "ok": true,
+                "rtt_ms": 0,
+                "rtt_us": 411
+            },
+            "retries_used": 0
+        }
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(DirectSendResponse.self, from: data)
+        #expect(resp.ok == true)
+        #expect(resp.requestId == "614d0f48011c0cf1df6f97f9f9658705")
+        #expect(resp.requireAck?.ok == true)
+        #expect(resp.requireAck?.rttUs == 411)
+    }
+
+    @Test("DirectSendResponse decodes legacy fire-and-forget response")
+    func directSendResponseLegacyDecoding() throws {
+        // Without require_ack_ms the daemon omits the `require_ack` block.
+        let json = """
+        {
+            "ok": true,
+            "path": "gossip_inbox",
+            "request_id": "abc",
+            "retries_used": 0
+        }
+        """
+        let data = Data(json.utf8)
+        let resp = try JSONDecoder().decode(DirectSendResponse.self, from: data)
+        #expect(resp.ok == true)
+        #expect(resp.requireAck == nil)
+    }
+
+    @Test("DirectMessageRequest encodes require_ack_ms when set")
+    func directMessageRequestAckEncoding() throws {
+        let req = DirectMessageRequest(
+            agentId: "abc",
+            payload: "aGVsbG8=",
+            requireAckMs: 3000
+        )
+        let data = try JSONEncoder().encode(req)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        #expect(jsonStr.contains("\"agent_id\":\"abc\""))
+        #expect(jsonStr.contains("\"payload\":\"aGVsbG8=\""))
+        #expect(jsonStr.contains("\"require_ack_ms\":3000"))
+    }
+
+    @Test("PeerLifecycleEvent decodes Established frame payload")
+    func peerLifecycleEventDecoding() throws {
+        // Daemon emits these on /peers/events SSE with event=peer-lifecycle.
+        let json = """
+        {
+            "peer_id": "57ae036829ecbcb5d851b0554de7841a7a5232337172471d9c2e04871582440f",
+            "event": "Established { generation: 5 }",
+            "at_ms": 1777370802198
+        }
+        """
+        let data = Data(json.utf8)
+        let event = try JSONDecoder().decode(PeerLifecycleEvent.self, from: data)
+        #expect(event.peerId.count == 64)
+        #expect(event.event.contains("Established"))
+        #expect(event.atMs == 1_777_370_802_198)
+    }
+
+    @Test("PeerLifecycleEvent surfaces supersede transitions")
+    func peerLifecycleEventSupersedeDecoding() throws {
+        // ant-quic 0.27.3+ emits a Replaced/Closing/Closed sequence on
+        // connection supersede. Each lands as a separate frame.
+        let json = """
+        {
+            "peer_id": "abc",
+            "event": "Replaced { old_generation: 5, new_generation: 6 }",
+            "at_ms": 1777370802199
+        }
+        """
+        let data = Data(json.utf8)
+        let event = try JSONDecoder().decode(PeerLifecycleEvent.self, from: data)
+        #expect(event.event.contains("Replaced"))
+        #expect(event.event.contains("old_generation: 5"))
+        #expect(event.event.contains("new_generation: 6"))
+    }
+
+    // MARK: - SSE frame parsing
+
+    @Test("SseFrame decodes JSON data payload")
+    func sseFrameJsonDecoding() throws {
+        let frame = SseFrame(
+            event: "peer-lifecycle",
+            id: nil,
+            data: """
+            {"peer_id":"abc","event":"Established { generation: 5 }","at_ms":1234}
+            """
+        )
+        let event: PeerLifecycleEvent = try frame.json()
+        #expect(event.peerId == "abc")
+        #expect(event.event.contains("Established"))
+        #expect(event.atMs == 1234)
+    }
 }

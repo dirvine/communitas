@@ -157,6 +157,16 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("user_agents", "userAgents"),
 ];
 
+/// Maps Rust `X0xSseStream` methods to their Swift counterparts on
+/// `X0xSseStream`. The Rust side lives in `src/sse.rs`; the Swift side
+/// lives in `Sources/X0xClient/X0xSseStream.swift`.
+const RUST_SSE_TO_SWIFT: &[(&str, &str)] = &[
+    ("connect", "connect"),
+    ("connect_direct", "connectDirect"),
+    ("connect_presence", "connectPresence"),
+    ("connect_peer_events", "connectPeerEvents"),
+];
+
 /// Verify that each Rust method has a Swift equivalent.
 #[test]
 fn swift_client_has_all_rust_methods() {
@@ -243,5 +253,45 @@ fn parity_map_covers_all_rust_methods() {
         "Rust client methods without Swift parity mapping:\n  {}\n\n\
          Add entries to RUST_TO_SWIFT in swift_parity.rs.",
         unmapped.join("\n  ")
+    );
+}
+
+/// Verify that each Rust `X0xSseStream` method has a Swift equivalent.
+///
+/// Mirrors `swift_client_has_all_rust_methods` but for the SSE consumer
+/// (`src/sse.rs` ↔ `Sources/X0xClient/X0xSseStream.swift`).
+#[test]
+fn swift_sse_stream_has_all_rust_methods() {
+    let swift_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../communitas-apple/Sources/X0xClient/X0xSseStream.swift"
+    );
+
+    let swift_src = match std::fs::read_to_string(swift_path) {
+        Ok(src) => src,
+        Err(_) => {
+            eprintln!(
+                "WARNING: Swift X0xSseStream not found at {swift_path} — \
+                 skipping parity check. This is expected in CI without \
+                 the Apple source checked out."
+            );
+            return;
+        }
+    };
+
+    let mut missing = Vec::new();
+    for (rust_name, swift_name) in RUST_SSE_TO_SWIFT {
+        let pattern = format!("func {swift_name}(");
+        if !swift_src.contains(&pattern) {
+            missing.push(format!("{rust_name} -> {swift_name}"));
+        }
+    }
+
+    assert!(
+        missing.is_empty(),
+        "Rust X0xSseStream methods without Swift equivalents ({} missing):\n  {}\n\n\
+         Either add the method to X0xSseStream.swift or update the mapping in RUST_SSE_TO_SWIFT.",
+        missing.len(),
+        missing.join("\n  ")
     );
 }

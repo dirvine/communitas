@@ -205,9 +205,35 @@ public final class X0xClient: Sendable {
     // MARK: - Direct Messaging
 
     /// Send a direct message to an agent. `POST /direct/send`
+    ///
+    /// Fire-and-forget: returns when the daemon has accepted the message
+    /// for transmission, with no delivery confirmation. For ACK-confirmed
+    /// delivery use `sendDirect(agentId:payload:requireAckMs:)`.
     public func sendDirect(agentId: String, payload: String) async throws {
         let body = DirectMessageRequest(agentId: agentId, payload: payload)
         let _: Empty = try await post("/direct/send", body: body)
+    }
+
+    /// Send a direct message and wait for a peer-receive ACK probe.
+    /// `POST /direct/send` with `require_ack_ms` (x0xd ≥ 0.19.6).
+    ///
+    /// After the send, the daemon issues an ant-quic `probe_peer` against
+    /// the recipient and waits up to `requireAckMs` for the round-trip.
+    /// The returned `DirectSendResponse.requireAck` carries the outcome
+    /// (`ok`, `rttMs`/`rttUs`, or `error`).
+    @discardableResult
+    public func sendDirect(
+        agentId: String,
+        payload: String,
+        requireAckMs: UInt64
+    ) async throws -> DirectSendResponse {
+        let body = DirectMessageRequest(
+            agentId: agentId,
+            payload: payload,
+            requireAckMs: requireAckMs
+        )
+        let resp: DirectSendResponse = try await post("/direct/send", body: body)
+        return resp
     }
 
     /// List active direct connections. `GET /direct/connections`

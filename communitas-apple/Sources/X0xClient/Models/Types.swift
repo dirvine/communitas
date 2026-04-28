@@ -113,15 +113,20 @@ public struct SubscribeResponse: Codable, Sendable {
 public struct DirectMessageRequest: Codable, Sendable {
     public let agentId: String
     public let payload: String // base64
+    /// Opt-in: wait up to this many ms for an ant-quic `probe_peer` ACK
+    /// after send. Omit for legacy fire-and-forget. (x0xd ≥ 0.19.6.)
+    public let requireAckMs: UInt64?
 
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
         case payload
+        case requireAckMs = "require_ack_ms"
     }
 
-    public init(agentId: String, payload: String) {
+    public init(agentId: String, payload: String, requireAckMs: UInt64? = nil) {
         self.agentId = agentId
         self.payload = payload
+        self.requireAckMs = requireAckMs
     }
 }
 
@@ -419,15 +424,102 @@ public struct ProbePeerResult: Codable, Sendable {
 }
 
 /// Connection health snapshot from `GET /peers/:peer_id/health`.
+///
+/// `health` is the legacy Debug-rendered string; new code should prefer
+/// `snapshot` (structured fields, x0xd ≥ 0.19.7). Both are populated when
+/// the daemon supports it; older daemons return `health` only.
 public struct PeerHealth: Codable, Sendable {
     public let ok: Bool?
     public let peerId: String?
     public let health: String?
+    public let snapshot: PeerHealthSnapshot?
     public let error: String?
 
     enum CodingKeys: String, CodingKey {
-        case ok, health, error
+        case ok, health, snapshot, error
         case peerId = "peer_id"
+    }
+}
+
+/// Structured peer connection-health snapshot (x0xd ≥ 0.19.7).
+///
+/// `Instant`-typed ant-quic fields are converted to elapsed-millisecond
+/// deltas so the wire format stays calendar-agnostic.
+public struct PeerHealthSnapshot: Codable, Sendable {
+    public let connected: Bool
+    public let generation: UInt64?
+    public let readerTaskActive: Bool?
+    public let lastReceivedMsAgo: UInt64?
+    public let lastSentMsAgo: UInt64?
+    public let idleMs: UInt64?
+    /// Most-recent close reason as a Debug string (no canonical Codable
+    /// upstream yet).
+    public let closeReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case connected, generation
+        case readerTaskActive = "reader_task_active"
+        case lastReceivedMsAgo = "last_received_ms_ago"
+        case lastSentMsAgo = "last_sent_ms_ago"
+        case idleMs = "idle_ms"
+        case closeReason = "close_reason"
+    }
+}
+
+/// Response from `POST /direct/send` (x0xd ≥ 0.19.6).
+///
+/// When the request omits `require_ack_ms`, the daemon does not include
+/// the `requireAck` block — `requireAck` will be `nil` here for legacy
+/// fire-and-forget behaviour.
+public struct DirectSendResponse: Codable, Sendable {
+    public let ok: Bool
+    public let path: String?
+    public let requestId: String?
+    public let retriesUsed: UInt64?
+    public let requireAck: RequireAckResult?
+    public let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, path, error
+        case requestId = "request_id"
+        case retriesUsed = "retries_used"
+        case requireAck = "require_ack"
+    }
+}
+
+/// Active-liveness ACK probe carried in `DirectSendResponse.requireAck`.
+///
+/// Mirrors `ProbePeerResult` but is emitted as part of the send response
+/// rather than as a standalone probe call.
+public struct RequireAckResult: Codable, Sendable {
+    public let ok: Bool
+    public let rttMs: UInt64?
+    public let rttUs: UInt64?
+    public let error: String?
+    public let reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, error, reason
+        case rttMs = "rtt_ms"
+        case rttUs = "rtt_us"
+    }
+}
+
+/// One frame on `GET /peers/events` (x0xd ≥ 0.19.6).
+///
+/// The wire shape is `{"peer_id":"...","event":"Established { generation: 5 }",
+/// "at_ms":1777370802198}`. `event` is a Debug-rendered enum string —
+/// substring-match on `"Established"`, `"Replaced"`, `"Closing"`,
+/// `"Closed"`, `"ReaderExited"` rather than reaching for a typed enum.
+public struct PeerLifecycleEvent: Codable, Sendable {
+    public let peerId: String
+    public let event: String
+    public let atMs: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case event
+        case peerId = "peer_id"
+        case atMs = "at_ms"
     }
 }
 

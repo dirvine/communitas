@@ -13,9 +13,9 @@ default = []
 e2e-test-mode = []
 
 [dependencies]
-communitas-core = { version = "0.12.2", package = "communitas-core", path = "../communitas-core" }
-communitas-ui-api = { version = "0.12.2", path = "../communitas-ui-api" }
-communitas-ui-service = { version = "0.12.2", path = "../communitas-ui-service" }
+communitas-core = { version = "0.12.3", package = "communitas-core", path = "../communitas-core" }
+communitas-ui-api = { version = "0.12.3", path = "../communitas-ui-api" }
+communitas-ui-service = { version = "0.12.3", path = "../communitas-ui-service" }
 dioxus = { version = "0.7", features = ["desktop", "router", "signals"] }
 dioxus-logger = "0.5.1"
 tracing.workspace = true
@@ -44,35 +44,12 @@ dioxus-history = "0.7"
 tempfile = "3.10"
 tokio-test = { version = "0.4" }
 criterion = { version = "0.5", features = ["async_tokio"] }
-x0x-test-harness = { path = "../../x0x/tests/harness" }
 
-[[test]]
-name = "e2e_identity"
-path = "tests/e2e/identity.rs"
-
-[[test]]
-name = "e2e_trust_contacts"
-path = "tests/e2e/trust_contacts.rs"
-
-[[test]]
-name = "e2e_connectivity"
-path = "tests/e2e/connectivity.rs"
-
-[[test]]
-name = "e2e_groups"
-path = "tests/e2e/groups.rs"
-
-[[test]]
-name = "e2e_kv_store"
-path = "tests/e2e/kv_store.rs"
-
-[[test]]
-name = "e2e_presence"
-path = "tests/e2e/presence.rs"
-
-[[test]]
-name = "e2e_upgrade"
-path = "tests/e2e/upgrade.rs"
+# Parity-matrix E2E tests live in `tests/e2e/` as a self-contained nested
+# Cargo package (see `tests/e2e/Cargo.toml`). They are not registered as
+# `[[test]]` entries here because their `x0x-test-harness` path dependency
+# does not exist in CI checkouts that only include the communitas repo.
+# Run them via `tests/e2e.sh`.
 
 [[bench]]
 name = "startup"

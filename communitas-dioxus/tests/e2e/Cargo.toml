@@ -1,0 +1,52 @@
+# Self-contained Cargo package for the Dioxus parity-matrix E2E tests.
+#
+# This package is intentionally NOT a member of the communitas workspace so
+# its `x0x-test-harness` path dependency (../../../../x0x/tests/harness) does
+# not break `cargo metadata` in CI checkouts that only include the
+# communitas repo. Run with `tests/e2e.sh` or
+# `cd tests/e2e && cargo test`.
+[package]
+name = "communitas-dioxus-e2e"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+# Empty workspace — explicitly opts this directory out of the parent
+# communitas workspace so cargo does not attempt to load it during normal
+# builds of the rest of the repo.
+
+[dependencies]
+anyhow = "1"
+communitas-x0x-client = { path = "../../../communitas-x0x-client" }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+x0x-test-harness = { path = "../../../../x0x/tests/harness" }
+
+[[test]]
+name = "e2e_identity"
+path = "identity.rs"
+
+[[test]]
+name = "e2e_trust_contacts"
+path = "trust_contacts.rs"
+
+[[test]]
+name = "e2e_connectivity"
+path = "connectivity.rs"
+
+[[test]]
+name = "e2e_groups"
+path = "groups.rs"
+
+[[test]]
+name = "e2e_kv_store"
+path = "kv_store.rs"
+
+[[test]]
+name = "e2e_presence"
+path = "presence.rs"
+
+[[test]]
+name = "e2e_upgrade"
+path = "upgrade.rs"

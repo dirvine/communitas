@@ -47,12 +47,19 @@ TESTS=(
     e2e_upgrade
 )
 
+# The E2E tests live in a self-contained nested Cargo package
+# (`tests/e2e/Cargo.toml`) that is intentionally NOT a member of the
+# communitas workspace. This keeps the `x0x-test-harness` path dep
+# (which only exists in dev environments where the x0x repo is checked
+# out as a sibling) out of the workspace dependency graph so CI
+# checkouts that only include communitas can still run
+# `cargo metadata` / `cargo build` cleanly.
+E2E_MANIFEST="$SCRIPT_DIR/e2e/Cargo.toml"
+
 for test_name in "${TESTS[@]}"; do
     echo "[e2e] running $test_name"
     "${RUN_PREFIX[@]}" cargo test \
-        --manifest-path "$WORKSPACE_DIR/Cargo.toml" \
-        -p communitas-dioxus \
-        --features e2e-test-mode \
+        --manifest-path "$E2E_MANIFEST" \
         --test "$test_name" \
         -- --ignored --test-threads=1
     echo "[e2e] $test_name passed"

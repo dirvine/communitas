@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # x0x daemon client
-communitas-x0x-client = { version = "=0.12.2", path = "../communitas-x0x-client" }
+communitas-x0x-client = { version = "=0.12.3", path = "../communitas-x0x-client" }
 
 # CRDT for document collaboration (Sprint 3.2)
 # sync feature enables Send + Sync traits for multithreaded environments
@@ -95,7 +95,7 @@ reed-solomon-erasure = "6.0.0"
 mime_guess = "2.0"
 
 # Local dependencies (version required for crates.io publishing)
-communitas-kanban = { version = "=0.12.2", path = "../communitas-kanban" }
+communitas-kanban = { version = "=0.12.3", path = "../communitas-kanban" }
 
 [features]
 default = []

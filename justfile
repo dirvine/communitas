@@ -45,3 +45,7 @@ apple:
 # Generate the Dioxus ↔ Swift feature parity matrix at docs/parity.md.
 parity:
     bash scripts/parity-check.sh
+
+# Run the Communitas Dioxus live parity E2E harness.
+e2e:
+    cd communitas-dioxus && just e2e

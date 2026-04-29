@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
     }
 
     // Sort by timestamp descending
-    threads.sort_by(|a, b| b.last_message_timestamp.cmp(&a.last_message_timestamp));
+    threads.sort_by_key(|thread| std::cmp::Reverse(thread.last_message_timestamp));
 
     let total_count = threads.len();
     let snapshot = ThreadSnapshot {

@@ -38,6 +38,7 @@ struct GroupDiscoveryView: View {
                 TextField("Search by tag, name, or ID…", text: $query)
                     .textFieldStyle(.roundedBorder)
                     .disabled(mode == .nearby)
+                    .accessibilityIdentifier("group-discover-query")
                     .onChange(of: query) { _, _ in
                         Task { await reload() }
                     }
@@ -49,6 +50,7 @@ struct GroupDiscoveryView: View {
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
+                .accessibilityIdentifier("group-discover-mode-picker")
                 .onChange(of: mode) { _, _ in
                     Task { await reload() }
                 }
@@ -71,9 +73,11 @@ struct GroupDiscoveryView: View {
                             status: requestStatus[card.groupId] ?? .idle,
                             onRequest: { submitRequest(for: card) }
                         )
+                        .accessibilityIdentifier("group-discover-row-\(card.groupId)")
                     }
                 }
                 .listStyle(.inset)
+                .accessibilityIdentifier("group-discover-list")
             }
         }
         .padding(20)

@@ -401,7 +401,13 @@ fn coverage_matches_x0x_registry_when_available() {
         ("GET".to_string(), "/ws/direct".to_string()),
     ]);
 
-    let exempt = HashSet::from([("GET".to_string(), "/gui/".to_string())]);
+    let exempt = HashSet::from([
+        ("GET".to_string(), "/gui/".to_string()),
+        // x0xd 0.19.7 added this endpoint after the frozen client surface.
+        // Dioxus records the gap in PARITY_EVIDENCE.md; add a typed
+        // X0xClient::apply_upgrade follow-up before removing this exemption.
+        ("POST".to_string(), "/upgrade/apply".to_string()),
+    ]);
 
     let mut missing: Vec<_> = registry
         .difference(&covered)

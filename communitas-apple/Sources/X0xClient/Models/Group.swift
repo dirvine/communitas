@@ -283,6 +283,11 @@ public enum GroupMemberState: String, Codable, Sendable, CaseIterable {
 
 /// Full roster entry. Distinct from the minimal ``GroupMember`` used
 /// inside ``GroupInfo`` — prefer this one for `GET /groups/:id/members`.
+///
+/// `updated_at`, `removed_by`, and `kem_public_key_b64` are only emitted
+/// by the daemon's all-members admin path (`/groups/:id/members?all=true`
+/// in newer x0xd builds). They're optional in Swift so the public
+/// roster endpoint, which omits them today, decodes cleanly.
 public struct NamedGroupMember: Codable, Sendable, Identifiable, Hashable {
     public var id: String { agentId }
     public let agentId: String
@@ -291,7 +296,7 @@ public struct NamedGroupMember: Codable, Sendable, Identifiable, Hashable {
     public let state: GroupMemberState
     public let displayName: String?
     public let joinedAt: UInt64
-    public let updatedAt: UInt64
+    public let updatedAt: UInt64?
     public let addedBy: String?
     public let removedBy: String?
     public let kemPublicKeyB64: String?

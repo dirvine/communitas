@@ -188,9 +188,11 @@ struct ManageGroupSheet: View {
                     Button("Apply policy change") { applyPolicy() }
                         .buttonStyle(.borderedProminent)
                         .disabled(!hasPolicyChange)
+                        .accessibilityIdentifier("apply-policy-button")
                 }
             }
         }
+        .accessibilityIdentifier("group-policy-section")
     }
 
     private var hasPolicyChange: Bool {
@@ -538,9 +540,11 @@ private struct MemberRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName).font(.subheadline).fontWeight(.semibold)
+                        .accessibilityIdentifier("member-row-name-\(member.agentId)")
                     Text("\(shorten(member.agentId)) · role \(member.role.rawValue) · state \(member.state.rawValue)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("member-row-details-\(member.agentId)")
                 }
                 Spacer()
                 if canManage {
@@ -548,13 +552,16 @@ private struct MemberRow: View {
                         if canPromote {
                             Button("Promote to admin") { onPromote() }
                                 .controlSize(.small)
+                                .accessibilityIdentifier("member-promote-button-\(member.agentId)")
                         }
                         if member.state == .banned {
                             Button("Unban") { onUnban() }
                                 .controlSize(.small)
+                                .accessibilityIdentifier("member-unban-button-\(member.agentId)")
                         } else {
                             Button("Ban", role: .destructive) { onBan() }
                                 .controlSize(.small)
+                                .accessibilityIdentifier("member-ban-button-\(member.agentId)")
                         }
                     }
                 }

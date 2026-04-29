@@ -28,6 +28,7 @@ struct GroupsView: View {
                     Label("Discover", systemImage: "magnifyingglass")
                 }
                 .disabled(appState.daemonState != .running)
+                .accessibilityIdentifier("group-discover-toggle")
 
                 Button {
                     showJoinSheet = true
@@ -42,6 +43,7 @@ struct GroupsView: View {
                     Label("Create Group", systemImage: "plus")
                 }
                 .disabled(appState.daemonState != .running)
+                .accessibilityIdentifier("group-create-new")
 
                 Button {
                     Task { await appState.refresh() }
@@ -74,6 +76,7 @@ struct GroupsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(group.name)
                         .font(.headline)
+                        .accessibilityIdentifier("group-row-title")
                     if let description = group.description {
                         Text(description)
                             .font(.caption)
@@ -90,6 +93,7 @@ struct GroupsView: View {
             }
             .padding(.vertical, 4)
             .tag(group)
+            .accessibilityIdentifier("group-row-\(group.groupId)")
             .contextMenu {
                 Button("Manage…") {
                     manageGroup = group
@@ -173,6 +177,7 @@ struct CreateGroupSheet: View {
             Form {
                 Section {
                     TextField("Group Name", text: $name)
+                        .accessibilityIdentifier("group-name")
                     TextField("Description (optional)", text: $description)
                     TextField("Your Display Name (optional)", text: $displayName)
                 }
@@ -208,6 +213,7 @@ struct CreateGroupSheet: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
                     .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("group-create-confirm")
             }
         }
         .padding(20)

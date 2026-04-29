@@ -8,6 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 description = "Dioxus desktop application for Communitas - decentralized collaboration platform"
 
+[features]
+default = []
+e2e-test-mode = []
+
 [dependencies]
 communitas-core = { version = "0.12.1", package = "communitas-core", path = "../communitas-core" }
 communitas-ui-api = { version = "0.12.1", path = "../communitas-ui-api" }
@@ -34,11 +38,41 @@ workspace = true
 features = ["rt", "sync"]
 
 [dev-dependencies]
+anyhow.workspace = true
 dioxus-ssr = "0.7"
 dioxus-history = "0.7"
 tempfile = "3.10"
 tokio-test = { version = "0.4" }
 criterion = { version = "0.5", features = ["async_tokio"] }
+x0x-test-harness = { path = "../../x0x/tests/harness" }
+
+[[test]]
+name = "e2e_identity"
+path = "tests/e2e/identity.rs"
+
+[[test]]
+name = "e2e_trust_contacts"
+path = "tests/e2e/trust_contacts.rs"
+
+[[test]]
+name = "e2e_connectivity"
+path = "tests/e2e/connectivity.rs"
+
+[[test]]
+name = "e2e_groups"
+path = "tests/e2e/groups.rs"
+
+[[test]]
+name = "e2e_kv_store"
+path = "tests/e2e/kv_store.rs"
+
+[[test]]
+name = "e2e_presence"
+path = "tests/e2e/presence.rs"
+
+[[test]]
+name = "e2e_upgrade"
+path = "tests/e2e/upgrade.rs"
 
 [[bench]]
 name = "startup"

@@ -79,8 +79,10 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if let identity = appState.agentIdentity {
                     copyableRow(label: "Agent ID", value: identity.agentId)
+                        .accessibilityIdentifier("agent-id-display")
                     if let machineId = identity.machineId {
                         copyableRow(label: "Machine ID", value: machineId)
+                            .accessibilityIdentifier("machine-id-display")
                     }
                 } else {
                     Text("Not connected to daemon")
@@ -107,6 +109,7 @@ struct DashboardView: View {
             .buttonStyle(.borderedProminent)
             .tint(DeepSpace.cyan)
             .disabled(appState.daemonState != .running)
+            .accessibilityIdentifier("dashboard-create-space")
 
             Button {
                 appState.selectedSystemPage = .network
@@ -116,6 +119,36 @@ struct DashboardView: View {
             }
             .buttonStyle(.bordered)
             .disabled(appState.daemonState != .running)
+
+            Button {
+                appState.selectedSystemPage = .liveFeed
+                appState.selectedDMContact = nil
+            } label: {
+                Label("Open Pub/Sub", systemImage: "antenna.radiowaves.left.and.right")
+            }
+            .buttonStyle(.bordered)
+            .disabled(appState.daemonState != .running)
+            .accessibilityIdentifier("open-pubsub")
+
+            Button {
+                appState.selectedSystemPage = .groups
+                appState.selectedDMContact = nil
+            } label: {
+                Label("Open Groups", systemImage: "person.3")
+            }
+            .buttonStyle(.bordered)
+            .disabled(appState.daemonState != .running)
+            .accessibilityIdentifier("open-groups")
+
+            Button {
+                appState.selectedSystemPage = .kvStores
+                appState.selectedDMContact = nil
+            } label: {
+                Label("Open KV Stores", systemImage: "tray.full")
+            }
+            .buttonStyle(.bordered)
+            .disabled(appState.daemonState != .running)
+            .accessibilityIdentifier("open-kv-stores")
 
             Spacer()
         }

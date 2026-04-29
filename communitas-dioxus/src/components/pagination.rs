@@ -44,7 +44,7 @@ pub struct PaginationProps {
 
 /// Page navigation with prev/next and page indicator.
 ///
-/// Displays: [< Prev] Page 1 of 5 [Next >]
+/// Displays: `[< Prev] Page 1 of 5 [Next >]`
 /// Prev button is disabled when on first page, Next button is disabled on last page.
 #[component]
 pub fn Pagination(props: PaginationProps) -> Element {

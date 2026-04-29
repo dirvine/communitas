@@ -6,6 +6,8 @@
 mod components;
 pub mod contrast;
 pub mod design_tokens;
+#[cfg(feature = "e2e-test-mode")]
+mod e2e_test_mode;
 pub mod hooks;
 pub mod models;
 pub mod onboarding;
@@ -155,6 +157,15 @@ enum Route {
 
 #[tokio::main]
 async fn main() {
+    #[cfg(feature = "e2e-test-mode")]
+    if std::env::var_os("COMMUNITAS_TEST_MODE").is_some() {
+        if let Err(err) = e2e_test_mode::run().await {
+            eprintln!("e2e test mode failed: {err}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     if let Err(err) = dioxus_logger::init(Level::INFO) {
         eprintln!("failed to init logger: {err}");
     }

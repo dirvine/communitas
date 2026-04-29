@@ -4,11 +4,17 @@ import X0xClient
 struct ContactsView: View {
     @EnvironmentObject var appState: AppState
     @State private var showAddSheet = false
+    @State private var showComposeSheet = false
     @State private var selectedContact: Contact?
     @State private var discoveredAgents: [DiscoveredAgent] = []
     @State private var isLoadingAgents = false
     @State private var discoveryReport: String?
     @State private var showingDiscoveryReport = false
+    @State private var foafResults: [DiscoveredAgent] = []
+    @State private var foafStatus: String?
+    @State private var connectStatus: [String: String] = [:]
+    @State private var directConnectionsCount: Int = 0
+    @State private var presenceStatusText: String = ""
 
     var body: some View {
         Group {
@@ -22,6 +28,15 @@ struct ContactsView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
+                    showComposeSheet = true
+                } label: {
+                    Label("Compose Direct Message", systemImage: "square.and.pencil")
+                }
+                .disabled(appState.daemonState != .running)
+                .accessibilityIdentifier("compose-direct-message")
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
                     showAddSheet = true
                 } label: {
                     Label("Add Contact", systemImage: "plus")
@@ -33,6 +48,7 @@ struct ContactsView: View {
                     Task {
                         await appState.refresh()
                         await loadDiscoveredAgents()
+                        await refreshDirectConnectionsCount()
                     }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
@@ -43,8 +59,13 @@ struct ContactsView: View {
             AddContactSheet()
                 .environmentObject(appState)
         }
+        .sheet(isPresented: $showComposeSheet) {
+            ComposeDirectMessageSheet()
+                .environmentObject(appState)
+        }
         .task {
             await loadDiscoveredAgents()
+            await refreshDirectConnectionsCount()
         }
         .alert("Agent Diagnostics", isPresented: $showingDiscoveryReport, actions: {
             Button("OK", role: .cancel) {}
@@ -107,8 +128,47 @@ struct ContactsView: View {
                     if !discoveredAgents.isEmpty {
                         Text("(\(discoveredAgents.count))")
                             .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("discovered-agents-count")
                     }
                 }
+            }
+            .accessibilityIdentifier("discovered-agents-list")
+
+            // FOAF walk section
+            Section {
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await runFoaf() }
+                    } label: {
+                        Label("Run FOAF Walk", systemImage: "arrow.triangle.branch")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.daemonState != .running)
+                    .accessibilityIdentifier("presence-foaf-button")
+                    if let s = foafStatus {
+                        Text(s).font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("presence-foaf-status")
+                    }
+                    Spacer()
+                    Text("Direct connections: \(directConnectionsCount)")
+                        .font(.caption)
+                        .accessibilityIdentifier("direct-connections-count")
+                }
+                if !foafResults.isEmpty {
+                    ForEach(foafResults) { agent in
+                        Text("FOAF: \(agent.agentId.prefix(16))…")
+                            .font(.system(.caption, design: .monospaced))
+                            .accessibilityIdentifier("presence-foaf-result-\(agent.agentId)")
+                    }
+                }
+                if !presenceStatusText.isEmpty {
+                    Text(presenceStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("presence-status-text")
+                }
+            } header: {
+                Text("Presence Discovery")
             }
         }
     }
@@ -204,10 +264,34 @@ struct ContactsView: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
+                if let status = connectStatus[agent.agentId] {
+                    Text(status)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("connect-status-\(agent.agentId)")
+                }
             }
             Spacer()
+            Button {
+                Task { await connect(agent) }
+            } label: {
+                Label("Connect", systemImage: "link")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("connect-agent-button-\(agent.agentId)")
+
+            Button {
+                Task { await inspectDiscoveredAgent(agent) }
+            } label: {
+                Label("Inspect", systemImage: "info.circle")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("inspect-agent-button-\(agent.agentId)")
         }
         .padding(.vertical, 4)
+        .accessibilityIdentifier("discovered-agent-row-\(agent.agentId)")
         .contextMenu {
             Button("Add as Contact") {
                 Task {
@@ -230,6 +314,38 @@ struct ContactsView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(agent.agentId, forType: .string)
             }
+        }
+    }
+
+    private func connect(_ agent: DiscoveredAgent) async {
+        connectStatus[agent.agentId] = "Connecting…"
+        do {
+            try await appState.client.connectAgent(agentId: agent.agentId)
+            await refreshDirectConnectionsCount()
+            connectStatus[agent.agentId] = "Connected"
+        } catch {
+            connectStatus[agent.agentId] = "Failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func refreshDirectConnectionsCount() async {
+        do {
+            let conns = try await appState.client.directConnections()
+            directConnectionsCount = conns.count
+        } catch {
+            directConnectionsCount = 0
+        }
+    }
+
+    private func runFoaf() async {
+        foafStatus = "Walking…"
+        do {
+            let agents = try await appState.client.presenceFoaf(ttl: 2, timeoutMs: 4_000)
+            foafResults = agents
+            foafStatus = "FOAF returned \(agents.count) agents"
+        } catch {
+            foafResults = []
+            foafStatus = "FOAF failed: \(error.localizedDescription)"
         }
     }
 
@@ -269,7 +385,9 @@ struct ContactsView: View {
             lines.append("Active find: found")
         }
 
-        discoveryReport = lines.isEmpty ? "No diagnostics available for this agent yet." : lines.joined(separator: " • ")
+        let report = lines.isEmpty ? "No diagnostics available for this agent yet." : lines.joined(separator: " • ")
+        discoveryReport = report
+        presenceStatusText = report
         showingDiscoveryReport = true
     }
 
@@ -396,6 +514,82 @@ struct AddContactSheet: View {
             } catch {
                 self.error = error.localizedDescription
             }
+        }
+    }
+}
+
+// MARK: - Compose Direct Message Sheet
+
+/// Lightweight DM composer used by the parity XCUITest. Sends via
+/// `POST /direct/send` with a self-addressed agent_id so the test
+/// does not require a peer.
+struct ComposeDirectMessageSheet: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var recipient: String = ""
+    @State private var messageText: String = ""
+    @State private var sending: Bool = false
+    @State private var sentConfirmation: Bool = false
+    @State private var sendError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Compose Direct Message").font(.title2).fontWeight(.semibold)
+            TextField("Recipient agent ID", text: $recipient)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("dm-recipient-agent-id")
+            TextEditor(text: $messageText)
+                .frame(minHeight: 100)
+                .border(Color.secondary.opacity(0.2))
+                .accessibilityIdentifier("dm-body")
+
+            if sentConfirmation {
+                Text("Sent")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                    .accessibilityIdentifier("dm-sent-confirmation")
+            }
+            if let sendError {
+                Text(sendError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("dm-send-error")
+            }
+
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Send") {
+                    Task { await send() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(sending
+                    || recipient.trimmingCharacters(in: .whitespaces).isEmpty
+                    || messageText.isEmpty)
+                .accessibilityIdentifier("dm-send")
+            }
+        }
+        .padding(20)
+        .frame(width: 480, height: 280)
+    }
+
+    private func send() async {
+        sending = true
+        defer { sending = false }
+
+        var rcpt = recipient.trimmingCharacters(in: .whitespaces)
+        if rcpt == "self", let agent = appState.agentIdentity?.agentId {
+            rcpt = agent
+        }
+        let payload = Data(messageText.utf8).base64EncodedString()
+        sendError = nil
+        sentConfirmation = false
+        do {
+            try await appState.client.sendDirect(agentId: rcpt, payload: payload)
+            sentConfirmation = true
+        } catch {
+            sendError = "Send failed: \(error.localizedDescription)"
         }
     }
 }

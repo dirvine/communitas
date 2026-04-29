@@ -8,6 +8,10 @@ struct SettingsView: View {
     @AppStorage("displayName") private var displayName = ""
     @State private var agentCardLink: String?
     @State private var generatingCard = false
+    @State private var exportStatus: String?
+    @State private var importedAgentId: String?
+    @State private var showImportSheet = false
+    @State private var importBuffer: String = ""
 
     var body: some View {
         Form {
@@ -50,6 +54,7 @@ struct SettingsView: View {
                             .textSelection(.enabled)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                            .accessibilityIdentifier("settings-agent-id")
                     }
                     if let machineId = identity.machineId {
                         LabeledContent("Machine ID") {
@@ -58,6 +63,7 @@ struct SettingsView: View {
                                 .textSelection(.enabled)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                                .accessibilityIdentifier("settings-machine-id")
                         }
                     }
                     VStack(alignment: .leading, spacing: 8) {
@@ -78,11 +84,37 @@ struct SettingsView: View {
                                 }
                             }
                         }
+                        HStack {
+                            Button {
+                                exportKeypairBackup()
+                            } label: {
+                                Label("Export Identity Backup…", systemImage: "externaldrive.badge.plus")
+                            }
+                            .disabled(appState.daemonState != .running || appState.agentIdentity == nil)
+                            .accessibilityIdentifier("export-keypair-button")
+
+                            Button {
+                                showImportSheet = true
+                            } label: {
+                                Label("Import Identity Card…", systemImage: "square.and.arrow.down")
+                            }
+                            .disabled(appState.daemonState != .running)
+                            .accessibilityIdentifier("import-keypair-button")
+                        }
                         if let link = agentCardLink {
                             Text(link)
                                 .font(.system(.caption, design: .monospaced))
                                 .textSelection(.enabled)
                                 .lineLimit(3)
+                                .accessibilityIdentifier("settings-agent-card-link")
+                        }
+                        if let s = exportStatus {
+                            Text(s).font(.caption).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("export-keypair-status")
+                        }
+                        if let id = importedAgentId {
+                            Text("Imported: \(id.prefix(12))…").font(.caption)
+                                .accessibilityIdentifier("imported-agent-id")
                         }
                     }
                     .padding(.top, 4)
@@ -119,6 +151,30 @@ struct SettingsView: View {
             guard agentCardLink == nil, appState.daemonState == .running else { return }
             await loadAgentCardLink()
         }
+        .sheet(isPresented: $showImportSheet) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Import Identity Card").font(.headline)
+                Text("Paste an `x0x://agent/...` link or the JSON card contents.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $importBuffer)
+                    .frame(minHeight: 100)
+                    .border(Color.secondary.opacity(0.2))
+                    .accessibilityIdentifier("import-keypair-buffer")
+                HStack {
+                    Button("Cancel") { showImportSheet = false }
+                    Spacer()
+                    Button("Import") {
+                        importKeypair()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(importBuffer.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .accessibilityIdentifier("import-keypair-confirm")
+                }
+            }
+            .padding(20)
+            .frame(width: 480)
+        }
     }
 
     private func loadAgentCardLink() async {
@@ -127,6 +183,74 @@ struct SettingsView: View {
             agentCardLink = resp.link
         } catch {
             agentCardLink = nil
+        }
+    }
+
+    /// Export a consent-gated private identity backup to a JSON file.
+    ///
+    /// This writes the local x0x private key files (`agent.key`,
+    /// `machine.key`, optional `user.key`, optional `agent.cert`, and
+    /// optional `agent_kem.key`) into an explicit backup bundle. Agent
+    /// cards remain available above as shareable public metadata; they
+    /// are not key backups.
+    private func exportKeypairBackup() {
+        guard let identity = appState.agentIdentity else {
+            exportStatus = "Export failed: daemon identity is not loaded."
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "x0x-identity-backup-\(String(identity.agentId.prefix(8))).json"
+        panel.title = "Export x0x Identity Backup"
+        let response = panel.runModal()
+        guard response == .OK, let url = panel.url else {
+            exportStatus = "Export cancelled."
+            return
+        }
+
+        do {
+            let bundle = try IdentityBackupExporter.exportBundle(
+                agentId: identity.agentId,
+                machineId: identity.machineId
+            )
+            try IdentityBackupExporter.writeBundle(bundle, to: url)
+            exportStatus = "Exported private identity backup to \(url.lastPathComponent)"
+        } catch {
+            exportStatus = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Import a shareable agent card so the daemon stores the contact and
+    /// we can verify the `agent_id` matches the source card. This is not
+    /// a private key restore path.
+    private func importKeypair() {
+        let trimmed = importBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Task {
+            do {
+                let payload: String
+                if trimmed.hasPrefix("x0x://agent/") {
+                    payload = trimmed
+                } else {
+                    // Allow the wrapped JSON shape produced by Export.
+                    if let data = trimmed.data(using: .utf8),
+                       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let link = obj["link"] as? String {
+                        payload = link
+                    } else {
+                        payload = trimmed
+                    }
+                }
+                let resp = try await appState.client.importAgentCard(card: payload, trustLevel: .known)
+                importedAgentId = resp.agentId
+                showImportSheet = false
+                importBuffer = ""
+                await appState.refresh()
+            } catch {
+                exportStatus = "Import failed: \(error.localizedDescription)"
+            }
         }
     }
 

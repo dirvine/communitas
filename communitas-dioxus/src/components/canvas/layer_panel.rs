@@ -296,7 +296,7 @@ mod tests {
         ];
 
         // Sort highest first (for visual stacking order)
-        layers.sort_by(|a, b| b.z_index.cmp(&a.z_index));
+        layers.sort_by_key(|layer| std::cmp::Reverse(layer.z_index));
 
         assert_eq!(layers[0].name, "Top");
         assert_eq!(layers[1].name, "Middle");

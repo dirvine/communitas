@@ -343,8 +343,11 @@ pub fn SettingsView() -> Element {
                 }
             }
 
-            // Software Updates
+            // x0xd Software Updates
             {update_check_section()}
+
+            // Keypair backup / export status
+            {keypair_backup_section()}
 
             // About (below update section)
             div {
@@ -364,21 +367,19 @@ pub fn SettingsView() -> Element {
     }
 }
 
-/// GitHub release update check URL.
-const UPDATE_CHECK_URL: &str =
-    "https://github.com/saorsa-labs/communitas/releases/latest/download/update.json";
-
 /// Update status for the settings view.
 #[derive(Clone, PartialEq)]
 enum UpdateStatus {
     Idle,
     Checking,
+    Applying,
     UpToDate,
     Available(String),
+    Applied(String),
     Error(String),
 }
 
-/// Software update check section.
+/// Software update check section for the local x0xd daemon.
 fn update_check_section() -> Element {
     let mut status = use_signal(|| UpdateStatus::Idle);
 
@@ -397,31 +398,38 @@ fn update_check_section() -> Element {
     );
 
     let current = crate::version::CURRENT.version;
-    let status_text = match &*status.read() {
-        UpdateStatus::Idle => String::new(),
-        UpdateStatus::Checking => "Checking for updates...".to_string(),
-        UpdateStatus::UpToDate => format!("You're up to date (v{current})."),
-        UpdateStatus::Available(v) => format!("Version {v} is available (you have {current})."),
-        UpdateStatus::Error(e) => format!("Check failed: {e}"),
+    let current_status = status.read().clone();
+    let available_version = match &current_status {
+        UpdateStatus::Available(version) => Some(version.clone()),
+        _ => None,
     };
-    let status_color = match &*status.read() {
+    let status_text = match &current_status {
+        UpdateStatus::Idle => String::new(),
+        UpdateStatus::Checking => "Checking x0xd for updates...".to_string(),
+        UpdateStatus::Applying => "Applying x0xd update...".to_string(),
+        UpdateStatus::UpToDate => "x0xd reports that it is up to date.".to_string(),
+        UpdateStatus::Available(v) => format!("x0xd update {v} is available."),
+        UpdateStatus::Applied(msg) => msg.clone(),
+        UpdateStatus::Error(e) => format!("x0xd update operation failed: {e}"),
+    };
+    let status_color = match &current_status {
         UpdateStatus::Available(_) => colors::PRIMARY,
+        UpdateStatus::Applied(_) | UpdateStatus::UpToDate => colors::SUCCESS,
         UpdateStatus::Error(_) => colors::DANGER,
-        UpdateStatus::UpToDate => colors::SUCCESS,
         _ => colors::TEXT_MUTED,
     };
 
     rsx! {
         div {
             style: "{card_style}",
-            div { style: "{section_label}", "Software Updates" }
+            div { style: "{section_label}", "x0xd Software Updates" }
 
             div {
-                style: format!("display: flex; align-items: center; gap: {};", spacing::MD),
+                style: format!("display: flex; align-items: center; flex-wrap: wrap; gap: {};", spacing::MD),
 
                 div {
                     style: format!("font-size: {}; color: {};", typography::TEXT_SM, colors::TEXT_SECONDARY),
-                    "Current version: {current}"
+                    "Communitas build: {current}"
                 }
 
                 button {
@@ -430,7 +438,7 @@ fn update_check_section() -> Element {
                          border-radius: {}; cursor: pointer; font-size: {};",
                         spacing::XS, spacing::MD, colors::PRIMARY, radius::MD, typography::TEXT_XS,
                     ),
-                    disabled: matches!(*status.read(), UpdateStatus::Checking),
+                    disabled: matches!(current_status, UpdateStatus::Checking | UpdateStatus::Applying),
                     onclick: move |_| {
                         status.set(UpdateStatus::Checking);
                         spawn(async move {
@@ -441,10 +449,36 @@ fn update_check_section() -> Element {
                             }
                         });
                     },
-                    if matches!(*status.read(), UpdateStatus::Checking) {
+                    if matches!(current_status, UpdateStatus::Checking) {
                         "Checking..."
                     } else {
-                        "Check for Updates"
+                        "Check x0xd"
+                    }
+                }
+
+                if let Some(version) = available_version {
+                    button {
+                        style: format!(
+                            "padding: {} {}; background: {}; color: white; border: none; \
+                             border-radius: {}; cursor: pointer; font-size: {};",
+                            spacing::XS, spacing::MD, colors::SUCCESS, radius::MD, typography::TEXT_XS,
+                        ),
+                        disabled: matches!(*status.read(), UpdateStatus::Applying),
+                        onclick: move |_| {
+                            let version = version.clone();
+                            status.set(UpdateStatus::Applying);
+                            spawn(async move {
+                                match apply_update().await {
+                                    Ok(message) => status.set(UpdateStatus::Applied(message)),
+                                    Err(e) => status.set(UpdateStatus::Error(format!("{version}: {e}"))),
+                                }
+                            });
+                        },
+                        if matches!(*status.read(), UpdateStatus::Applying) {
+                            "Applying..."
+                        } else {
+                            "Apply x0xd Update"
+                        }
                     }
                 }
             }
@@ -462,37 +496,108 @@ fn update_check_section() -> Element {
     }
 }
 
-/// Check GitHub releases for a newer version.
+/// Keypair backup/export surface.
+fn keypair_backup_section() -> Element {
+    let card_style = format!(
+        "background: {}; border: 1px solid {}; border-radius: {}; padding: {};",
+        colors::SURFACE_ELEVATED,
+        colors::BORDER_DEFAULT,
+        radius::LG,
+        spacing::MD,
+    );
+    let section_label = format!(
+        "font-size: {}; font-weight: 600; color: {}; margin-bottom: {};",
+        typography::TEXT_SM,
+        colors::TEXT_PRIMARY,
+        spacing::SM,
+    );
+    rsx! {
+        div {
+            style: "{card_style}",
+            div { style: "{section_label}", "Identity Backup" }
+            div {
+                style: format!("font-size: {}; color: {}; line-height: 1.5;", typography::TEXT_SM, colors::TEXT_SECONDARY),
+                "Keypair export is intentionally disabled until x0xd and communitas-x0x-client expose a consent-gated backup endpoint with an encrypted-at-rest format."
+            }
+            button {
+                style: format!(
+                    "margin-top: {}; padding: {} {}; background: transparent; color: {}; border: 1px solid {}; \
+                     border-radius: {}; cursor: not-allowed; font-size: {}; opacity: 0.65;",
+                    spacing::SM,
+                    spacing::XS,
+                    spacing::MD,
+                    colors::TEXT_MUTED,
+                    colors::BORDER_DEFAULT,
+                    radius::MD,
+                    typography::TEXT_XS,
+                ),
+                disabled: true,
+                "Export keypairs — awaiting client API"
+            }
+        }
+    }
+}
+
+/// Check the local x0xd daemon for updates.
 ///
-/// Returns `Ok(Some(version))` if a newer version is available,
-/// `Ok(None)` if up to date, or `Err(message)` on failure.
+/// Returns `Ok(Some(version))` if a daemon update is available,
+/// `Ok(None)` if x0xd reports no update, or `Err(message)` on failure.
 async fn check_for_update() -> std::result::Result<Option<String>, String> {
+    let client = X0xClient::new();
+    let status = client.check_upgrade().await.map_err(|e| format!("{e}"))?;
+    if status.update_available.unwrap_or(false) {
+        Ok(status.version.or(status.current_version))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Apply a local x0xd daemon update via the raw endpoint added in x0xd 0.19.7.
+async fn apply_update() -> std::result::Result<String, String> {
+    let (base, token) = x0x_endpoint().map_err(|e| format!("{e}"))?;
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| format!("{e}"))?;
-
-    let resp = client
-        .get(UPDATE_CHECK_URL)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {e}"))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+    let mut request = client.post(format!("{}/upgrade/apply", base.trim_end_matches('/')));
+    if let Some(token) = token.filter(|value| !value.trim().is_empty()) {
+        request = request.bearer_auth(token);
     }
-
-    let body: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {e}"))?;
-
-    let latest = body["version"]
-        .as_str()
-        .ok_or("Missing version field in update.json")?;
-
-    let current = crate::version::CURRENT.version;
-    if crate::version::CURRENT.is_newer_than(latest) || latest == current {
-        Ok(None)
+    let response = request.send().await.map_err(|e| format!("{e}"))?;
+    let status = response.status();
+    let body: serde_json::Value = response.json().await.map_err(|e| format!("{e}"))?;
+    if !status.is_success() || body.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Err(format!("HTTP {status}: {body}"));
+    }
+    if body.get("applied").and_then(serde_json::Value::as_bool) == Some(true) {
+        let version = body
+            .get("version")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("new version");
+        Ok(format!("x0xd update applied: {version}"))
     } else {
-        Ok(Some(latest.to_string()))
+        let reason = body
+            .get("reason")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("no upgrade required");
+        Ok(format!("x0xd update not applied: {reason}"))
     }
+}
+
+fn x0x_endpoint() -> std::result::Result<(String, Option<String>), communitas_x0x_client::X0xError>
+{
+    let env_base = std::env::var("X0X_API_BASE")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let env_token = std::env::var("X0X_API_TOKEN")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    if let Some(base) = env_base {
+        return Ok((base, env_token));
+    }
+    let config = communitas_x0x_client::discover_x0x_config()?;
+    Ok((
+        format!("http://{}", config.address.trim_end_matches('/')),
+        Some(config.token),
+    ))
 }

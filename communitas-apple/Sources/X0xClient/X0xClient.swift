@@ -28,11 +28,47 @@ public struct X0xConfig: Sendable {
         self.token = token
     }
 
-    /// Attempt to discover the running daemon's configuration from the filesystem.
+    /// Attempt to discover daemon configuration from explicit test environment.
     ///
-    /// Reads `~/Library/Application Support/x0x/api.port` and `api-token`.
-    /// Returns `nil` if either file is missing or cannot be read (daemon not running).
+    /// `X0X_API_BASE` may be either `http://host:port` or `host:port`.
+    /// `X0X_API_TOKEN` is optional so unauthenticated health probes still work.
+    public static func fromEnvironment() -> X0xConfig? {
+        let env = ProcessInfo.processInfo.environment
+        guard let rawBase = env["X0X_API_BASE"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawBase.isEmpty else {
+            return nil
+        }
+
+        let address: String
+        if let url = URL(string: rawBase), let host = url.host {
+            if let port = url.port {
+                address = "\(host):\(port)"
+            } else {
+                address = host
+            }
+        } else {
+            address = rawBase
+                .replacingOccurrences(of: "http://", with: "")
+                .replacingOccurrences(of: "https://", with: "")
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        guard !address.isEmpty else { return nil }
+        let token = env["X0X_API_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return X0xConfig(address: address, token: token)
+    }
+
+    /// Attempt to discover the running daemon's configuration.
+    ///
+    /// Resolution order:
+    /// 1. `X0X_API_BASE` / `X0X_API_TOKEN` environment override (used by XCUITest).
+    /// 2. `~/Library/Application Support/x0x/api.port` and `api-token`.
+    ///
+    /// Returns `nil` if neither source is available.
     public static func discover() -> X0xConfig? {
+        if let fromEnvironment = fromEnvironment() {
+            return fromEnvironment
+        }
+
         let fm = FileManager.default
         guard let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
@@ -93,7 +129,7 @@ public final class X0xClient: Sendable {
     /// Initialise from a discovered ``X0xConfig``.
     public convenience init(config: X0xConfig) {
         let url = config.baseHTTPURL ?? URL(string: "http://127.0.0.1:12700")!
-        self.init(baseURL: url, token: config.token)
+        self.init(baseURL: url, token: config.token.isEmpty ? nil : config.token)
     }
 
     /// Attempt to discover the daemon config and build a client.

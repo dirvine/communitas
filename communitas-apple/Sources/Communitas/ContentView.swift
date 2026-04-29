@@ -12,6 +12,8 @@ struct ContentView: View {
     @State private var showCreateChannel = false
     /// Which group the create-channel sheet targets.
     @State private var createChannelGroup: GroupSummary?
+    /// Live presence-event toast model — wired to `/presence/events` SSE.
+    @StateObject private var presenceToast = PresenceToastModel()
 
     var body: some View {
         NavigationSplitView {
@@ -53,7 +55,17 @@ struct ContentView: View {
                 .transition(.opacity)
             }
         }
+        .overlay(alignment: .top) {
+            if let last = presenceToast.lastEvent,
+               let at = presenceToast.lastEventAt,
+               Date().timeIntervalSince(at) < 6 {
+                PresenceToastView(event: last)
+                    .padding(.top, 24)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .animation(.easeOut(duration: 0.15), value: appState.showQuickSwitcher)
+        .animation(.easeOut(duration: 0.2), value: presenceToast.lastEventAt)
         .sheet(isPresented: $appState.showCreateSpace) {
             CreateSpaceSheet()
                 .environmentObject(appState)
@@ -82,6 +94,13 @@ struct ContentView: View {
             } else if let first = appState.groups.first {
                 expandedSpaceId = first.groupId
             }
+            // Wire presence-events SSE → toast model.
+            if let cfg = X0xConfig.discover() {
+                presenceToast.start(config: cfg)
+            }
+        }
+        .onDisappear {
+            presenceToast.stop()
         }
         .onChange(of: appState.groups) { _, newGroups in
             // When groups load, ensure we have an expanded space
@@ -524,8 +543,16 @@ struct ContentView: View {
         switch page {
         case .people:
             ContactsView()
+        case .groups:
+            GroupsView()
         case .network:
             NetworkView()
+        case .liveFeed:
+            LiveFeedView()
+        case .kvStores:
+            KvStoresView()
+        case .fourWord:
+            FourWordBootstrapView()
         case .constitution:
             ConstitutionView()
         case .settings:

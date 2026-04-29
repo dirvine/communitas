@@ -93,12 +93,12 @@ async fn all_targets_expose_core_daemon_surfaces() {
         );
         assert!(!card.link.is_empty(), "{} card link", target.summary());
 
-        let _ = client
+        client
             .announce()
             .await
             .unwrap_or_else(|err| panic!("{} announce failed: {err}", target.summary()));
         if target.kind.as_deref() != Some("remote") {
-            let _ = client
+            client
                 .announce_with_options(false, false)
                 .await
                 .unwrap_or_else(|err| {

@@ -1,0 +1,10 @@
+# communitas-dioxus justfile
+
+set shell := ["bash", "-uc"]
+
+default:
+    @just --list
+
+# Run the live Dioxus parity E2E harness and write a proof bundle.
+e2e:
+    bash tests/e2e.sh

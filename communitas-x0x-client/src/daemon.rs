@@ -113,7 +113,7 @@ impl DaemonManager {
     ///
     /// Runs: `curl -sfL https://x0x.md | sh`
     ///
-    /// Times out after [`INSTALL_TIMEOUT_SECS`] seconds.
+    /// Times out after the internal installer timeout.
     pub async fn install() -> Result<()> {
         tracing::info!("installing x0x via curl -sfL https://x0x.md | sh");
         let output = run_with_timeout(
@@ -138,7 +138,7 @@ impl DaemonManager {
     ///
     /// Runs: `x0x autostart`
     ///
-    /// Times out after [`SUBPROCESS_TIMEOUT_SECS`] seconds.
+    /// Times out after the internal subprocess timeout.
     pub async fn autostart() -> Result<()> {
         tracing::info!("configuring x0x autostart");
         let output = run_with_timeout(
@@ -160,7 +160,7 @@ impl DaemonManager {
     ///
     /// Runs: `x0x start`
     ///
-    /// Times out after [`SUBPROCESS_TIMEOUT_SECS`] seconds.
+    /// Times out after the internal subprocess timeout.
     pub async fn start() -> Result<()> {
         tracing::info!("starting x0x daemon");
         let output = run_with_timeout(
@@ -182,7 +182,7 @@ impl DaemonManager {
     ///
     /// Runs: `x0x stop`
     ///
-    /// Times out after [`SUBPROCESS_TIMEOUT_SECS`] seconds.
+    /// Times out after the internal subprocess timeout.
     pub async fn stop() -> Result<()> {
         tracing::info!("stopping x0x daemon");
         let output = run_with_timeout(

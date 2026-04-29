@@ -108,6 +108,7 @@ struct FilesView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
+            .accessibilityIdentifier("file-accept-button-\(transfer.transferId)")
 
             Button("Reject") {
                 Task { await rejectAction(transfer) }
@@ -115,9 +116,11 @@ struct FilesView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .tint(.red)
+            .accessibilityIdentifier("file-reject-button-\(transfer.transferId)")
         }
         .padding(10)
         .background(Color.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityIdentifier("file-incoming-row-\(transfer.transferId)")
     }
 
     // MARK: - Active Transfers
@@ -211,8 +214,10 @@ struct FilesView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedAgentId.isEmpty)
+                .accessibilityIdentifier("file-send-button")
             }
         }
+        .accessibilityIdentifier("file-transfer-list")
     }
 
     // MARK: - Actions

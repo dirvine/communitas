@@ -12,6 +12,10 @@ struct SettingsView: View {
     @State private var importedAgentId: String?
     @State private var showImportSheet = false
     @State private var importBuffer: String = ""
+    @State private var daemonUpdateStatus: String?
+    @State private var daemonUpdateAvailableVersion: String?
+    @State private var isCheckingDaemonUpdate = false
+    @State private var isApplyingDaemonUpdate = false
 
     var body: some View {
         Form {
@@ -133,6 +137,33 @@ struct SettingsView: View {
                 .disabled(!updaterController.canCheckForUpdates)
             }
 
+            Section("x0xd Daemon Updates") {
+                if let status = daemonUpdateStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(daemonUpdateStatusColor)
+                }
+
+                HStack {
+                    Button {
+                        checkDaemonUpdate()
+                    } label: {
+                        Label(isCheckingDaemonUpdate ? "Checking..." : "Check x0xd for Updates", systemImage: "arrow.clockwise.circle")
+                    }
+                    .disabled(isCheckingDaemonUpdate || isApplyingDaemonUpdate || appState.daemonState != .running)
+
+                    if let version = daemonUpdateAvailableVersion {
+                        Button {
+                            applyDaemonUpdate(version: version)
+                        } label: {
+                            Label(isApplyingDaemonUpdate ? "Applying..." : "Apply Update (\(version))", systemImage: "arrow.down.doc")
+                        }
+                        .disabled(isApplyingDaemonUpdate || appState.daemonState != .running)
+                        .foregroundStyle(.green)
+                    }
+                }
+            }
+
             Section("About") {
                 LabeledContent("App") {
                     Text("Communitas")
@@ -210,13 +241,38 @@ struct SettingsView: View {
             return
         }
 
+        // Prompt for passphrase using native NSAlert + NSSecureTextField
+        let alert = NSAlert()
+        alert.messageText = "Set Backup Passphrase"
+        alert.informativeText = "Please enter a passphrase to encrypt your identity backup. You will need this passphrase to restore your identity in the future."
+        alert.alertStyle = .warning
+
+        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        input.placeholderString = "Passphrase"
+        alert.accessoryView = input
+
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        let alertResponse = alert.runModal()
+        guard alertResponse == .alertFirstButtonReturn else {
+            exportStatus = "Export cancelled: passphrase required."
+            return
+        }
+
+        let passphrase = input.stringValue
+        guard !passphrase.isEmpty else {
+            exportStatus = "Export failed: passphrase cannot be empty."
+            return
+        }
+
         do {
             let bundle = try IdentityBackupExporter.exportBundle(
                 agentId: identity.agentId,
                 machineId: identity.machineId
             )
-            try IdentityBackupExporter.writeBundle(bundle, to: url)
-            exportStatus = "Exported private identity backup to \(url.lastPathComponent)"
+            try IdentityBackupExporter.writeBundle(bundle, to: url, with: passphrase)
+            exportStatus = "Exported encrypted identity backup to \(url.lastPathComponent)"
         } catch {
             exportStatus = "Export failed: \(error.localizedDescription)"
         }
@@ -289,5 +345,73 @@ struct SettingsView: View {
         Circle()
             .fill(appState.daemonState == .running ? .green : .gray)
             .frame(width: 8, height: 8)
+    }
+
+    private var daemonUpdateStatusColor: Color {
+        if isApplyingDaemonUpdate || isCheckingDaemonUpdate {
+            return .secondary
+        }
+        if daemonUpdateAvailableVersion != nil {
+            return .blue
+        }
+        if let status = daemonUpdateStatus {
+            if status.contains("applied") || status.contains("up to date") {
+                return .green
+            }
+            if status.contains("failed") || status.contains("Error") {
+                return .red
+            }
+        }
+        return .primary
+    }
+
+    private func checkDaemonUpdate() {
+        isCheckingDaemonUpdate = true
+        daemonUpdateStatus = "Checking x0xd for updates..."
+        daemonUpdateAvailableVersion = nil
+        Task {
+            do {
+                let status = try await appState.client.checkUpgrade()
+                await MainActor.run {
+                    isCheckingDaemonUpdate = false
+                    if status.updateAvailable == true {
+                        let version = status.version ?? status.currentVersion ?? "new version"
+                        daemonUpdateAvailableVersion = version
+                        daemonUpdateStatus = "x0xd update \(version) is available."
+                    } else {
+                        daemonUpdateStatus = "x0xd reports that it is up to date."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isCheckingDaemonUpdate = false
+                    daemonUpdateStatus = "x0xd update check failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func applyDaemonUpdate(version: String) {
+        isApplyingDaemonUpdate = true
+        daemonUpdateStatus = "Applying x0xd update..."
+        Task {
+            do {
+                let resp = try await appState.client.applyUpgrade()
+                await MainActor.run {
+                    isApplyingDaemonUpdate = false
+                    daemonUpdateAvailableVersion = nil
+                    if resp.applied {
+                        daemonUpdateStatus = "x0xd update applied: \(resp.version ?? version)"
+                    } else {
+                        daemonUpdateStatus = "x0xd update not applied: \(resp.reason ?? "no upgrade required")"
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isApplyingDaemonUpdate = false
+                    daemonUpdateStatus = "x0xd update application failed: \(error.localizedDescription)"
+                }
+            }
+        }
     }
 }

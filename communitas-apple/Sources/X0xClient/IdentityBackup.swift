@@ -1,3 +1,4 @@
+import CommonCrypto
 import CryptoKit
 import Foundation
 
@@ -17,6 +18,19 @@ public struct IdentityBackupBundle: Codable, Sendable, Equatable {
     public let machineId: String?
     /// Backed-up key/certificate files.
     public let files: [IdentityBackupFile]
+}
+
+/// An encrypted wrapper around `IdentityBackupBundle`.
+public struct EncryptedIdentityBackupBundle: Codable, Sendable, Equatable {
+    public let schema: String
+    public let saltBase64: String
+    public let ciphertextBase64: String
+
+    public init(schema: String, saltBase64: String, ciphertextBase64: String) {
+        self.schema = schema
+        self.saltBase64 = saltBase64
+        self.ciphertextBase64 = ciphertextBase64
+    }
 }
 
 /// One file inside an ``IdentityBackupBundle``.
@@ -149,12 +163,86 @@ public enum IdentityBackupExporter {
         )
     }
 
-    /// Encode and write a backup bundle to disk.
-    public static func writeBundle(_ bundle: IdentityBackupBundle, to url: URL) throws {
+    /// Derive a 256-bit AES key from a passphrase using PBKDF2 with SHA-256 and a salt.
+    private static func deriveKey(passphrase: String, salt: Data) throws -> SymmetricKey {
+        var keyData = Data(count: 32)
+        let passwordBytes = Array(passphrase.utf8)
+        let saltBytes = Array(salt)
+        let keyLength = keyData.count
+
+        let status = keyData.withUnsafeMutableBytes { keyBytes in
+            CCKeyDerivationPBKDF(
+                CCPBKDFAlgorithm(kCCPBKDF2),
+                passphrase,
+                passwordBytes.count,
+                saltBytes,
+                saltBytes.count,
+                CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
+                10000, // iterations
+                keyBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                keyLength
+            )
+        }
+        guard status == kCCSuccess else {
+            throw NSError(domain: "IdentityBackupError", code: -2, userInfo: [NSLocalizedDescriptionKey: "Key derivation failed"])
+        }
+        return SymmetricKey(data: keyData)
+    }
+
+    /// Encrypt a bundle using a passphrase and return the JSON-encoded EncryptedIdentityBackupBundle data.
+    public static func encryptBundle(_ bundle: IdentityBackupBundle, with passphrase: String) throws -> Data {
+        // Generate random 16-byte salt
+        var salt = Data(count: 16)
+        let result = salt.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 16, $0.baseAddress!) }
+        guard result == errSecSuccess else {
+            throw NSError(domain: "IdentityBackupError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to generate random salt"])
+        }
+
+        let symmetricKey = try deriveKey(passphrase: passphrase, salt: salt)
+
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(bundle)
-        try data.write(to: url, options: .atomic)
+        let bundleData = try encoder.encode(bundle)
+        let sealedBox = try AES.GCM.seal(bundleData, using: symmetricKey)
+
+        guard let combined = sealedBox.combined else {
+            throw NSError(domain: "IdentityBackupError", code: -5, userInfo: [NSLocalizedDescriptionKey: "Encryption packing failed"])
+        }
+
+        let encryptedBundle = EncryptedIdentityBackupBundle(
+            schema: "x0x.encrypted-identity-backup.v1",
+            saltBase64: salt.base64EncodedString(),
+            ciphertextBase64: combined.base64EncodedString()
+        )
+        return try JSONEncoder().encode(encryptedBundle)
+    }
+
+    /// Decrypt an encrypted bundle data using a passphrase and return the decrypted IdentityBackupBundle.
+    public static func decryptBundle(data: Data, with passphrase: String) throws -> IdentityBackupBundle {
+        let encryptedBundle = try JSONDecoder().decode(EncryptedIdentityBackupBundle.self, from: data)
+        guard encryptedBundle.schema == "x0x.encrypted-identity-backup.v1" else {
+            throw NSError(domain: "IdentityBackupError", code: -3, userInfo: [NSLocalizedDescriptionKey: "Unsupported backup schema"])
+        }
+        guard let salt = Data(base64Encoded: encryptedBundle.saltBase64),
+              let combined = Data(base64Encoded: encryptedBundle.ciphertextBase64) else {
+            throw NSError(domain: "IdentityBackupError", code: -4, userInfo: [NSLocalizedDescriptionKey: "Malformed encrypted backup data"])
+        }
+
+        let symmetricKey = try deriveKey(passphrase: passphrase, salt: salt)
+        let sealedBox = try AES.GCM.SealedBox(combined: combined)
+        let decryptedData = try AES.GCM.open(sealedBox, using: symmetricKey)
+        return try JSONDecoder().decode(IdentityBackupBundle.self, from: decryptedData)
+    }
+
+    /// Encode, encrypt, and write a backup bundle to disk.
+    public static func writeBundle(_ bundle: IdentityBackupBundle, to url: URL, with passphrase: String) throws {
+        let encryptedData = try encryptBundle(bundle, with: passphrase)
+        try encryptedData.write(to: url, options: .atomic)
+    }
+
+    /// Read, decrypt, and decode a backup bundle from disk.
+    public static func readBundle(from url: URL, with passphrase: String) throws -> IdentityBackupBundle {
+        let data = try Data(contentsOf: url)
+        return try decryptBundle(data: data, with: passphrase)
     }
 
     private static func readFile(kind: IdentityBackupFileKind, url: URL) throws -> IdentityBackupFile {

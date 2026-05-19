@@ -44,14 +44,25 @@ struct IdentityExportRoundTripTests {
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("x0x-identity-backup-\(UUID().uuidString).json")
-        try IdentityBackupExporter.writeBundle(bundle, to: tmp)
+        let testPassphrase = "correct-horse-battery-staple"
+        try IdentityBackupExporter.writeBundle(bundle, to: tmp, with: testPassphrase)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let decoded = try JSONDecoder().decode(
-            IdentityBackupBundle.self,
-            from: try Data(contentsOf: tmp)
-        )
+        // Verify that the exported file is in the encrypted format
+        let encryptedRaw = try Data(contentsOf: tmp)
+        let encryptedObj = try JSONDecoder().decode(EncryptedIdentityBackupBundle.self, from: encryptedRaw)
+        #expect(encryptedObj.schema == "x0x.encrypted-identity-backup.v1")
+        #expect(!encryptedObj.saltBase64.isEmpty)
+        #expect(!encryptedObj.ciphertextBase64.isEmpty)
+
+        // Verify that we can decrypt with the correct passphrase
+        let decoded = try IdentityBackupExporter.readBundle(from: tmp, with: testPassphrase)
         #expect(decoded == bundle)
+
+        // Verify that decryption throws an error when given an incorrect passphrase
+        #expect(performing: {
+            _ = try IdentityBackupExporter.readBundle(from: tmp, with: "wrong-password")
+        }, throws: { _ in true })
     }
 
     @Test("Agent card export to file then import on a second daemon round-trips the agent id")

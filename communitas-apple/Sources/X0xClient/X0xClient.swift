@@ -1003,6 +1003,11 @@ public final class X0xClient: Sendable {
         try await get("/upgrade")
     }
 
+    /// Apply a daemon update. `POST /upgrade/apply`
+    public func applyUpgrade() async throws -> ApplyUpgradeResponse {
+        try await postEmpty("/upgrade/apply")
+    }
+
     // MARK: - WebSocket Sessions
 
     /// List active WebSocket sessions. `GET /ws/sessions`

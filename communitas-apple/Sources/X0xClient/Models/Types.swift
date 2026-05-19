@@ -1168,6 +1168,21 @@ public struct UpgradeStatus: Codable, Sendable {
     }
 }
 
+/// Response from `POST /upgrade/apply`.
+public struct ApplyUpgradeResponse: Codable, Sendable {
+    public let ok: Bool
+    public let applied: Bool
+    public let version: String?
+    public let reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case applied
+        case version
+        case reason
+    }
+}
+
 // MARK: - Discovered Agent (Single)
 
 /// Wrapper for `GET /agents/discovered/:agent_id` response.

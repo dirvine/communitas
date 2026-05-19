@@ -87,26 +87,7 @@ impl DaemonManager {
     /// Checks `which x0x` first (PATH lookup), then falls back to well-known
     /// install locations matching the Swift DaemonManager behavior.
     pub fn is_installed() -> bool {
-        // Fast path: check PATH
-        if Command::new("which")
-            .arg("x0x")
-            .output()
-            .is_ok_and(|o| o.status.success())
-        {
-            return true;
-        }
-
-        // Check well-known install locations
-        let home = dirs_next::home_dir().unwrap_or_default();
-        let candidates = [
-            std::path::PathBuf::from("/usr/local/bin/x0x"),
-            std::path::PathBuf::from("/opt/homebrew/bin/x0x"),
-            std::path::PathBuf::from("/opt/zerobrew/bin/x0x"),
-            home.join(".cargo/bin/x0x"),
-            home.join(".x0x/bin/x0x"),
-        ];
-
-        candidates.iter().any(|p| p.exists())
+        Self::locate_installed_binary().is_some()
     }
 
     /// Install x0x using the official installer script.
@@ -141,8 +122,10 @@ impl DaemonManager {
     /// Times out after the internal subprocess timeout.
     pub async fn autostart() -> Result<()> {
         tracing::info!("configuring x0x autostart");
+        let binary_path = Self::locate_installed_binary()
+            .ok_or_else(|| X0xError::Daemon("x0x binary not installed".into()))?;
         let output = run_with_timeout(
-            tokio::process::Command::new("x0x").arg("autostart"),
+            tokio::process::Command::new(&binary_path).arg("autostart"),
             Duration::from_secs(SUBPROCESS_TIMEOUT_SECS),
             "autostart",
         )
@@ -163,8 +146,10 @@ impl DaemonManager {
     /// Times out after the internal subprocess timeout.
     pub async fn start() -> Result<()> {
         tracing::info!("starting x0x daemon");
+        let binary_path = Self::locate_installed_binary()
+            .ok_or_else(|| X0xError::Daemon("x0x binary not installed".into()))?;
         let output = run_with_timeout(
-            tokio::process::Command::new("x0x").arg("start"),
+            tokio::process::Command::new(&binary_path).arg("start"),
             Duration::from_secs(SUBPROCESS_TIMEOUT_SECS),
             "start",
         )
@@ -185,8 +170,10 @@ impl DaemonManager {
     /// Times out after the internal subprocess timeout.
     pub async fn stop() -> Result<()> {
         tracing::info!("stopping x0x daemon");
+        let binary_path = Self::locate_installed_binary()
+            .ok_or_else(|| X0xError::Daemon("x0x binary not installed".into()))?;
         let output = run_with_timeout(
-            tokio::process::Command::new("x0x").arg("stop"),
+            tokio::process::Command::new(&binary_path).arg("stop"),
             Duration::from_secs(SUBPROCESS_TIMEOUT_SECS),
             "stop",
         )

@@ -224,3 +224,4 @@ public/
 # Local files
 dave
 .beads/
+.worktrees/

@@ -21,6 +21,7 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("shutdown", "POST", "/shutdown"),
     ("agent", "GET", "/agent"),
     ("agent_user_id", "GET", "/agent/user-id"),
+    ("agent_sign", "POST", "/agent/sign"),
     ("agent_card", "GET", "/agent/card"),
     ("import_agent_card", "POST", "/agent/card/import"),
     ("introduction", "GET", "/introduction"),
@@ -48,6 +49,10 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
         "GET",
         "/diagnostics/connectivity",
     ),
+    ("diagnostics_ack", "GET", "/diagnostics/ack"),
+    ("diagnostics_dm", "GET", "/diagnostics/dm"),
+    ("diagnostics_exec", "GET", "/diagnostics/exec"),
+    ("diagnostics_groups", "GET", "/diagnostics/groups"),
     ("gossip_stats", "GET", "/diagnostics/gossip"),
     ("probe_peer", "POST", "/peers/:peer_id/probe"),
     ("peer_health", "GET", "/peers/:peer_id/health"),
@@ -58,6 +63,9 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     // Direct Messaging
     ("connect_agent", "POST", "/agents/connect"),
     ("connect_machine", "POST", "/machines/connect"),
+    ("exec_run", "POST", "/exec/run"),
+    ("exec_cancel", "POST", "/exec/cancel"),
+    ("exec_sessions", "GET", "/exec/sessions"),
     ("send_direct", "POST", "/direct/send"),
     ("direct_connections", "GET", "/direct/connections"),
     // Contacts

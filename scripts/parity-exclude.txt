@@ -109,3 +109,14 @@ join_store
 list_task_lists
 transfer_status
 create_group
+
+# (GAP-OBSERVABILITY) Operator/automation APIs covered by typed clients;
+# desktop apps do not expose these as end-user features yet.
+agent_sign
+diagnostics_ack
+diagnostics_dm
+diagnostics_exec
+diagnostics_groups
+exec_run
+exec_cancel
+exec_sessions

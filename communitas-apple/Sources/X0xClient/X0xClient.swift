@@ -181,6 +181,10 @@ public final class X0xClient: Sendable {
     /// - Parameters:
     ///   - displayName: Display name to include in the card.
     ///   - includeGroups: Whether to include group invites in the card.
+    public func agentSign(payloadB64: String) async throws -> AgentSignResponse {
+        try await post("/agent/sign", body: AgentSignRequest(payloadB64: payloadB64))
+    }
+
     public func agentCard(displayName: String? = nil, includeGroups: Bool? = nil) async throws -> AgentCardResponse {
         var queryItems: [URLQueryItem] = []
         if let displayName {
@@ -245,6 +249,18 @@ public final class X0xClient: Sendable {
     /// Fire-and-forget: returns when the daemon has accepted the message
     /// for transmission, with no delivery confirmation. For ACK-confirmed
     /// delivery use `sendDirect(agentId:payload:requireAckMs:)`.
+    public func execRun(_ request: ExecRunRequest) async throws -> ExecRunResponse {
+        try await post("/exec/run", body: request)
+    }
+
+    public func execCancel(requestId: String, agentId: String? = nil) async throws {
+        let _: Empty = try await post("/exec/cancel", body: ExecCancelRequest(requestId: requestId, agentId: agentId))
+    }
+
+    public func execSessions() async throws -> ExecSessionsSnapshot {
+        try await get("/exec/sessions")
+    }
+
     public func sendDirect(agentId: String, payload: String) async throws {
         let body = DirectMessageRequest(agentId: agentId, payload: payload)
         let _: Empty = try await post("/direct/send", body: body)
@@ -649,6 +665,26 @@ public final class X0xClient: Sendable {
     /// Get full ant-quic connectivity diagnostics. `GET /diagnostics/connectivity`
     public func connectivityDiagnostics() async throws -> ConnectivityDiagnostics {
         try await get("/diagnostics/connectivity")
+    }
+
+    /// ant-quic ACK-v2 diagnostics. `GET /diagnostics/ack`
+    public func diagnosticsAck() async throws -> DiagnosticsSnapshot {
+        try await get("/diagnostics/ack")
+    }
+
+    /// Direct-message transport diagnostics. `GET /diagnostics/dm`
+    public func diagnosticsDm() async throws -> DiagnosticsSnapshot {
+        try await get("/diagnostics/dm")
+    }
+
+    /// Remote exec diagnostics. `GET /diagnostics/exec`
+    public func diagnosticsExec() async throws -> DiagnosticsSnapshot {
+        try await get("/diagnostics/exec")
+    }
+
+    /// Named-group ingest diagnostics. `GET /diagnostics/groups`
+    public func diagnosticsGroups() async throws -> DiagnosticsSnapshot {
+        try await get("/diagnostics/groups")
     }
 
     /// List connected peers. `GET /peers`

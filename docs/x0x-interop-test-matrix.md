@@ -1,7 +1,7 @@
 # x0x Interop Test Matrix
 
-Status: frozen baseline for Milestone 1
-Last reviewed: 2026-03-26
+Status: release validation for 0.12.4 beta
+Last reviewed: 2026-05-26
 Primary contract: `docs/x0x-integration-contract.md`
 
 ## Purpose
@@ -18,7 +18,7 @@ Dioxus and Swift rows remain execution work for later milestones unless marked o
 
 ## Legend
 
-- **Pass**: verified on 2026-03-26
+- **Pass**: verified on 2026-05-26 unless noted otherwise
 - **Fail**: verified broken
 - **Todo**: not yet executed in this milestone
 - **N/A**: not applicable
@@ -29,15 +29,16 @@ These rows validate the source-of-truth side before any Communitas app interop w
 
 | ID | Flow | Expected result | Status | Notes |
 |---|---|---|---|---|
-| X1 | `x0x --version` | `x0x 0.10.0` | Pass | Validated live |
-| X2 | `x0x health` and `GET /health` | Flattened success payload, no `data` wrapper | Pass | `{"ok":true,"status":"healthy",...}` |
-| X3 | `x0x status` and `GET /status` | Flattened success payload, no `data` wrapper | Pass | Includes `api_address`, `external_addrs`, `agent_id`, `warnings` |
-| X4 | `x0x routes` | Reports `71 endpoints total` | Pass | Live CLI baseline; README still says `73` |
+| X1 | `x0x --version` / `x0xd --version` | CLI `0.15.2`, daemon `0.19.49` | Pass | Version skew observed; daemon is source of runtime truth |
+| X2 | `GET /health` | Flattened success payload, no `data` wrapper | Pass | `{"ok":true,"status":"healthy","version":"0.19.49",...}` |
+| X3 | `GET /status` | Flattened success payload, no `data` wrapper | Pass | Includes `api_address`, `external_addrs`, `agent_id`, `warnings` |
+| X4 | `x0x routes` | Reports `82 endpoints total` | Pass | Live CLI inventory is still not exhaustive of every directly live route |
 | X5 | Direct probe of `/shutdown`, `/gui`, `/gui/`, `/ws`, `/ws/direct` | Routes are live even though `x0x routes` is incomplete | Pass | `/shutdown` returned `405 Allow: POST`; `/gui*` returned `200`; `/ws*` upgraded `101` |
 | X6 | `GET /events` | SSE endpoint, not WebSocket | Pass | `content-type: text/event-stream` |
 | X7 | `GET /groups/:id` | `chat_topic` and `metadata_topic` use 16-char group prefix | Pass | Example: `x0x.group.e0511563b44806e6.chat/general` |
 | X8 | WS connect to `/ws` and `/ws/direct` | Initial `connected` frame received | Pass | Verified live |
 | X9 | WS keepalive | Client tolerates unsolicited `{"type":"pong"}` | Pass | Observed live immediately after connect |
+| X10 | New daemon API coverage | `/agent/sign`, `/diagnostics/{ack,dm,exec,groups}`, `/exec/{run,cancel,sessions}` are covered by Rust and Swift clients | Pass | Direct probes returned `200` for read/sign/session endpoints and structured `400` for intentionally invalid exec requests |
 
 ## 1. Daemon lifecycle and identity
 

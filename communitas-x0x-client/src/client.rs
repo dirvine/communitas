@@ -219,6 +219,20 @@ impl X0xClient {
         Ok(status.user_id)
     }
 
+    /// Sign a base64-encoded payload with the local agent signing key.
+    pub async fn agent_sign(&self, payload_b64: &str) -> Result<AgentSignResponse> {
+        let req = AgentSignRequest {
+            payload_b64: payload_b64.to_owned(),
+        };
+        let resp = self
+            .client
+            .post(self.url("/agent/sign"))
+            .json(&req)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
     /// Generate a shareable agent card and x0x://agent link.
     pub async fn agent_card(
         &self,
@@ -401,6 +415,38 @@ impl X0xClient {
         self.parse(resp).await
     }
 
+    /// ant-quic ACK-v2 diagnostics from `GET /diagnostics/ack`.
+    pub async fn diagnostics_ack(&self) -> Result<DiagnosticsSnapshot> {
+        let resp = self.client.get(self.url("/diagnostics/ack")).send().await?;
+        self.parse(resp).await
+    }
+
+    /// Direct-message transport diagnostics from `GET /diagnostics/dm`.
+    pub async fn diagnostics_dm(&self) -> Result<DiagnosticsSnapshot> {
+        let resp = self.client.get(self.url("/diagnostics/dm")).send().await?;
+        self.parse(resp).await
+    }
+
+    /// Remote exec diagnostics from `GET /diagnostics/exec`.
+    pub async fn diagnostics_exec(&self) -> Result<DiagnosticsSnapshot> {
+        let resp = self
+            .client
+            .get(self.url("/diagnostics/exec"))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Named-group ingest diagnostics from `GET /diagnostics/groups`.
+    pub async fn diagnostics_groups(&self) -> Result<DiagnosticsSnapshot> {
+        let resp = self
+            .client
+            .get(self.url("/diagnostics/groups"))
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
     /// PubSub drop-detection counters (x0x 0.18+).
     ///
     /// Returns the 9 atomic counters that `x0xd` tracks across the publish
@@ -496,6 +542,32 @@ impl X0xClient {
             .json(&req)
             .send()
             .await?;
+        self.parse(resp).await
+    }
+
+    /// Run a strictly allowlisted command on a remote daemon.
+    pub async fn exec_run(&self, request: &ExecRunRequest) -> Result<ExecRunResponse> {
+        let resp = self
+            .client
+            .post(self.url("/exec/run"))
+            .json(request)
+            .send()
+            .await?;
+        self.parse(resp).await
+    }
+
+    /// Cancel an in-flight remote exec request.
+    pub async fn exec_cancel(&self, request_id: &str, agent_id: Option<&str>) -> Result<()> {
+        let req = ExecCancelRequest {
+            request_id: request_id.to_owned(),
+            agent_id: agent_id.map(ToOwned::to_owned),
+        };
+        self.post_ok("/exec/cancel", &req).await
+    }
+
+    /// List local pending and remote active exec sessions.
+    pub async fn exec_sessions(&self) -> Result<ExecSessionsSnapshot> {
+        let resp = self.client.get(self.url("/exec/sessions")).send().await?;
         self.parse(resp).await
     }
 

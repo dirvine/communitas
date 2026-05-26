@@ -1,24 +1,31 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use communitas_x0x_client::X0xClient;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tokio::test]
 #[ignore = "requires a running x0xd on localhost"]
-async fn group_list_and_detail_match_live_contract() {
+async fn group_list_and_detail_match_live_contract() -> Result<(), Box<dyn std::error::Error>> {
     let client = X0xClient::new();
 
-    let groups = client.list_groups().await.expect("groups should decode");
-    assert!(
-        !groups.is_empty(),
-        "expected at least one group in live daemon"
-    );
+    let groups = client.list_groups().await?;
+    let group_id = if let Some(group) = groups.first() {
+        group.group_id.clone()
+    } else {
+        let suffix = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        client
+            .create_group(
+                &format!("communitas-live-contract-{suffix}"),
+                Some("created by the Communitas x0x live contract test"),
+                Some("Communitas Live Contract"),
+            )
+            .await?
+            .group_id
+    };
 
-    let group = client
-        .get_group(&groups[0].group_id)
-        .await
-        .expect("group detail should decode");
+    let group = client.get_group(&group_id).await?;
 
-    assert_eq!(group.group_id, groups[0].group_id);
+    assert_eq!(group.group_id, group_id);
     assert!(!group.name.is_empty(), "group name should be present");
     assert!(
         group
@@ -36,16 +43,14 @@ async fn group_list_and_detail_match_live_contract() {
     );
     assert!(group.members.len() <= 10_000, "member list should be sane");
 
+    let agent = client.agent().await?;
     let welcome = client
-        .create_mls_welcome(
-            &groups[0].group_id,
-            &client.agent().await.expect("agent").agent_id,
-        )
-        .await
-        .expect("mls welcome should decode");
-    assert_eq!(welcome.group_id, groups[0].group_id);
+        .create_mls_welcome(&group_id, &agent.agent_id)
+        .await?;
+    assert_eq!(welcome.group_id, group_id);
     assert!(
         !welcome.welcome.is_empty(),
         "welcome payload should be present"
     );
+    Ok(())
 }

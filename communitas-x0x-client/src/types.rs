@@ -283,6 +283,9 @@ pub struct BootstrapCacheStatus {
     pub connection_count: u32,
 }
 
+/// Raw JSON diagnostics payload returned by x0xd observability endpoints.
+pub type DiagnosticsSnapshot = serde_json::Value;
+
 /// Response from `GET /diagnostics/connectivity`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConnectivityDiagnostics {
@@ -427,6 +430,22 @@ pub struct AgentCard {
     #[serde(default)]
     pub stores: Vec<CardStore>,
     pub created_at: u64,
+}
+
+/// Request body for `POST /agent/sign`.
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentSignRequest {
+    /// Base64-encoded payload bytes to sign verbatim.
+    pub payload_b64: String,
+}
+
+/// Detached agent signature from `POST /agent/sign`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AgentSignResponse {
+    pub agent_id: String,
+    pub public_key_b64: String,
+    pub signature_b64: String,
+    pub algorithm: String,
 }
 
 /// Response from `GET /agent/card`.
@@ -1169,6 +1188,50 @@ pub struct UpgradeStatus {
     #[serde(default)]
     pub current_version: Option<String>,
 }
+
+/// Request body for `POST /exec/run`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExecRunRequest {
+    pub agent_id: String,
+    pub argv: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stdin_b64: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+}
+
+/// Response from `POST /exec/run`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExecRunResponse {
+    pub request_id: String,
+    #[serde(default)]
+    pub code: Option<i32>,
+    #[serde(default)]
+    pub signal: Option<i32>,
+    pub duration_ms: u64,
+    pub stdout_b64: String,
+    pub stderr_b64: String,
+    pub stdout_bytes_total: u64,
+    pub stderr_bytes_total: u64,
+    pub truncated: bool,
+    #[serde(default)]
+    pub denial_reason: Option<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+/// Request body for `POST /exec/cancel`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExecCancelRequest {
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+}
+
+/// Snapshot from `GET /exec/sessions`.
+pub type ExecSessionsSnapshot = serde_json::Value;
 
 // ── WebSocket sessions ──────────────────────────────────────────────────────
 

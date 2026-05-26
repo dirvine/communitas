@@ -1,7 +1,7 @@
 # x0x Integration Contract
 
-Status: frozen for Milestone 1
-Last validated: 2026-03-26
+Status: release validation for 0.12.4 beta
+Last validated: 2026-05-26
 Scope: Communitas integrations against `../x0x`
 
 ## 1. Purpose
@@ -34,23 +34,25 @@ Resolution rule inside item 1:
 
 ## 3. Live validation baseline
 
-Validated on 2026-03-26 against the running local x0x installation.
+Validated on 2026-05-26 against the running local x0x installation.
 
 Required checks:
 
-- `x0x --version` → `x0x 0.10.0`
-- `x0x health` → flattened success output
-- `x0x status` → flattened success output
-- `x0x routes` → `71 endpoints total`
-- `curl -s http://127.0.0.1:12700/health` → flattened JSON
-- `curl -s http://127.0.0.1:12700/status` → flattened JSON
+- `x0x --version` → `x0x 0.15.2` (CLI wrapper)
+- `x0xd --version` → `x0xd 0.19.49` (running daemon binary)
+- `GET /health` → flattened success output
+- `GET /status` → flattened success output
+- `x0x routes` → `82 endpoints total`
+- `cargo test -p communitas-x0x-client --tests` → Rust/Swift parity and x0x registry coverage pass
+- `swift test --filter X0xClientTests` and `X0X_LIVE_TESTS=1 swift test --filter X0xClientTests` → pass
 
 Observed live facts:
 
 - Base API URL: `http://127.0.0.1:12700`
-- `GET /health` returned `{"ok":true,"status":"healthy","version":"0.10.0","peers":4,"uptime_secs":...}`
-- `GET /status` returned `{"ok":true,"status":"connected","version":"0.10.0","uptime_secs":...,"api_address":"127.0.0.1:12700","external_addrs":[...],"agent_id":"...","peers":4,"warnings":[]}`
-- `x0x routes` reported `71 endpoints total`
+- `GET /health` returned `{"ok":true,"status":"healthy","version":"0.19.49","peers":4,"uptime_secs":...}`
+- `GET /status` returned a flattened payload with `api_address`, `external_addrs`, `agent_id`, `peers`, and `warnings`
+- `x0x routes` reported `82 endpoints total`
+- Direct probes of `/agent/sign`, `/diagnostics/{ack,dm,exec,groups}`, `/exec/sessions`, `/exec/run`, and `/exec/cancel` returned live flattened success or structured validation errors as expected
 
 Additional direct runtime checks used to resolve drift:
 
@@ -68,11 +70,11 @@ The current x0x sources and live outputs do not fully agree on route inventory.
 
 | Source | Current claim | Notes |
 |---|---|---|
-| Live `x0x routes` | `71 endpoints total` | Not exhaustive of all live daemon routes |
+| Live `x0x routes` | `82 endpoints total` | Not exhaustive of all live daemon routes; CLI and daemon versions can differ |
 | `../x0x/src/api/mod.rs` | 71 registry entries | Includes `/shutdown` and `/gui`; omits `/ws`, `/ws/direct`, `/gui/` |
 | `../x0x/docs/api-reference.md` / `api.md` | `/ws`, `/ws/direct`, `/shutdown`, `/gui`, `/gui/` documented | More complete than `x0x routes` for these endpoints |
-| `../x0x/README.md` | says `73` documented endpoints | Stale on 2026-03-26 |
-| `../x0x/src/bin/x0xd.rs` router | 76 method/path handlers | Matches direct runtime probes for `/ws`, `/ws/direct`, `/shutdown`, `/gui`, `/gui/` |
+| `../x0x/README.md` | may lag generated route inventory | Stale route counts should not block direct probes |
+| `../x0x/src/bin/x0xd.rs` router | includes diagnostics, exec, signing, WS, GUI, and lifecycle handlers | Matches direct runtime probes for the 0.19.49 daemon |
 
 Frozen rule for Communitas:
 

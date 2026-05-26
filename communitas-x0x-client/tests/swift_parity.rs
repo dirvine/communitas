@@ -18,6 +18,7 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("shutdown", "shutdown"),
     ("agent", "agent"),
     ("agent_user_id", "agentUserId"),
+    ("agent_sign", "agentSign"),
     ("agent_card", "agentCard"),
     ("import_agent_card", "importAgentCard"),
     ("introduction", "introduction"),
@@ -37,6 +38,10 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("network_status", "networkStatus"),
     ("bootstrap_cache", "bootstrapCache"),
     ("connectivity_diagnostics", "connectivityDiagnostics"),
+    ("diagnostics_ack", "diagnosticsAck"),
+    ("diagnostics_dm", "diagnosticsDm"),
+    ("diagnostics_exec", "diagnosticsExec"),
+    ("diagnostics_groups", "diagnosticsGroups"),
     ("gossip_stats", "gossipStats"),
     ("probe_peer", "probePeer"),
     ("peer_health", "peerHealth"),
@@ -47,6 +52,9 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     // Direct Messaging
     ("connect_agent", "connectAgent"),
     ("connect_machine", "connectMachine"),
+    ("exec_run", "execRun"),
+    ("exec_cancel", "execCancel"),
+    ("exec_sessions", "execSessions"),
     ("send_direct", "sendDirect"),
     ("direct_connections", "directConnections"),
     // Contacts

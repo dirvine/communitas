@@ -4,6 +4,14 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [0.12.4] - 2026-05-26
+
+### Added
+- Added Swift and Rust x0x client coverage for x0xd 0.19 diagnostics, remote exec, and agent signing endpoints.
+
+### Fixed
+- Updated live group contract testing to seed a group when a fresh daemon has none.
+
 ## [0.11.11] - 2026-04-06
 
 ### Fixed

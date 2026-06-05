@@ -153,6 +153,7 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("gui_html", "guiHTML"),
     // Upgrades
     ("check_upgrade", "checkUpgrade"),
+    ("apply_upgrade", "applyUpgrade"),
     // Presence (extended)
     ("presence_online", "presenceOnline"),
     ("presence_foaf", "presenceFoaf"),

@@ -552,52 +552,30 @@ async fn check_for_update() -> std::result::Result<Option<String>, String> {
     }
 }
 
-/// Apply a local x0xd daemon update via the raw endpoint added in x0xd 0.19.7.
+/// Apply a local x0xd daemon update via the typed x0x client.
 async fn apply_update() -> std::result::Result<String, String> {
-    let (base, token) = x0x_endpoint().map_err(|e| format!("{e}"))?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("{e}"))?;
-    let mut request = client.post(format!("{}/upgrade/apply", base.trim_end_matches('/')));
-    if let Some(token) = token.filter(|value| !value.trim().is_empty()) {
-        request = request.bearer_auth(token);
-    }
-    let response = request.send().await.map_err(|e| format!("{e}"))?;
-    let status = response.status();
-    let body: serde_json::Value = response.json().await.map_err(|e| format!("{e}"))?;
-    if !status.is_success() || body.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
-        return Err(format!("HTTP {status}: {body}"));
-    }
-    if body.get("applied").and_then(serde_json::Value::as_bool) == Some(true) {
-        let version = body
-            .get("version")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("new version");
+    let client = x0x_client_from_env();
+    let response = client.apply_upgrade().await.map_err(|e| format!("{e}"))?;
+    if response.applied {
+        let version = response.version.as_deref().unwrap_or("new version");
         Ok(format!("x0xd update applied: {version}"))
     } else {
-        let reason = body
-            .get("reason")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("no upgrade required");
+        let reason = response.reason.as_deref().unwrap_or("no upgrade required");
         Ok(format!("x0xd update not applied: {reason}"))
     }
 }
 
-fn x0x_endpoint() -> std::result::Result<(String, Option<String>), communitas_x0x_client::X0xError>
-{
-    let env_base = std::env::var("X0X_API_BASE")
+fn x0x_client_from_env() -> X0xClient {
+    let base = std::env::var("X0X_API_BASE")
         .ok()
         .filter(|value| !value.trim().is_empty());
-    let env_token = std::env::var("X0X_API_TOKEN")
+    let token = std::env::var("X0X_API_TOKEN")
         .ok()
         .filter(|value| !value.trim().is_empty());
-    if let Some(base) = env_base {
-        return Ok((base, env_token));
+
+    match (base, token) {
+        (Some(base), Some(token)) => X0xClient::with_base_url_and_token(&base, &token),
+        (Some(base), None) => X0xClient::with_base_url(&base),
+        _ => X0xClient::new(),
     }
-    let config = communitas_x0x_client::discover_x0x_config()?;
-    Ok((
-        format!("http://{}", config.address.trim_end_matches('/')),
-        Some(config.token),
-    ))
 }

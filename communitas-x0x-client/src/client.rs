@@ -1161,6 +1161,12 @@ impl X0xClient {
         self.parse(resp).await
     }
 
+    /// Apply a pending x0xd update.
+    pub async fn apply_upgrade(&self) -> Result<ApplyUpgradeResponse> {
+        let resp = self.client.post(self.url("/upgrade/apply")).send().await?;
+        self.parse(resp).await
+    }
+
     // ── Constitution ───────────────────────────────────────────────────────
 
     /// Fetch the raw markdown text of the x0x constitution.

@@ -216,6 +216,7 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("gui_html", "GET", "/gui"),
     // Upgrades
     ("check_upgrade", "GET", "/upgrade"),
+    ("apply_upgrade", "POST", "/upgrade/apply"),
     // Presence (extended)
     ("presence_online", "GET", "/presence/online"),
     ("presence_foaf", "GET", "/presence/foaf"),

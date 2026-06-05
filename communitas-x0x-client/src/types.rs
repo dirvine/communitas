@@ -1189,6 +1189,16 @@ pub struct UpgradeStatus {
     pub current_version: Option<String>,
 }
 
+/// Structured response from `POST /upgrade/apply`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApplyUpgradeResponse {
+    pub applied: bool,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
 /// Request body for `POST /exec/run`.
 #[derive(Debug, Clone, Serialize)]
 pub struct ExecRunRequest {

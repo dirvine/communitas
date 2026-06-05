@@ -9,6 +9,7 @@ import XCTest
 /// on observable UI state rather than on private APIs.
 ///
 /// Running:
+///   COMMUNITAS_RUN_XCUITEST=1 \
 ///   xcodebuild \
 ///     -scheme Communitas \
 ///     -destination 'platform=macOS' \
@@ -19,17 +20,21 @@ import XCTest
 ///   * An `x0xd` daemon is running on 127.0.0.1:12700 (default).
 ///   * The app is signed (or ad-hoc signed) so XCUITest can launch it.
 ///
-/// When `XCUITEST_SKIP=1` is set in the environment, every test is a
-/// fast-pass. This lets CI machines without a macOS runner import the
-/// target without breaking the build.
+/// Set `COMMUNITAS_RUN_XCUITEST=1` to run this suite. Plain `swift test`
+/// does not provide the target app path XCUITest needs, so these tests skip
+/// by default unless explicitly enabled. `XCUITEST_SKIP=1` also forces a skip.
 final class CommunitasGoldenPathsUITests: XCTestCase {
 
     var app: XCUIApplication!
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        if ProcessInfo.processInfo.environment["XCUITEST_SKIP"] == "1" {
+        let env = ProcessInfo.processInfo.environment
+        if env["XCUITEST_SKIP"] == "1" {
             throw XCTSkip("XCUITEST_SKIP=1 — skipping UI test")
+        }
+        guard env["COMMUNITAS_RUN_XCUITEST"] == "1" else {
+            throw XCTSkip("COMMUNITAS_RUN_XCUITEST is not set — skipping XCUITest under swift test")
         }
         app = XCUIApplication()
         app.launchEnvironment["X0X_API_BASE"] =

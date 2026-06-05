@@ -95,7 +95,7 @@ async fn handle_operation(op: &str, command: &Value) -> Result<Value, String> {
         "kv.access_policy_setup" => kv_access_policy_setup(&client).await,
         "presence.foaf" => presence_foaf(&client).await,
         "upgrade.check" => upgrade_check(&client).await,
-        "upgrade.apply" => upgrade_apply().await,
+        "upgrade.apply" => upgrade_apply(&client).await,
         _ => Err(format!("unknown e2e op: {op}")),
     }
 }
@@ -463,12 +463,19 @@ async fn upgrade_check(client: &X0xClient) -> Result<Value, String> {
     }
 }
 
-async fn upgrade_apply() -> Result<Value, String> {
-    let raw = raw_x0x_request(reqwest::Method::POST, "/upgrade/apply").await?;
+async fn upgrade_apply(client: &X0xClient) -> Result<Value, String> {
+    let response = client
+        .apply_upgrade()
+        .await
+        .map_err(|err| err.to_string())?;
     Ok(json!({
-        "http_status": raw.http_status,
-        "client_method_gap": true,
-        "body": raw.body,
+        "http_status": 200,
+        "body": {
+            "ok": true,
+            "applied": response.applied,
+            "version": response.version,
+            "reason": response.reason,
+        },
     }))
 }
 

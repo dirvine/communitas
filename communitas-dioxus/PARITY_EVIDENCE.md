@@ -117,5 +117,4 @@ Proof bundles land under `proofs/dioxus-parity-YYYYMMDD/` and include `stdout.lo
 ### Apply update
 
 - Test: `tests/e2e/upgrade.rs::dioxus_parity_upgrade_apply_update_endpoint`
-- Evidence: x0xd exposes the new `POST /upgrade/apply` endpoint, but `communitas-x0x-client` does not yet expose a typed method. The Dioxus test driver performs the POST with the same daemon base/token to prove the endpoint is routed and returns a structured response body, while also marking `client_method_gap: true` in the response.
-- Follow-up: add a typed `X0xClient::apply_upgrade` method so the Dioxus UI can remove this raw endpoint bridge.
+- Evidence: Dioxus binary command `upgrade.apply` calls the typed `X0xClient::apply_upgrade` method against a live daemon and validates the structured `applied` / `version` / `reason` response shape. The Dioxus settings UI uses the same typed method, preserving `X0X_API_BASE` / `X0X_API_TOKEN` overrides for test targets.

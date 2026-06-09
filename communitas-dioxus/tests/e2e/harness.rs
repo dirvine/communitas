@@ -7,8 +7,9 @@
 //! isolated `x0xd` daemons, then launches the Communitas Dioxus binary in its
 //! feature-gated headless JSON driver mode pointed at daemon A.
 
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
@@ -16,9 +17,10 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use communitas_x0x_client::X0xClient;
 use serde_json::{Value, json};
-use x0x_test_harness::daemon::DaemonFixture;
+use tempfile::TempDir;
 
 const DRIVER_TIMEOUT: Duration = Duration::from_secs(45);
+const DAEMON_STARTUP_TIMEOUT: Duration = Duration::from_secs(45);
 
 /// Two-daemon Dioxus parity fixture.
 pub struct ParityHarness {
@@ -34,8 +36,8 @@ pub struct ParityHarness {
 impl ParityHarness {
     /// Start two isolated daemons and the headless Dioxus test driver.
     pub async fn start(prefix: &str) -> Result<Self> {
-        let primary = DaemonFixture::start(&format!("{prefix}-a")).await;
-        let secondary = DaemonFixture::start(&format!("{prefix}-b")).await;
+        let primary = DaemonFixture::start(&format!("{prefix}-a")).await?;
+        let secondary = DaemonFixture::start(&format!("{prefix}-b")).await?;
         let api_base = primary.url("");
         let token = primary.api_token().to_string();
         let mut app = DioxusDriver::start(&api_base, &token)?;
@@ -59,6 +61,152 @@ impl ParityHarness {
     /// Typed client for the secondary daemon.
     pub fn secondary_client(&self) -> X0xClient {
         X0xClient::with_base_url_and_token(&self.secondary.url(""), self.secondary.api_token())
+    }
+}
+
+/// Isolated x0xd daemon fixture for Communitas Dioxus E2E tests.
+pub struct DaemonFixture {
+    process: Child,
+    api_addr: String,
+    api_token: String,
+    tempdir: TempDir,
+    stdout_log: PathBuf,
+    stderr_log: PathBuf,
+}
+
+impl DaemonFixture {
+    /// Start a fresh daemon, preferring `X0XD_BIN` when supplied by CI or scripts.
+    pub async fn start(_prefix: &str) -> Result<Self> {
+        let binary = find_x0xd_binary()?;
+        let tempdir = TempDir::new().context("create daemon temp dir")?;
+        let config_path = tempdir.path().join("config.toml");
+        let config = format!(
+            "bind_address = \"0.0.0.0:0\"\napi_address = \"127.0.0.1:0\"\ndata_dir = \"{}\"\nlog_level = \"warn\"\nbootstrap_peers = []\n",
+            tempdir.path().display(),
+        );
+        fs::write(&config_path, config).context("write daemon config")?;
+
+        let stdout_log = tempdir.path().join("daemon.stdout.log");
+        let stderr_log = tempdir.path().join("daemon.stderr.log");
+        let stdout = File::create(&stdout_log).context("create daemon stdout log")?;
+        let stderr = File::create(&stderr_log).context("create daemon stderr log")?;
+        let process = Command::new(&binary)
+            .arg("--config")
+            .arg(&config_path)
+            .arg("--skip-update-check")
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()
+            .with_context(|| format!("start x0xd at {}", binary.display()))?;
+
+        let mut fixture = Self {
+            process,
+            api_addr: String::new(),
+            api_token: String::new(),
+            tempdir,
+            stdout_log,
+            stderr_log,
+        };
+        fixture.wait_for_startup().await?;
+        Ok(fixture)
+    }
+
+    async fn wait_for_startup(&mut self) -> Result<()> {
+        let port_file = self.port_file();
+        let deadline = tokio::time::Instant::now() + DAEMON_STARTUP_TIMEOUT;
+        self.api_addr = loop {
+            if let Some(status) = self
+                .process
+                .try_wait()
+                .context("poll x0xd startup status")?
+            {
+                bail!(
+                    "x0xd exited before writing api.port with status {status}\nstdout:\n{}\nstderr:\n{}",
+                    read_log_excerpt(&self.stdout_log),
+                    read_log_excerpt(&self.stderr_log)
+                );
+            }
+            if tokio::time::Instant::now() > deadline {
+                bail!(
+                    "timeout waiting for x0xd api.port at {}\nstdout:\n{}\nstderr:\n{}",
+                    port_file.display(),
+                    read_log_excerpt(&self.stdout_log),
+                    read_log_excerpt(&self.stderr_log)
+                );
+            }
+            if let Ok(addr) = fs::read_to_string(&port_file) {
+                let trimmed = addr.trim();
+                if let Ok(addr) = trimmed.parse::<std::net::SocketAddr>() {
+                    break addr.to_string();
+                }
+                if let Ok(port) = trimmed.parse::<u16>() {
+                    break format!("127.0.0.1:{port}");
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        };
+
+        let client = X0xClient::with_base_url(&self.url(""));
+        let deadline = tokio::time::Instant::now() + DAEMON_STARTUP_TIMEOUT;
+        loop {
+            if tokio::time::Instant::now() > deadline {
+                bail!(
+                    "timeout waiting for x0xd health at {}\nstdout:\n{}\nstderr:\n{}",
+                    self.url("/health"),
+                    read_log_excerpt(&self.stdout_log),
+                    read_log_excerpt(&self.stderr_log)
+                );
+            }
+            if client.health().await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
+        let token_file = self.token_file();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        self.api_token = loop {
+            if let Ok(token) = fs::read_to_string(&token_file) {
+                let token = token.trim().to_owned();
+                if !token.is_empty() {
+                    break token;
+                }
+            }
+            if tokio::time::Instant::now() > deadline {
+                bail!(
+                    "timeout waiting for x0xd api-token at {}",
+                    token_file.display()
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+
+        Ok(())
+    }
+
+    /// Full HTTP URL for `path`.
+    pub fn url(&self, path: &str) -> String {
+        format!("http://{}{}", self.api_addr, path)
+    }
+
+    /// Raw API token.
+    pub fn api_token(&self) -> &str {
+        &self.api_token
+    }
+
+    fn port_file(&self) -> PathBuf {
+        self.tempdir.path().join("api.port")
+    }
+
+    fn token_file(&self) -> PathBuf {
+        self.tempdir.path().join("api-token")
+    }
+}
+
+impl Drop for DaemonFixture {
+    fn drop(&mut self) {
+        let _ = self.process.kill();
+        let _ = self.process.wait();
     }
 }
 
@@ -180,4 +328,45 @@ fn dioxus_binary_path() -> Result<PathBuf> {
     path.push("debug");
     path.push(format!("communitas-dioxus{}", std::env::consts::EXE_SUFFIX));
     Ok(path)
+}
+
+fn find_x0xd_binary() -> Result<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(path) = std::env::var("X0XD_BIN") {
+        candidates.push(PathBuf::from(path));
+    }
+    if let Ok(dir) = std::env::var("X0X_DIR") {
+        let dir = PathBuf::from(dir);
+        candidates.push(dir.join("target/release/x0xd"));
+        candidates.push(dir.join("target/debug/x0xd"));
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_dir = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .context("resolve Communitas workspace from E2E manifest dir")?;
+    candidates.push(workspace_dir.join("../x0x/target/release/x0xd"));
+    candidates.push(workspace_dir.join("../x0x/target/debug/x0xd"));
+    candidates.push(std::env::current_dir()?.join("target/release/x0xd"));
+    candidates.push(std::env::current_dir()?.join("target/debug/x0xd"));
+
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+
+    bail!("could not locate x0xd; build x0x or set X0XD_BIN")
+}
+
+fn read_log_excerpt(path: &Path) -> String {
+    let Ok(contents) = fs::read_to_string(path) else {
+        return "(unreadable)".to_owned();
+    };
+    let mut lines: Vec<&str> = contents.lines().rev().take(40).collect();
+    lines.reverse();
+    lines.join("\n")
 }

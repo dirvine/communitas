@@ -536,19 +536,25 @@ async fn upgrade_check(client: &X0xClient) -> Result<Value, String> {
 }
 
 async fn upgrade_apply(client: &X0xClient) -> Result<Value, String> {
-    let response = client
-        .apply_upgrade()
-        .await
-        .map_err(|err| err.to_string())?;
-    Ok(json!({
-        "http_status": 200,
-        "body": {
-            "ok": true,
-            "applied": response.applied,
-            "version": response.version,
-            "reason": response.reason,
-        },
-    }))
+    match client.apply_upgrade().await {
+        Ok(response) => Ok(json!({
+            "http_status": 200,
+            "body": {
+                "ok": true,
+                "applied": response.applied,
+                "version": response.version,
+                "reason": response.reason,
+            },
+        })),
+        Err(client_error) => {
+            let raw = raw_x0x_request(reqwest::Method::POST, "/upgrade/apply").await?;
+            Ok(json!({
+                "http_status": raw.http_status,
+                "client_error": client_error.to_string(),
+                "body": raw.body,
+            }))
+        }
+    }
 }
 
 struct RawX0xResponse {

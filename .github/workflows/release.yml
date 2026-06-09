@@ -104,6 +104,18 @@ jobs:
 
           # Find the generated .app (use absolute path so subsequent steps work from repo root)
           APP_PATH=$(find "$(pwd)/dist" -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: dx bundle did not produce a macOS .app"
+            exit 1
+          fi
+
+          INFO_PLIST="$APP_PATH/Contents/Info.plist"
+          if /usr/libexec/PlistBuddy -c "Print :LSRequiresCarbon" "$INFO_PLIST" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c "Delete :LSRequiresCarbon" "$INFO_PLIST"
+            echo "Removed generated LSRequiresCarbon from $INFO_PLIST"
+          fi
+          plutil -p "$INFO_PLIST" | grep -E 'CFBundleIdentifier|CFBundleName|CFBundleDisplayName|LSRequiresCarbon' || true
+
           echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
 
           # Replace binary with universal one

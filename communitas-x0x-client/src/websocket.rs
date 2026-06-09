@@ -13,6 +13,7 @@
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -32,6 +33,8 @@ use crate::types::{WsInbound, WsOutbound};
 pub struct X0xWebSocket {
     tx: mpsc::UnboundedSender<WsOutbound>,
     rx: mpsc::UnboundedReceiver<WsInbound>,
+    send_task: JoinHandle<()>,
+    receive_task: JoinHandle<()>,
 }
 
 impl X0xWebSocket {
@@ -41,6 +44,10 @@ impl X0xWebSocket {
     /// files. Falls back to `ws://127.0.0.1:12700/ws` with no token if the
     /// config files are not found.
     pub async fn connect() -> Result<Self> {
+        if let Some(url) = websocket_url_from_env("/ws") {
+            return Self::connect_to(&url).await;
+        }
+
         match crate::config::discover() {
             Ok(cfg) => Self::connect_with_config(&cfg, "/ws").await,
             Err(e) => {
@@ -58,6 +65,10 @@ impl X0xWebSocket {
     /// files. Falls back to `ws://127.0.0.1:12700/ws/direct` with no token if
     /// the config files are not found.
     pub async fn connect_direct() -> Result<Self> {
+        if let Some(url) = websocket_url_from_env("/ws/direct") {
+            return Self::connect_to(&url).await;
+        }
+
         match crate::config::discover() {
             Ok(cfg) => Self::connect_with_config(&cfg, "/ws/direct").await,
             Err(e) => {
@@ -100,7 +111,7 @@ impl X0xWebSocket {
         let (inbound_tx, inbound_rx) = mpsc::unbounded_channel::<WsInbound>();
 
         // Send task: forward outbound messages to the WebSocket.
-        tokio::spawn(async move {
+        let send_task = tokio::spawn(async move {
             while let Some(msg) = outbound_rx.recv().await {
                 let json = match serde_json::to_string(&msg) {
                     Ok(j) => j,
@@ -116,7 +127,7 @@ impl X0xWebSocket {
         });
 
         // Receive task: forward inbound WebSocket messages to the channel.
-        tokio::spawn(async move {
+        let receive_task = tokio::spawn(async move {
             while let Some(Ok(msg)) = ws_source.next().await {
                 let text = match msg {
                     Message::Text(t) => t.to_string(),
@@ -139,6 +150,8 @@ impl X0xWebSocket {
         Ok(Self {
             tx: outbound_tx,
             rx: inbound_rx,
+            send_task,
+            receive_task,
         })
     }
 
@@ -196,5 +209,35 @@ impl X0xWebSocket {
     /// Receive the next inbound message. Returns `None` if the connection is closed.
     pub async fn recv(&mut self) -> Option<WsInbound> {
         self.rx.recv().await
+    }
+}
+
+impl Drop for X0xWebSocket {
+    fn drop(&mut self) {
+        self.send_task.abort();
+        self.receive_task.abort();
+    }
+}
+
+fn websocket_url_from_env(path: &str) -> Option<String> {
+    let base_url = std::env::var("X0X_API_BASE").ok()?;
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let url = if let Some(address) = trimmed.strip_prefix("https://") {
+        format!("wss://{address}{path}")
+    } else if let Some(address) = trimmed.strip_prefix("http://") {
+        format!("ws://{address}{path}")
+    } else if trimmed.starts_with("ws://") || trimmed.starts_with("wss://") {
+        format!("{trimmed}{path}")
+    } else {
+        format!("ws://{trimmed}{path}")
+    };
+
+    match std::env::var("X0X_API_TOKEN") {
+        Ok(token) if !token.trim().is_empty() => Some(format!("{url}?token={}", token.trim())),
+        _ => Some(url),
     }
 }

@@ -78,13 +78,7 @@ pub fn OnboardingGate(children: Element) -> Element {
 
     // On mount, check daemon state once.
     use_future(move || async move {
-        let manager = DaemonManager::new();
-        let state = manager.state().await;
-        match state {
-            DaemonState::Running | DaemonState::Degraded => gate.set(GateState::Ready),
-            DaemonState::NotRunning => gate.set(GateState::NotRunning),
-            DaemonState::NotInstalled => gate.set(GateState::NotInstalled),
-        }
+        gate.set(check_daemon_gate_state().await);
     });
 
     match gate() {
@@ -115,7 +109,7 @@ pub fn OnboardingGate(children: Element) -> Element {
                                                 gate.set(GateState::Ready);
                                             } else {
                                                 gate.set(GateState::Failed(
-                                                    "x0x started but did not become healthy within 15 seconds. Try restarting Communitas.".to_string(),
+                                                    "x0x started but did not become healthy within 30 seconds. Try restarting Communitas.".to_string(),
                                                 ));
                                             }
                                         }
@@ -193,7 +187,12 @@ pub fn OnboardingGate(children: Element) -> Element {
                 OnboardingScreen {
                     FailedView {
                         error: err_msg,
-                        on_retry: move |_| gate.set(GateState::Checking),
+                        on_retry: move |_| {
+                            gate.set(GateState::Checking);
+                            spawn(async move {
+                                gate.set(check_daemon_gate_state().await);
+                            });
+                        },
                     }
                 }
             }
@@ -202,7 +201,12 @@ pub fn OnboardingGate(children: Element) -> Element {
         GateState::Cancelled => rsx! {
             OnboardingScreen {
                 CancelledView {
-                    on_try_again: move |_| gate.set(GateState::Checking),
+                    on_try_again: move |_| {
+                        gate.set(GateState::Checking);
+                        spawn(async move {
+                            gate.set(check_daemon_gate_state().await);
+                        });
+                    },
                     on_quit: move |_| quit_app(),
                 }
             }
@@ -211,6 +215,16 @@ pub fn OnboardingGate(children: Element) -> Element {
 }
 
 // ── Helper ───────────────────────────────────────────────────────────────────
+
+/// Probe the x0x daemon and convert the lifecycle result into a UI state.
+async fn check_daemon_gate_state() -> GateState {
+    let manager = DaemonManager::new();
+    match manager.state().await {
+        DaemonState::Running | DaemonState::Degraded => GateState::Ready,
+        DaemonState::NotRunning => GateState::NotRunning,
+        DaemonState::NotInstalled => GateState::NotInstalled,
+    }
+}
 
 /// Poll the x0xd health endpoint until it responds successfully or the
 /// `timeout_secs` deadline elapses. Returns `true` if healthy.
@@ -230,7 +244,7 @@ async fn poll_until_healthy(timeout_secs: u64) -> bool {
         if std::time::Instant::now() >= deadline {
             return false;
         }
-        tokio::time::sleep(tokio::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
+        crate::poll_sleep(tokio::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
     }
 }
 

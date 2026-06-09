@@ -119,9 +119,9 @@ dependencies = [
 
 [[package]]
 name = "ant-quic"
-version = "0.27.6"
+version = "0.27.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec518faf7b0879b7ca930cb8de46ca33119805b28c8e5a1852984af592032af7"
+checksum = "52b26b0f24d6e345460e230283e789c5d7a7fce75b1d989920d6ec44075b5fdc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -156,7 +156,7 @@ dependencies = [
  "rustls-pemfile",
  "rustls-platform-verifier",
  "rustls-post-quantum",
- "saorsa-pqc 0.5.1",
+ "saorsa-pqc",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-x0x-client"
-version = "0.12.2"
+version = "0.12.4"
 dependencies = [
  "base64",
  "dirs-next",
@@ -1054,7 +1054,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "curve25519-dalek-derive",
- "digest",
  "fiat-crypto",
  "rustc_version",
  "subtle",
@@ -1242,31 +1241,6 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
-
-[[package]]
-name = "ed25519"
-version = "2.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
-dependencies = [
- "pkcs8",
- "signature",
-]
-
-[[package]]
-name = "ed25519-dalek"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
-dependencies = [
- "curve25519-dalek",
- "ed25519",
- "rand_core 0.6.4",
- "serde",
- "sha2",
- "subtle",
- "zeroize",
-]
 
 [[package]]
 name = "either"
@@ -2794,16 +2768,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "pkcs8"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
-dependencies = [
- "der",
- "spki",
-]
-
-[[package]]
 name = "pkg-config"
 version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3439,9 +3403,9 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-coordinator"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "250eee6bc9da01622a7e8aa2152ae57dbd40694a639a6c732b610f5f8655702d"
+checksum = "b202f76d150025b219eb835cd332f73e7d1fa5a88e9b71a3758d53b74e9c19f5"
 dependencies = [
  "ant-quic",
  "anyhow",
@@ -3453,7 +3417,7 @@ dependencies = [
  "postcard",
  "rand 0.8.6",
  "saorsa-gossip-types",
- "saorsa-pqc 0.5.1",
+ "saorsa-pqc",
  "serde",
  "serde_bytes",
  "tokio",
@@ -3462,9 +3426,9 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-crdt-sync"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3ee9f2a770c6fa276c87d6def82712197ad6d8d1529bcd7c8453f8234a2d975"
+checksum = "5051b315b977e0a9bcf727ae2197db72168fb4cddf980ef179205bfa9caa74af"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3477,37 +3441,37 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-groups"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61a789171ddb5d37b164ed9b71146aa2cbe4619c91c317df95e241405407ab93"
+checksum = "7bc03d591aa8cd2c052f2d738c74045c1c9b45de86091cfb1f7f14da382499dd"
 dependencies = [
  "anyhow",
  "blake3",
  "saorsa-gossip-types",
- "saorsa-pqc 0.5.1",
+ "saorsa-pqc",
  "serde",
 ]
 
 [[package]]
 name = "saorsa-gossip-identity"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2682f2803c8fcc3a625da97daee7fdf7454dae29c6a891371b3f718e74240623"
+checksum = "2bb3c14d470fa525f907c0112b4e2be4e7e1bc7a6a6385b230b5f18afe01f55a"
 dependencies = [
  "anyhow",
  "blake3",
  "postcard",
  "saorsa-gossip-types",
- "saorsa-pqc 0.5.1",
+ "saorsa-pqc",
  "serde",
  "tokio",
 ]
 
 [[package]]
 name = "saorsa-gossip-membership"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ed3cf1f59127c63850343a280eb199b85f87b3766918abacd065d2542c3d9e3"
+checksum = "25b2f0cb92980c6ed3fa76e8f8de0ac886ca16117146a90ae66f4c786a2136d5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3523,9 +3487,9 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-presence"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa063d4e44b98f2e7c7980c7ab2b106f3456aac577fc2f9a3e766b075f20a501"
+checksum = "119e65bf33bccbdd6c44dcac927d9dc7f49cdec279521e9a6d0e22564df9422b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3537,7 +3501,7 @@ dependencies = [
  "saorsa-gossip-identity",
  "saorsa-gossip-transport",
  "saorsa-gossip-types",
- "saorsa-pqc 0.5.1",
+ "saorsa-pqc",
  "serde",
  "tokio",
  "tracing",
@@ -3545,9 +3509,9 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-pubsub"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b3ffcba3448412b300e4c23f2d3c7a00037e660e6212ebc70be9c710a557409"
+checksum = "e1da242c37b239bc8d69b0d74544a0931520170437f5ab9e35bbe76c7e52629a"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3567,25 +3531,25 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-rendezvous"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96f000ce06b2a613979b96ac67ff2a76010d36f3f43bfbc4cc2fb9c275f2a58f"
+checksum = "c13c2a41b17858383f3c7993918795ae5ad7f00ad39f4207cfabea037bcfdb04"
 dependencies = [
  "anyhow",
  "blake3",
  "bytes",
  "ciborium",
  "saorsa-gossip-types",
- "saorsa-pqc 0.5.1",
+ "saorsa-pqc",
  "serde",
  "tokio",
 ]
 
 [[package]]
 name = "saorsa-gossip-runtime"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f31f992881c04f0f2e24d9f2ccc3ba7b9eea46ab48daea52dac0a506e189472"
+checksum = "d391abd1a8ced879f08c1a7efbeb29b665cd111b5d1e4bc176b59de3d3f1ec2b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3609,9 +3573,9 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-transport"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2aeb5220e870763862ceb548926a5b708bef55df628083550c9a53871447e568"
+checksum = "4b6e3f059783179f29bcd9c23b831f8f5f4cf982c3843bf17895ec7a28887bb9"
 dependencies = [
  "ant-quic",
  "anyhow",
@@ -3631,24 +3595,26 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-types"
-version = "0.5.23"
+version = "0.5.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22ff8ae3941bbdf5c3ec5be5bb4e86554b8d100cb6a4944fc7094cb812b0346a"
+checksum = "b74ad4ca9a9542ac75c9f8cf61fc8f7e519ad0bb8a6c34462ca98e2895ca7271"
 dependencies = [
  "anyhow",
+ "async-trait",
  "blake3",
  "bytes",
  "hex",
  "postcard",
+ "rand 0.8.6",
  "serde",
  "sha2",
 ]
 
 [[package]]
 name = "saorsa-mls"
-version = "0.3.5"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14d51eeaea1d4c75374d7e3ec2bd171316b11bc66ad6a4edab695e5d272e1306"
+checksum = "931d3dcde2afb4d1f8db4364aa43ac7db347e6350e531b65ff15466375af2196"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3656,64 +3622,20 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "dashmap",
+ "getrandom 0.4.2",
  "hex",
  "lazy_static",
  "parking_lot",
  "postcard",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
- "saorsa-pqc 0.4.2",
+ "saorsa-pqc",
  "serde",
  "serde_json",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
  "uuid",
  "zeroize",
  "zeroize_derive",
-]
-
-[[package]]
-name = "saorsa-pqc"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56d4bae22bfc65b379efcaae0c9ec5075916a79c05e97d595a4b78fb8ff6545b"
-dependencies = [
- "aead",
- "aes-gcm",
- "anyhow",
- "blake3",
- "bytes",
- "chacha20poly1305",
- "curve25519-dalek",
- "ed25519-dalek",
- "fips203",
- "fips204",
- "fips205",
- "futures",
- "hkdf",
- "hmac",
- "hpke",
- "libc",
- "log",
- "pbkdf2",
- "postcard",
- "rand 0.8.6",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
- "rayon",
- "serde",
- "serde_json",
- "sha2",
- "sha3",
- "subtle",
- "thiserror 2.0.18",
- "time",
- "tokio",
- "tracing",
- "wide",
- "x25519-dalek",
- "zeroize",
 ]
 
 [[package]]
@@ -3990,15 +3912,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signature"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
-dependencies = [
- "rand_core 0.6.4",
-]
-
-[[package]]
 name = "simd-adler32"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4054,16 +3967,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
  "lock_api",
-]
-
-[[package]]
-name = "spki"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
-dependencies = [
- "base64ct",
- "der",
 ]
 
 [[package]]
@@ -5518,7 +5421,7 @@ dependencies = [
 
 [[package]]
 name = "x0x"
-version = "0.19.8"
+version = "0.21.3"
 dependencies = [
  "ant-quic",
  "anyhow",
@@ -5534,12 +5437,14 @@ dependencies = [
  "clap",
  "dashmap",
  "dirs",
+ "fips204",
  "flate2",
  "four-word-networking",
  "futures",
  "hex",
  "hyper 0.14.32",
  "if-addrs 0.13.4",
+ "libc",
  "postcard",
  "rand 0.8.6",
  "reqwest",
@@ -5555,7 +5460,7 @@ dependencies = [
  "saorsa-gossip-transport",
  "saorsa-gossip-types",
  "saorsa-mls",
- "saorsa-pqc 0.5.1",
+ "saorsa-pqc",
  "semver",
  "serde",
  "serde_json",

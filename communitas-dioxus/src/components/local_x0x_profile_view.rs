@@ -85,7 +85,7 @@ async fn load_local_x0x_profile() -> LocalX0xProfile {
         Err(err) => warn!(target: "ui.local_x0x_profile", "failed to load /agent: {err}"),
     }
 
-    match client.agent_card(None, Some(false)).await {
+    match client.agent_card_for_local_share(None, Some(false)).await {
         Ok(card_resp) => {
             let card = card_resp.card;
             if !card.display_name.trim().is_empty() {

@@ -38,6 +38,20 @@ struct X0xClientTests {
         #expect(cases.contains(.trusted))
     }
 
+    @Test("AddNamedGroupMemberRequest encodes optional TreeKEM key package")
+    func addNamedGroupMemberRequestEncodesTreeKemKeyPackage() throws {
+        let request = AddNamedGroupMemberRequest(
+            agentId: "aabb",
+            displayName: "Alice",
+            treekemKeyPackageB64: "a2V5cGtn"
+        )
+        let data = try JSONEncoder().encode(request)
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: String]
+        #expect(object?["agent_id"] == "aabb")
+        #expect(object?["display_name"] == "Alice")
+        #expect(object?["treekem_key_package_b64"] == "a2V5cGtn")
+    }
+
     @Test("Contact model decodes from JSON")
     func contactDecoding() throws {
         let json = """
@@ -776,7 +790,8 @@ struct X0xClientTests {
 
     @Test("DirectSendResponse decodes legacy fire-and-forget response")
     func directSendResponseLegacyDecoding() throws {
-        // Without require_ack_ms the daemon omits the `require_ack` block.
+        // Without require_ack_ms the daemon omits the peer-probe `require_ack`
+        // block. x0x 0.22 may still have required the recipient inbox gossip ACK.
         let json = """
         {
             "ok": true,
@@ -791,17 +806,19 @@ struct X0xClientTests {
         #expect(resp.requireAck == nil)
     }
 
-    @Test("DirectMessageRequest encodes require_ack_ms when set")
+    @Test("DirectMessageRequest encodes ACK controls when set")
     func directMessageRequestAckEncoding() throws {
         let req = DirectMessageRequest(
             agentId: "abc",
             payload: "aGVsbG8=",
+            requireGossipAck: true,
             requireAckMs: 3000
         )
         let data = try JSONEncoder().encode(req)
         let jsonStr = String(data: data, encoding: .utf8)!
         #expect(jsonStr.contains("\"agent_id\":\"abc\""))
         #expect(jsonStr.contains("\"payload\":\"aGVsbG8=\""))
+        #expect(jsonStr.contains("\"require_gossip_ack\":true"))
         #expect(jsonStr.contains("\"require_ack_ms\":3000"))
     }
 

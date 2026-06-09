@@ -40,6 +40,10 @@ impl X0xClient {
     /// found, preserving backward compatibility for environments where x0xd has
     /// not yet written its config.
     pub fn new() -> Self {
+        if let Some(client) = Self::from_env_override() {
+            return client;
+        }
+
         match crate::config::discover() {
             Ok(cfg) => Self::from_config(cfg),
             Err(e) => {
@@ -59,6 +63,21 @@ impl X0xClient {
         let base_url = format!("http://{}", config.address.trim_end_matches('/'));
         let client = Self::build_authenticated_client(&config.token);
         Self { base_url, client }
+    }
+
+    fn from_env_override() -> Option<Self> {
+        let base_url = std::env::var("X0X_API_BASE").ok()?;
+        let trimmed = base_url.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        match std::env::var("X0X_API_TOKEN") {
+            Ok(token) if !token.trim().is_empty() => {
+                Some(Self::with_base_url_and_token(trimmed, token.trim()))
+            }
+            _ => Some(Self::with_base_url(trimmed)),
+        }
     }
 
     /// Discover the x0x daemon config and create an authenticated client.
@@ -108,6 +127,24 @@ impl X0xClient {
 
     fn url(&self, path: &str) -> String {
         format!("{}{}", self.base_url, path)
+    }
+
+    fn path_component(value: &str) -> String {
+        const HEX: &[u8; 16] = b"0123456789ABCDEF";
+        let mut encoded = String::with_capacity(value.len());
+        for byte in value.bytes() {
+            match byte {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                    encoded.push(char::from(byte))
+                }
+                _ => {
+                    encoded.push('%');
+                    encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+                    encoded.push(char::from(HEX[usize::from(byte & 0x0F)]));
+                }
+            }
+        }
+        encoded
     }
 
     /// Parse a daemon response, handling x0x's flattened `{"ok":true,...}` payloads.
@@ -239,12 +276,39 @@ impl X0xClient {
         display_name: Option<&str>,
         include_groups: Option<bool>,
     ) -> Result<AgentCardResponse> {
+        self.agent_card_query(display_name, include_groups, None)
+            .await
+    }
+
+    /// Generate an agent card suitable for nearby/local app pairing.
+    ///
+    /// This keeps the base `agent_card` method aligned with x0xd's default
+    /// privacy behavior while allowing local UI share flows to include LAN
+    /// addresses needed for first contact on a local network.
+    pub async fn agent_card_for_local_share(
+        &self,
+        display_name: Option<&str>,
+        include_groups: Option<bool>,
+    ) -> Result<AgentCardResponse> {
+        self.agent_card_query(display_name, include_groups, Some(true))
+            .await
+    }
+
+    async fn agent_card_query(
+        &self,
+        display_name: Option<&str>,
+        include_groups: Option<bool>,
+        include_local_addresses: Option<bool>,
+    ) -> Result<AgentCardResponse> {
         let mut query: Vec<(String, String)> = Vec::new();
         if let Some(name) = display_name {
             query.push(("display_name".to_owned(), name.to_owned()));
         }
         if let Some(include) = include_groups {
             query.push(("include_groups".to_owned(), include.to_string()));
+        }
+        if let Some(include) = include_local_addresses {
+            query.push(("include_local_addresses".to_owned(), include.to_string()));
         }
 
         let resp = self
@@ -572,10 +636,25 @@ impl X0xClient {
     }
 
     /// Send a direct (point-to-point) message.
+    ///
+    /// Communitas user-facing DMs require the x0x 0.22 recipient inbox gossip
+    /// ACK so send failures surface instead of silently dropping receive paths.
     pub async fn send_direct(&self, agent_id: &str, payload: &[u8]) -> Result<()> {
+        self.send_direct_with_gossip_ack(agent_id, payload, true)
+            .await
+    }
+
+    /// Send a direct message with explicit gossip-inbox ACK behavior.
+    pub async fn send_direct_with_gossip_ack(
+        &self,
+        agent_id: &str,
+        payload: &[u8],
+        require_gossip_ack: bool,
+    ) -> Result<()> {
         let req = DirectSendRequest {
             agent_id: agent_id.to_owned(),
             payload: BASE64.encode(payload),
+            require_gossip_ack: Some(require_gossip_ack),
         };
         self.post_ok("/direct/send", &req).await
     }
@@ -959,6 +1038,7 @@ impl X0xClient {
 
     /// List tasks in a task list.
     pub async fn list_tasks(&self, list_id: &str) -> Result<Vec<Task>> {
+        let list_id = Self::path_component(list_id);
         let resp = self
             .client
             .get(self.url(&format!("/task-lists/{list_id}/tasks")))
@@ -979,6 +1059,7 @@ impl X0xClient {
             title: title.to_owned(),
             description: description.map(str::to_owned),
         };
+        let list_id = Self::path_component(list_id);
         self.post_ok(&format!("/task-lists/{list_id}/tasks"), &req)
             .await
     }
@@ -988,6 +1069,8 @@ impl X0xClient {
         let req = UpdateTaskRequest {
             action: "claim".to_owned(),
         };
+        let list_id = Self::path_component(list_id);
+        let task_id = Self::path_component(task_id);
         self.request_ok(
             self.client
                 .patch(self.url(&format!("/task-lists/{list_id}/tasks/{task_id}")))
@@ -1001,6 +1084,8 @@ impl X0xClient {
         let req = UpdateTaskRequest {
             action: "complete".to_owned(),
         };
+        let list_id = Self::path_component(list_id);
+        let task_id = Self::path_component(task_id);
         self.request_ok(
             self.client
                 .patch(self.url(&format!("/task-lists/{list_id}/tasks/{task_id}")))
@@ -1028,6 +1113,7 @@ impl X0xClient {
 
     /// Join an existing store by its topic.
     pub async fn join_store(&self, store_id: &str) -> Result<()> {
+        let store_id = Self::path_component(store_id);
         self.post_ok(&format!("/stores/{store_id}/join"), &serde_json::json!({}))
             .await
     }
@@ -1041,6 +1127,7 @@ impl X0xClient {
 
     /// List keys in a store.
     pub async fn list_keys(&self, store_id: &str) -> Result<Vec<StoreKeyEntry>> {
+        let store_id = Self::path_component(store_id);
         let resp = self
             .client
             .get(self.url(&format!("/stores/{store_id}/keys")))
@@ -1062,6 +1149,8 @@ impl X0xClient {
             value: BASE64.encode(value),
             content_type: content_type.map(str::to_owned),
         };
+        let store_id = Self::path_component(store_id);
+        let key = Self::path_component(key);
         self.request_ok(
             self.client
                 .put(self.url(&format!("/stores/{store_id}/{key}")))
@@ -1072,6 +1161,8 @@ impl X0xClient {
 
     /// Get a raw store entry, including its base64 value and metadata.
     pub async fn get(&self, store_id: &str, key: &str) -> Result<StoreValue> {
+        let store_id = Self::path_component(store_id);
+        let key = Self::path_component(key);
         let resp = self
             .client
             .get(self.url(&format!("/stores/{store_id}/{key}")))
@@ -1082,6 +1173,8 @@ impl X0xClient {
 
     /// Delete a key from a store.
     pub async fn delete_key(&self, store_id: &str, key: &str) -> Result<()> {
+        let store_id = Self::path_component(store_id);
+        let key = Self::path_component(key);
         self.delete_ok(&format!("/stores/{store_id}/{key}")).await
     }
 
@@ -1380,17 +1473,33 @@ impl X0xClient {
         agent_id: &str,
         display_name: Option<&str>,
     ) -> Result<()> {
+        self.add_named_group_member_with_treekem_key_package(group_id, agent_id, display_name, None)
+            .await
+    }
+
+    /// `POST /groups/:id/members` — add a member directly (admin+), supplying
+    /// TreeKEM key-package material when adding to a TreeKEM-secure group.
+    pub async fn add_named_group_member_with_treekem_key_package(
+        &self,
+        group_id: &str,
+        agent_id: &str,
+        display_name: Option<&str>,
+        treekem_key_package_b64: Option<&str>,
+    ) -> Result<()> {
         #[derive(serde::Serialize)]
         struct Body<'a> {
             agent_id: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             display_name: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            treekem_key_package_b64: Option<&'a str>,
         }
         self.post_ok(
             &format!("/groups/{group_id}/members"),
             &Body {
                 agent_id,
                 display_name,
+                treekem_key_package_b64,
             },
         )
         .await
@@ -1585,7 +1694,7 @@ impl X0xClient {
         group_id: &str,
         body: &str,
         kind: Option<&str>,
-    ) -> Result<GroupPublicMessage> {
+    ) -> Result<GroupPublicSendResponse> {
         let req = SendGroupMessageRequest {
             body: body.to_owned(),
             kind: kind.map(str::to_owned),
@@ -1734,5 +1843,28 @@ impl X0xClient {
 impl Default for X0xClient {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::X0xClient;
+
+    #[test]
+    fn path_component_leaves_unreserved_characters() {
+        assert_eq!(X0xClient::path_component("abc-XYZ_012.~"), "abc-XYZ_012.~");
+    }
+
+    #[test]
+    fn path_component_encodes_reserved_characters() {
+        assert_eq!(
+            X0xClient::path_component("x0x.group.abc.board/tasks#1"),
+            "x0x.group.abc.board%2Ftasks%231"
+        );
+    }
+
+    #[test]
+    fn path_component_encodes_utf8_bytes() {
+        assert_eq!(X0xClient::path_component("cafe\u{301}"), "cafe%CC%81");
     }
 }

@@ -144,14 +144,18 @@ pub fn DmView(
                 match client.direct_connections().await {
                     Ok(connections) => {
                         let is_connected = connections.iter().any(|c| c.agent_id == peer_id);
-                        peer_connected.set(is_connected);
+                        if *peer_connected.peek() != is_connected {
+                            peer_connected.set(is_connected);
+                        }
                     }
                     Err(e) => {
                         warn!(target: "ui.dm_view", "Failed to check connections: {e}");
-                        peer_connected.set(false);
+                        if *peer_connected.peek() {
+                            peer_connected.set(false);
+                        }
                     }
                 }
-                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                crate::poll_sleep(tokio::time::Duration::from_secs(5)).await;
             }
         }
     });
@@ -185,59 +189,76 @@ pub fn DmView(
     use_coroutine(move |_: UnboundedReceiver<()>| {
         let peer_id = ws_peer_id.clone();
         async move {
-            let mut ws = match X0xWebSocket::connect_direct().await {
-                Ok(ws) => {
-                    info!(target: "ui.dm_view", "Connected to /ws/direct for DMs");
-                    ws_connected.set(true);
-                    ws
-                }
-                Err(e) => {
-                    warn!(target: "ui.dm_view", "WebSocket /ws/direct connection failed: {e}");
-                    return;
-                }
-            };
-
-            while let Some(inbound) = ws.recv().await {
-                match inbound {
-                    communitas_x0x_client::WsInbound::DirectMessage {
-                        sender, payload, ..
-                    } => {
-                        // Only show messages from our conversation peer
-                        if sender != peer_id {
-                            continue;
-                        }
-
-                        match base64::engine::general_purpose::STANDARD.decode(&payload) {
-                            Ok(bytes) => match decode_direct_message_payload(&bytes, &sender) {
-                                Ok(msg) => {
-                                    let history_msg = msg.clone();
-                                    let history_peer = peer_id.clone();
-                                    messages.with_mut(|msgs| {
-                                        if !msgs.iter().any(|m| m.id == history_msg.id) {
-                                            msgs.push(msg);
-                                            msgs.sort_by_key(|m| m.timestamp);
-                                        }
-                                    });
-                                    x0x_contract::append_dm_history(&history_peer, &history_msg)
-                                        .await;
-                                }
-                                Err(e) => {
-                                    warn!(target: "ui.dm_view", "Failed to parse DM payload: {e}");
-                                }
-                            },
-                            Err(e) => {
-                                warn!(target: "ui.dm_view", "Failed to decode DM base64: {e}");
-                            }
-                        }
-                    }
-                    communitas_x0x_client::WsInbound::Error { message } => {
-                        error!(target: "ui.dm_view", "WebSocket error: {message}");
-                    }
-                    _ => {}
-                }
+            if !crate::live_streams_enabled() {
+                return;
             }
 
-            ws_connected.set(false);
+            let mut retry_delay = std::time::Duration::from_secs(1);
+            loop {
+                let mut ws = match X0xWebSocket::connect_direct().await {
+                    Ok(ws) => {
+                        info!(target: "ui.dm_view", "Connected to /ws/direct for DMs");
+                        ws_connected.set(true);
+                        retry_delay = std::time::Duration::from_secs(1);
+                        ws
+                    }
+                    Err(e) => {
+                        warn!(target: "ui.dm_view", "WebSocket /ws/direct connection failed: {e}");
+                        ws_connected.set(false);
+                        crate::ui_sleep(retry_delay).await;
+                        retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                        continue;
+                    }
+                };
+
+                while let Some(inbound) = ws.recv().await {
+                    match inbound {
+                        communitas_x0x_client::WsInbound::DirectMessage {
+                            sender, payload, ..
+                        } => {
+                            // Only show messages from our conversation peer
+                            if sender != peer_id {
+                                continue;
+                            }
+
+                            match base64::engine::general_purpose::STANDARD.decode(&payload) {
+                                Ok(bytes) => match decode_direct_message_payload(&bytes, &sender) {
+                                    Ok(msg) => {
+                                        let history_msg = msg.clone();
+                                        let history_peer = peer_id.clone();
+                                        messages.with_mut(|msgs| {
+                                            if !msgs.iter().any(|m| m.id == history_msg.id) {
+                                                msgs.push(msg);
+                                                msgs.sort_by_key(|m| m.timestamp);
+                                            }
+                                        });
+                                        x0x_contract::append_dm_history(
+                                            &history_peer,
+                                            &history_msg,
+                                        )
+                                        .await;
+                                    }
+                                    Err(e) => {
+                                        warn!(target: "ui.dm_view", "Failed to parse DM payload: {e}");
+                                    }
+                                },
+                                Err(e) => {
+                                    warn!(target: "ui.dm_view", "Failed to decode DM base64: {e}");
+                                }
+                            }
+                        }
+                        communitas_x0x_client::WsInbound::Error { message } => {
+                            error!(target: "ui.dm_view", "WebSocket error: {message}");
+                        }
+                        _ => {}
+                    }
+                }
+
+                ws_connected.set(false);
+                warn!(target: "ui.dm_view", "WebSocket /ws/direct closed; reconnecting");
+                crate::ui_sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+            }
         }
     });
 
@@ -288,7 +309,10 @@ pub fn DmView(
                 match serde_json::to_vec(&wire) {
                     Ok(json_bytes) => {
                         let client = X0xClient::new();
-                        if let Err(e) = client.send_direct(&peer_id, &json_bytes).await {
+                        if let Err(e) = client
+                            .send_direct_with_gossip_ack(&peer_id, &json_bytes, true)
+                            .await
+                        {
                             error!(target: "ui.dm_view", "Failed to send DM to {peer_id}: {e}");
                         } else {
                             info!(target: "ui.dm_view", "DM sent to {peer_id}");

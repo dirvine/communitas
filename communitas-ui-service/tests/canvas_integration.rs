@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Integration tests for the canvas service using real CommunitasApp.
 //!
 //! These tests verify the full canvas flow including element operations,

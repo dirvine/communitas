@@ -210,7 +210,11 @@ struct SettingsView: View {
 
     private func loadAgentCardLink() async {
         do {
-            let resp = try await appState.client.agentCard(displayName: nil, includeGroups: true)
+            let resp = try await appState.client.agentCard(
+                displayName: nil,
+                includeGroups: true,
+                includeLocalAddresses: true
+            )
             agentCardLink = resp.link
         } catch {
             agentCardLink = nil
@@ -318,7 +322,8 @@ struct SettingsView: View {
                 let name = displayName.trimmingCharacters(in: .whitespaces)
                 let resp = try await appState.client.agentCard(
                     displayName: name.isEmpty ? nil : name,
-                    includeGroups: includeGroups
+                    includeGroups: includeGroups,
+                    includeLocalAddresses: true
                 )
                 await MainActor.run {
                     agentCardLink = resp.link

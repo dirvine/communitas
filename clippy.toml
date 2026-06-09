@@ -5,6 +5,7 @@
 # This affects all code marked with #[test], #[cfg(test)], and test module functions
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+allow-panic-in-tests = true
 
 # Cognitive complexity threshold (default is 25)
 cognitive-complexity-threshold = 30

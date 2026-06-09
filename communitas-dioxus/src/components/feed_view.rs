@@ -113,7 +113,7 @@ pub fn FeedView(props: FeedViewProps) -> Element {
     let mut posts: Signal<Vec<FeedPost>> = use_signal(Vec::new);
     let mut composer_text = use_signal(String::new);
     let mut posting = use_signal(|| false);
-    let mut ws_connected = use_signal(|| false);
+    let mut ws_connected = use_signal(|| !crate::live_streams_enabled());
 
     // Load history on mount
     let history_group_id = group_id.clone();
@@ -149,63 +149,79 @@ pub fn FeedView(props: FeedViewProps) -> Element {
     use_coroutine(move |_: UnboundedReceiver<()>| {
         let group_id = ws_group_id.clone();
         async move {
+            if !crate::live_streams_enabled() {
+                return;
+            }
+
             let topic = feed_topic(&group_id);
+            let mut retry_delay = std::time::Duration::from_secs(1);
 
-            let ws = match X0xWebSocket::connect().await {
-                Ok(ws) => {
-                    if let Err(e) = ws.subscribe(vec![topic.clone()]) {
-                        error!(target: "ui.feed", "Failed to subscribe to feed topic: {e}");
-                        return;
+            loop {
+                let mut ws = match X0xWebSocket::connect().await {
+                    Ok(ws) => {
+                        if let Err(e) = ws.subscribe(vec![topic.clone()]) {
+                            error!(target: "ui.feed", "Failed to subscribe to feed topic: {e}");
+                            ws_connected.set(false);
+                            crate::ui_sleep(retry_delay).await;
+                            retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                            continue;
+                        }
+                        info!(target: "ui.feed", "Subscribed to feed topic: {topic}");
+                        ws_connected.set(true);
+                        retry_delay = std::time::Duration::from_secs(1);
+                        ws
                     }
-                    info!(target: "ui.feed", "Subscribed to feed topic: {topic}");
-                    ws_connected.set(true);
-                    ws
-                }
-                Err(e) => {
-                    warn!(target: "ui.feed", "WebSocket connect failed: {e}");
-                    return;
-                }
-            };
+                    Err(e) => {
+                        warn!(target: "ui.feed", "WebSocket connect failed: {e}");
+                        ws_connected.set(false);
+                        crate::ui_sleep(retry_delay).await;
+                        retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                        continue;
+                    }
+                };
 
-            let mut ws = ws;
-            while let Some(inbound) = ws.recv().await {
-                match inbound {
-                    communitas_x0x_client::WsInbound::Message {
-                        topic: msg_topic,
-                        payload,
-                        ..
-                    } => {
-                        if msg_topic == topic
-                            && let Ok(bytes) =
-                                base64::engine::general_purpose::STANDARD.decode(&payload)
-                        {
-                            match serde_json::from_slice::<FeedPost>(&bytes) {
-                                Ok(post) => {
-                                    let save_post = post.clone();
-                                    posts.with_mut(|list| {
-                                        if !list.iter().any(|p| p.id == save_post.id) {
-                                            list.insert(0, save_post);
-                                            if list.len() > FEED_LIMIT {
-                                                list.truncate(FEED_LIMIT);
+                while let Some(inbound) = ws.recv().await {
+                    match inbound {
+                        communitas_x0x_client::WsInbound::Message {
+                            topic: msg_topic,
+                            payload,
+                            ..
+                        } => {
+                            if msg_topic == topic
+                                && let Ok(bytes) =
+                                    base64::engine::general_purpose::STANDARD.decode(&payload)
+                            {
+                                match serde_json::from_slice::<FeedPost>(&bytes) {
+                                    Ok(post) => {
+                                        let save_post = post.clone();
+                                        posts.with_mut(|list| {
+                                            if !list.iter().any(|p| p.id == save_post.id) {
+                                                list.insert(0, save_post);
+                                                if list.len() > FEED_LIMIT {
+                                                    list.truncate(FEED_LIMIT);
+                                                }
                                             }
-                                        }
-                                    });
-                                    save_feed_history(&group_id, &posts()).await;
-                                }
-                                Err(e) => {
-                                    warn!(target: "ui.feed", "Failed to parse feed post: {e}");
+                                        });
+                                        save_feed_history(&group_id, &posts()).await;
+                                    }
+                                    Err(e) => {
+                                        warn!(target: "ui.feed", "Failed to parse feed post: {e}");
+                                    }
                                 }
                             }
                         }
+                        communitas_x0x_client::WsInbound::Error { message } => {
+                            error!(target: "ui.feed", "WebSocket error: {message}");
+                        }
+                        _ => {}
                     }
-                    communitas_x0x_client::WsInbound::Error { message } => {
-                        error!(target: "ui.feed", "WebSocket error: {message}");
-                    }
-                    _ => {}
                 }
-            }
 
-            ws_connected.set(false);
+                ws_connected.set(false);
+                warn!(target: "ui.feed", "WebSocket closed; reconnecting");
+                crate::ui_sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+            }
         }
     });
 

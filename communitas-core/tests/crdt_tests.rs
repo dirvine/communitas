@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Comprehensive CRDT Tests with Property-Based Testing
 //!
 //! Tests vector clocks, causal ordering, and CRDT message synchronization

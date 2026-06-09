@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! API coverage guardian for the communitas x0x client.
 //!
 //! Every public method on X0xClient and X0xWebSocket MUST have an entry
@@ -8,6 +10,7 @@
 //!
 //! Run: cargo nextest run -p communitas-x0x-client --test client_coverage
 
+use communitas_x0x_client::DirectSendRequest;
 use std::collections::HashSet;
 
 // ── Every public method on X0xClient that wraps an x0x API endpoint ────
@@ -23,6 +26,7 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("agent_user_id", "GET", "/agent/user-id"),
     ("agent_sign", "POST", "/agent/sign"),
     ("agent_card", "GET", "/agent/card"),
+    ("agent_card_for_local_share", "GET", "/agent/card"),
     ("import_agent_card", "POST", "/agent/card/import"),
     ("introduction", "GET", "/introduction"),
     ("ws_sessions", "GET", "/ws/sessions"),
@@ -67,6 +71,7 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("exec_cancel", "POST", "/exec/cancel"),
     ("exec_sessions", "GET", "/exec/sessions"),
     ("send_direct", "POST", "/direct/send"),
+    ("send_direct_with_gossip_ack", "POST", "/direct/send"),
     ("direct_connections", "GET", "/direct/connections"),
     // Contacts
     ("list_contacts", "GET", "/contacts"),
@@ -123,6 +128,11 @@ const COVERED_REST: &[(&str, &str, &str)] = &[
     ("update_group_policy", "PATCH", "/groups/:id/policy"),
     ("list_named_group_members", "GET", "/groups/:id/members"),
     ("add_named_group_member", "POST", "/groups/:id/members"),
+    (
+        "add_named_group_member_with_treekem_key_package",
+        "POST",
+        "/groups/:id/members",
+    ),
     (
         "remove_named_group_member",
         "DELETE",
@@ -289,14 +299,20 @@ fn no_duplicate_endpoints() {
     }
     // Allow intentional shared endpoints:
     // - announce / announce_with_options share POST /announce
+    // - agent_card / agent_card_for_local_share share GET /agent/card
     // - claim_task / complete_task share PATCH /task-lists/:id/tasks/:tid (different action param)
     // - create_group / create_group_with_preset share POST /groups (preset-aware overload)
+    // - add_named_group_member_with_treekem_key_package extends POST /groups/:id/members
+    // - send_direct_with_gossip_ack makes POST /direct/send ACK intent explicit
     let real_dupes: Vec<_> = dupes
         .iter()
         .filter(|d| {
             !d.contains("announce")
+                && !d.contains("agent_card_for_local_share")
                 && !d.contains("task")
                 && !d.contains("create_group_with_preset")
+                && !d.contains("add_named_group_member_with_treekem_key_package")
+                && !d.contains("send_direct_with_gossip_ack")
         })
         .collect();
     assert!(
@@ -545,6 +561,21 @@ fn all_client_methods_are_covered() {
         uncovered.len(),
         uncovered.join("\n  ")
     );
+}
+
+#[test]
+fn direct_send_request_encodes_gossip_ack_intent() {
+    let req = DirectSendRequest {
+        agent_id: "agent-a".to_owned(),
+        payload: "aGVsbG8=".to_owned(),
+        require_gossip_ack: Some(true),
+    };
+
+    let encoded = serde_json::to_value(req).expect("direct send request should serialize");
+
+    assert_eq!(encoded["agent_id"], "agent-a");
+    assert_eq!(encoded["payload"], "aGVsbG8=");
+    assert_eq!(encoded["require_gossip_ack"], true);
 }
 
 /// Verifies every public method in websocket.rs is tracked in COVERED_WS.

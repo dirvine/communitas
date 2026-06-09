@@ -267,7 +267,7 @@ pub fn ToastItem(props: ToastItemProps) -> Element {
                     }
                     #[cfg(not(target_arch = "wasm32"))]
                     {
-                        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                        crate::ui_sleep(std::time::Duration::from_millis(ms)).await;
                     }
                     if !dismissed() {
                         dismissed.set(true);

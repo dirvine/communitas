@@ -2,6 +2,7 @@
 
 #![allow(non_snake_case)]
 #![allow(clippy::print_stderr)] // eprintln! used for bootstrap errors before logger init
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 mod components;
 pub mod contrast;
@@ -193,7 +194,103 @@ async fn main() {
     }
 
     info!("starting Communitas (Deep Space Operations Console)");
-    dioxus::launch(App);
+    dioxus::LaunchBuilder::desktop()
+        .with_cfg(desktop_config())
+        .launch(App);
+}
+
+fn desktop_config() -> dioxus::desktop::Config {
+    let window_share_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let window = dioxus::desktop::WindowBuilder::new()
+        .with_title("CommunitasDioxus")
+        .with_inner_size(dioxus::desktop::LogicalSize::new(1200.0, 780.0))
+        .with_position(dioxus::desktop::LogicalPosition::new(220.0, 80.0))
+        .with_focused(true)
+        .with_visible(true);
+
+    dioxus::desktop::Config::new()
+        .with_window(window)
+        .with_background_color((10, 12, 20, 255))
+        .with_on_window(|window, _dom| configure_platform_window(window.as_ref()))
+        .with_custom_event_handler(move |event, _target| {
+            configure_platform_windows_after_startup(event, window_share_deadline);
+        })
+}
+
+#[cfg(target_os = "macos")]
+fn configure_platform_window(window: &dioxus::desktop::tao::window::Window) {
+    use dioxus::desktop::tao::platform::macos::WindowExtMacOS;
+    use objc2_app_kit::NSWindow;
+
+    let ns_window = window.ns_window() as *mut NSWindow;
+    if ns_window.is_null() {
+        warn!(target: "ui.window", "macOS window hook received a null NSWindow pointer");
+        return;
+    }
+
+    unsafe {
+        configure_ns_window(&*ns_window, true);
+    }
+
+    window.set_visible(true);
+    window.request_redraw();
+}
+
+#[cfg(target_os = "macos")]
+fn configure_platform_windows_after_startup<T: 'static>(
+    event: &dioxus::desktop::tao::event::Event<'_, T>,
+    deadline: std::time::Instant,
+) {
+    use dioxus::desktop::tao::event::Event;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSApplication;
+
+    if std::time::Instant::now() > deadline {
+        return;
+    }
+
+    if !matches!(
+        event,
+        Event::NewEvents(_)
+            | Event::Resumed
+            | Event::MainEventsCleared
+            | Event::RedrawEventsCleared
+            | Event::Reopen { .. }
+    ) {
+        return;
+    }
+
+    let Some(marker) = MainThreadMarker::new() else {
+        return;
+    };
+    let app = NSApplication::sharedApplication(marker);
+    for ns_window in app.windows().iter() {
+        configure_ns_window(&ns_window, false);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn configure_ns_window(ns_window: &objc2_app_kit::NSWindow, bring_to_front: bool) {
+    use objc2_app_kit::NSWindowSharingType;
+
+    ns_window.setSharingType(NSWindowSharingType::ReadOnly);
+    ns_window.setCanHide(false);
+    if bring_to_front && ns_window.canBecomeKeyWindow() {
+        ns_window.makeKeyAndOrderFront(None);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_platform_window(window: &dioxus::desktop::tao::window::Window) {
+    window.set_visible(true);
+    window.request_redraw();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_platform_windows_after_startup<T: 'static>(
+    _event: &dioxus::desktop::tao::event::Event<'_, T>,
+    _deadline: std::time::Instant,
+) {
 }
 
 // ── Global CSS ──────────────────────────────────────────────────────────────
@@ -240,6 +337,44 @@ body { background-color: #0a0c14; color: #e4e6f0; font-family: system-ui, -apple
 ::-webkit-scrollbar-thumb { background: #252940; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #353a52; }
 "#;
+
+pub(crate) async fn ui_sleep(duration: std::time::Duration) {
+    futures_timer::Delay::new(duration).await;
+}
+
+pub(crate) async fn poll_sleep(duration: std::time::Duration) {
+    if !polling_timers_enabled() {
+        std::future::pending::<()>().await;
+    }
+    ui_sleep(duration).await;
+}
+
+pub(crate) fn live_streams_enabled() -> bool {
+    live_streams_enabled_for_env(std::env::var_os("COMMUNITAS_DIOXUS_DISABLE_LIVE_WS").is_some())
+}
+
+fn live_streams_enabled_for_env(disable_live_ws: bool) -> bool {
+    !disable_live_ws
+}
+
+fn polling_timers_enabled() -> bool {
+    polling_timers_enabled_for_env(
+        cfg!(target_os = "macos"),
+        std::env::var_os("COMMUNITAS_DIOXUS_DISABLE_POLLS").is_some(),
+        std::env::var_os("COMMUNITAS_DIOXUS_ENABLE_POLLS").is_some(),
+    )
+}
+
+fn polling_timers_enabled_for_env(
+    _is_macos: bool,
+    disable_polls: bool,
+    _enable_polls: bool,
+) -> bool {
+    if disable_polls {
+        return false;
+    }
+    true
+}
 
 // ── App component ───────────────────────────────────────────────────────────
 
@@ -305,8 +440,16 @@ fn AppShell(children: Element) -> Element {
 
         loop {
             match client.health().await {
-                Ok(_) => connected.set(true),
-                Err(_) => connected.set(false),
+                Ok(_) => {
+                    if !*connected.peek() {
+                        connected.set(true);
+                    }
+                }
+                Err(_) => {
+                    if *connected.peek() {
+                        connected.set(false);
+                    }
+                }
             }
 
             if let Ok(agent) = client.agent().await {
@@ -322,15 +465,25 @@ fn AppShell(children: Element) -> Element {
                     .filter(|value| !value.trim().is_empty())
                     .unwrap_or_else(|| format!("agent:{short_agent}"));
 
-                agent_id.set(Some(agent.agent_id.clone()));
-                identity_secondary.set(Some(secondary));
+                let next_agent_id = Some(agent.agent_id.clone());
+                if agent_id.peek().as_ref() != next_agent_id.as_ref() {
+                    agent_id.set(next_agent_id);
+                }
 
-                match client.agent_card(None, Some(false)).await {
+                let next_secondary = Some(secondary);
+                if identity_secondary.peek().as_ref() != next_secondary.as_ref() {
+                    identity_secondary.set(next_secondary);
+                }
+
+                let next_label = match client.agent_card(None, Some(false)).await {
                     Ok(card_resp) if !card_resp.card.display_name.trim().is_empty() => {
-                        identity_label.set(card_resp.card.display_name.trim().to_string());
+                        card_resp.card.display_name.trim().to_string()
                     }
-                    Ok(_) => identity_label.set(fallback_label),
-                    Err(_) => identity_label.set(fallback_label),
+                    Ok(_) => fallback_label,
+                    Err(_) => fallback_label,
+                };
+                if identity_label.peek().as_str() != next_label.as_str() {
+                    identity_label.set(next_label);
                 }
             }
 
@@ -343,7 +496,9 @@ fn AppShell(children: Element) -> Element {
                         member_count: g.member_count.unwrap_or(0),
                     })
                     .collect();
-                groups.set(entries);
+                if groups.peek().as_slice() != entries.as_slice() {
+                    groups.set(entries);
+                }
             }
 
             let online_agents = client.presence().await.unwrap_or_default();
@@ -358,14 +513,19 @@ fn AppShell(children: Element) -> Element {
                         online: online_agents.iter().any(|id| id == &c.agent_id),
                     })
                     .collect();
-                contacts.set(entries);
+                if contacts.peek().as_slice() != entries.as_slice() {
+                    contacts.set(entries);
+                }
             }
 
             if let Ok(agents) = client.discovered_agents().await {
-                discovered_agent_count_sidebar.set(agents.len());
+                let next_count = agents.len();
+                if *discovered_agent_count_sidebar.peek() != next_count {
+                    discovered_agent_count_sidebar.set(next_count);
+                }
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(8)).await;
+            crate::poll_sleep(tokio::time::Duration::from_secs(8)).await;
         }
     });
 
@@ -625,6 +785,7 @@ fn SpaceView(space_id: String) -> Element {
     rsx! {
         AppShell {
             components::SpaceView {
+                key: "{space_id}:chat",
                 space_id: space_id,
             }
         }
@@ -636,6 +797,7 @@ fn SpaceTab(space_id: String, tab: String) -> Element {
     rsx! {
         AppShell {
             components::SpaceView {
+                key: "{space_id}:{tab}",
                 space_id: space_id,
                 initial_tab: Some(tab),
             }
@@ -979,5 +1141,32 @@ mod tests {
     fn route_people_is_slash_people() {
         let route = Route::People {};
         assert_eq!(format!("{route:?}"), "People");
+    }
+
+    #[test]
+    fn polling_timers_run_by_default_off_macos() {
+        assert!(polling_timers_enabled_for_env(false, false, false));
+    }
+
+    #[test]
+    fn polling_timers_run_by_default_on_macos() {
+        assert!(polling_timers_enabled_for_env(true, false, false));
+        assert!(polling_timers_enabled_for_env(true, false, true));
+    }
+
+    #[test]
+    fn polling_timers_disable_override_wins() {
+        assert!(!polling_timers_enabled_for_env(false, true, true));
+        assert!(!polling_timers_enabled_for_env(true, true, true));
+    }
+
+    #[test]
+    fn live_streams_run_by_default() {
+        assert!(live_streams_enabled_for_env(false));
+    }
+
+    #[test]
+    fn live_streams_disable_override_wins() {
+        assert!(!live_streams_enabled_for_env(true));
     }
 }

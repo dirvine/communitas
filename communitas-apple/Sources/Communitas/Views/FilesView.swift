@@ -1,4 +1,5 @@
 import CryptoKit
+import AppKit
 import SwiftUI
 import X0xClient
 
@@ -10,7 +11,7 @@ struct FilesView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedAgentId = ""
-    @State private var showFilePicker = false
+    @State private var hasStartedFiles = false
     @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
@@ -32,19 +33,13 @@ struct FilesView: View {
                 }
             }
         }
-        .task {
-            await refreshTransfers()
-            isLoading = false
-            startPolling()
+        .onAppear {
+            scheduleFilesStartup()
         }
         .onDisappear {
+            hasStartedFiles = false
             pollTask?.cancel()
             pollTask = nil
-        }
-        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.data]) { result in
-            if case .success(let url) = result {
-                Task { await sendFileAction(url: url) }
-            }
         }
     }
 
@@ -208,7 +203,7 @@ struct FilesView: View {
                 .frame(maxWidth: 240)
 
                 Button {
-                    showFilePicker = true
+                    chooseFileAction()
                 } label: {
                     Label("Choose File", systemImage: "folder")
                 }
@@ -221,6 +216,32 @@ struct FilesView: View {
     }
 
     // MARK: - Actions
+
+    @MainActor
+    private func chooseFileAction() {
+        guard !selectedAgentId.isEmpty else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.canCreateDirectories = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { await sendFileAction(url: url) }
+        }
+    }
+
+    private func scheduleFilesStartup() {
+        guard !hasStartedFiles else { return }
+        hasStartedFiles = true
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                await refreshTransfers()
+                isLoading = false
+                startPolling()
+            }
+        }
+    }
 
     private func refreshTransfers() async {
         do {
@@ -253,6 +274,12 @@ struct FilesView: View {
         let filename = url.lastPathComponent
         let fileData: Data
         do {
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
             fileData = try Data(contentsOf: url)
         } catch {
             errorMessage = "Cannot read file: \(error.localizedDescription)"

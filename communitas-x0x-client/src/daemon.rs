@@ -6,7 +6,7 @@
 //! starting, stopping, and optionally auto-starting the daemon. It does not
 //! assume undocumented direct `x0xd` process management semantics.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -25,6 +25,9 @@ const SUBPROCESS_TIMEOUT_SECS: u64 = 30;
 
 /// Maximum time to wait for the installer (`curl -sfL https://x0x.md | sh`) (seconds).
 const INSTALL_TIMEOUT_SECS: u64 = 120;
+
+/// Maximum time to wait for a daemon health probe while deciding onboarding state.
+const HEALTH_PROBE_TIMEOUT_SECS: u64 = 5;
 
 /// The current state of the x0xd daemon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,15 +66,20 @@ impl DaemonManager {
     /// Check the current state of the daemon.
     pub async fn state(&self) -> DaemonState {
         // First check if we can reach the daemon.
-        match self.client.health().await {
-            Ok(health) => {
-                if health.status == "healthy" || health.status == "running" {
+        match tokio::time::timeout(
+            Duration::from_secs(HEALTH_PROBE_TIMEOUT_SECS),
+            self.client.health(),
+        )
+        .await
+        {
+            Ok(Ok(health)) => {
+                if is_running_health_status(&health.status) {
                     DaemonState::Running
                 } else {
                     DaemonState::Degraded
                 }
             }
-            Err(_) => {
+            Ok(Err(_)) | Err(_) => {
                 // Daemon not reachable. Check if binary is installed.
                 if Self::is_installed() {
                     DaemonState::NotRunning
@@ -265,15 +273,7 @@ impl DaemonManager {
             }
         }
         let home = dirs_next::home_dir().unwrap_or_default();
-        [
-            PathBuf::from("/usr/local/bin/x0x"),
-            PathBuf::from("/opt/homebrew/bin/x0x"),
-            PathBuf::from("/opt/zerobrew/bin/x0x"),
-            home.join(".cargo/bin/x0x"),
-            home.join(".x0x/bin/x0x"),
-        ]
-        .into_iter()
-        .find(|p| p.exists())
+        locate_installed_binary_from_candidates(installed_binary_candidates(&home))
     }
 
     async fn fetch_release_manifest(url: &str) -> Result<ReleaseManifestLite> {
@@ -320,6 +320,29 @@ impl DaemonManager {
             }
         }
     }
+}
+
+fn installed_binary_candidates(home: &Path) -> [PathBuf; 6] {
+    [
+        PathBuf::from("/usr/local/bin/x0x"),
+        PathBuf::from("/opt/homebrew/bin/x0x"),
+        PathBuf::from("/opt/zerobrew/bin/x0x"),
+        home.join(".local/bin/x0x"),
+        home.join(".cargo/bin/x0x"),
+        home.join(".x0x/bin/x0x"),
+    ]
+}
+
+/// x0xd has used a few success strings across release lines.
+pub fn is_running_health_status(status: &str) -> bool {
+    matches!(status, "healthy" | "running" | "ok")
+}
+
+fn locate_installed_binary_from_candidates<I>(candidates: I) -> Option<PathBuf>
+where
+    I: IntoIterator<Item = PathBuf>,
+{
+    candidates.into_iter().find(|p| p.exists())
 }
 
 impl Default for DaemonManager {
@@ -393,5 +416,46 @@ async fn run_with_timeout(
                 timeout.as_secs()
             )))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn installed_binary_candidates_include_user_local_bin() {
+        let home = Path::new("/tmp/communitas-test-home");
+        let candidates = installed_binary_candidates(home);
+
+        assert!(
+            candidates.contains(&home.join(".local/bin/x0x")),
+            "~/.local/bin/x0x must be treated as an installed x0x CLI"
+        );
+    }
+
+    #[test]
+    fn running_health_status_accepts_all_success_spellings() {
+        assert!(is_running_health_status("healthy"));
+        assert!(is_running_health_status("running"));
+        assert!(is_running_health_status("ok"));
+        assert!(!is_running_health_status("degraded"));
+    }
+
+    #[test]
+    fn locate_installed_binary_from_candidates_finds_existing_user_binary() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let binary = temp.path().join(".local/bin/x0x");
+        let parent = binary.parent().expect("binary parent");
+        std::fs::create_dir_all(parent).expect("create x0x bin dir");
+        std::fs::write(&binary, b"#!/bin/sh\n").expect("write x0x marker");
+
+        let found = locate_installed_binary_from_candidates([
+            temp.path().join("missing/bin/x0x"),
+            binary.clone(),
+            temp.path().join(".cargo/bin/x0x"),
+        ]);
+
+        assert_eq!(found, Some(binary));
     }
 }

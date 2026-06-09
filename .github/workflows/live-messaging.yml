@@ -1,0 +1,149 @@
+name: Live Messaging
+
+on:
+  workflow_dispatch:
+    inputs:
+      x0x_ref:
+        description: "x0x git ref to test against"
+        required: true
+        default: "v0.22.0"
+  schedule:
+    - cron: "23 2 * * *"
+
+concurrency:
+  group: live-messaging-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  X0X_REF: ${{ inputs.x0x_ref || 'v0.22.0' }}
+
+jobs:
+  dioxus-live-messaging:
+    name: Dioxus Live Messaging E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/x0x
+          ref: ${{ env.X0X_REF }}
+          path: x0x
+
+      - name: Make x0x available as sibling checkout
+        run: |
+          if [ ! -e "$GITHUB_WORKSPACE/../x0x" ]; then
+            ln -s "$GITHUB_WORKSPACE/x0x" "$GITHUB_WORKSPACE/../x0x"
+          fi
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libssl-dev \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            libpipewire-0.3-dev \
+            libasound2-dev \
+            libdbus-1-dev \
+            libxdo-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            x0x -> target
+          cache-on-failure: false
+          shared-key: live-messaging-dioxus
+
+      - name: Run Dioxus live parity harness
+        env:
+          X0X_DIR: ${{ github.workspace }}/x0x
+        run: bash communitas-dioxus/tests/e2e.sh
+
+  swift-live-messaging:
+    name: Swift Live Messaging + Golden Paths
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: saorsa-labs/x0x
+          ref: ${{ env.X0X_REF }}
+          path: x0x
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build x0xd
+        run: cargo build --manifest-path x0x/Cargo.toml --release --bin x0xd
+
+      - name: Run Swift live WebSocket round-trips
+        working-directory: communitas-apple
+        env:
+          X0X_LIVE_TESTS: "1"
+          X0XD_BIN: ${{ github.workspace }}/x0x/target/release/x0xd
+        run: swift test --filter PubSubRoundTripTests
+
+      - name: Start x0xd for golden-path UI tests
+        run: |
+          "$GITHUB_WORKSPACE/x0x/target/release/x0xd" --skip-update-check > "$RUNNER_TEMP/x0xd-ui.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/x0xd-ui.pid"
+          for _ in $(seq 1 60); do
+            if [ -f "$HOME/Library/Application Support/x0x/api.port" ] \
+              && [ -f "$HOME/Library/Application Support/x0x/api-token" ]; then
+              break
+            fi
+            sleep 1
+          done
+          PORT="$(cat "$HOME/Library/Application Support/x0x/api.port")"
+          TOKEN="$(cat "$HOME/Library/Application Support/x0x/api-token")"
+          if [[ "$PORT" == *:* ]]; then
+            ADDRESS="$PORT"
+          else
+            ADDRESS="127.0.0.1:$PORT"
+          fi
+          echo "X0X_API_BASE=http://$ADDRESS" >> "$GITHUB_ENV"
+          echo "X0X_API_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Run Swift golden-path UI tests
+        working-directory: communitas-apple
+        env:
+          COMMUNITAS_RUN_XCUITEST: "1"
+          X0X_LIVE_TESTS: "1"
+        run: |
+          xcodebuild \
+            -scheme Communitas \
+            -destination 'platform=macOS' \
+            -only-testing:CommunitasUITests \
+            test
+
+      - name: Stop x0xd
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/x0xd-ui.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/x0xd-ui.pid")" || true
+          fi
+
+      - name: Upload x0xd UI-test log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swift-x0xd-ui-log
+          path: ${{ runner.temp }}/x0xd-ui.log
+          if-no-files-found: ignore

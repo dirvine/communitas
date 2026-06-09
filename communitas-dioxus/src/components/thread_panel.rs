@@ -67,53 +67,74 @@ pub fn ThreadPanel(
         let group_id = ws_group_id.clone();
         let parent_msg_id = ws_parent_msg_id.clone();
         async move {
-            let ws = match X0xWebSocket::connect().await {
-                Ok(ws) => {
-                    if let Err(e) = ws.subscribe(vec![topic.clone()]) {
-                        error!(target: "ui.thread_panel", "Failed to subscribe to thread: {e}");
-                        return;
-                    }
-                    ws_connected.set(true);
-                    ws
-                }
-                Err(e) => {
-                    warn!(target: "ui.thread_panel", "WebSocket connection failed: {e}");
-                    return;
-                }
-            };
-
-            let mut ws = ws;
-
-            while let Some(inbound) = ws.recv().await {
-                if let communitas_x0x_client::WsInbound::Message {
-                    topic: msg_topic,
-                    payload,
-                    ..
-                } = inbound
-                    && msg_topic == topic
-                    && let Ok(bytes) =
-                        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &payload)
-                    && let Ok(msg) = serde_json::from_slice::<ChatMessage>(&bytes)
-                {
-                    let history_msg = msg.clone();
-                    replies.with_mut(|r| {
-                        if !r.iter().any(|m| m.id == history_msg.id) {
-                            r.push(msg);
-                            r.sort_by_key(|m| m.timestamp);
-                        }
-                    });
-                    x0x_contract::append_thread_history(&group_id, &parent_msg_id, &history_msg)
-                        .await;
-                    // Notify channel view of new reply count
-                    if let Some(mut bump) = reply_count_bump {
-                        let next_gen = bump_generation() + 1;
-                        bump_generation.set(next_gen);
-                        bump.set(Some((parent_msg_id.clone(), next_gen)));
-                    }
-                }
+            if !crate::live_streams_enabled() {
+                return;
             }
 
-            ws_connected.set(false);
+            let mut retry_delay = std::time::Duration::from_secs(1);
+            loop {
+                let mut ws = match X0xWebSocket::connect().await {
+                    Ok(ws) => {
+                        if let Err(e) = ws.subscribe(vec![topic.clone()]) {
+                            error!(target: "ui.thread_panel", "Failed to subscribe to thread: {e}");
+                            ws_connected.set(false);
+                            crate::ui_sleep(retry_delay).await;
+                            retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                            continue;
+                        }
+                        ws_connected.set(true);
+                        retry_delay = std::time::Duration::from_secs(1);
+                        ws
+                    }
+                    Err(e) => {
+                        warn!(target: "ui.thread_panel", "WebSocket connection failed: {e}");
+                        ws_connected.set(false);
+                        crate::ui_sleep(retry_delay).await;
+                        retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                        continue;
+                    }
+                };
+
+                while let Some(inbound) = ws.recv().await {
+                    if let communitas_x0x_client::WsInbound::Message {
+                        topic: msg_topic,
+                        payload,
+                        ..
+                    } = inbound
+                        && msg_topic == topic
+                        && let Ok(bytes) = base64::Engine::decode(
+                            &base64::engine::general_purpose::STANDARD,
+                            &payload,
+                        )
+                        && let Ok(msg) = serde_json::from_slice::<ChatMessage>(&bytes)
+                    {
+                        let history_msg = msg.clone();
+                        replies.with_mut(|r| {
+                            if !r.iter().any(|m| m.id == history_msg.id) {
+                                r.push(msg);
+                                r.sort_by_key(|m| m.timestamp);
+                            }
+                        });
+                        x0x_contract::append_thread_history(
+                            &group_id,
+                            &parent_msg_id,
+                            &history_msg,
+                        )
+                        .await;
+                        // Notify channel view of new reply count
+                        if let Some(mut bump) = reply_count_bump {
+                            let next_gen = bump_generation() + 1;
+                            bump_generation.set(next_gen);
+                            bump.set(Some((parent_msg_id.clone(), next_gen)));
+                        }
+                    }
+                }
+
+                ws_connected.set(false);
+                warn!(target: "ui.thread_panel", "WebSocket closed; reconnecting");
+                crate::ui_sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+            }
         }
     });
 

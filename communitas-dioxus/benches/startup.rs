@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Startup performance benchmarks for Communitas Dioxus application.
 //!
 //! Measures the time to bootstrap UI services, which is the primary

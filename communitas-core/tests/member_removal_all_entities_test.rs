@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 // Copyright (c) 2025 Saorsa Labs Limited
 //
 // Integration tests for member removal across all entity types

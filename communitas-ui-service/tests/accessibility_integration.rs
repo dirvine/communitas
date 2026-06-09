@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Accessibility integration tests for UI service components.
 //!
 //! These tests verify that accessibility features are properly integrated

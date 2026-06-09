@@ -21,6 +21,45 @@ fn short_id(id: &str) -> String {
     }
 }
 
+fn same_transfers(left: &[FileTransfer], right: &[FileTransfer]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.transfer_id == right.transfer_id
+                && left.direction == right.direction
+                && left.remote_agent_id == right.remote_agent_id
+                && left.filename == right.filename
+                && left.total_size == right.total_size
+                && left.bytes_transferred == right.bytes_transferred
+                && left.status == right.status
+                && left.sha256 == right.sha256
+                && left.error == right.error
+                && left.started_at == right.started_at
+        })
+}
+
+async fn refresh_transfers(
+    mut transfers: Signal<Vec<FileTransfer>>,
+    mut error: Signal<Option<String>>,
+    mut loading: Signal<bool>,
+) {
+    let client = X0xClient::new();
+    match client.transfers().await {
+        Ok(list) => {
+            transfers.set(list);
+            if error.peek().is_some() {
+                error.set(None);
+            }
+        }
+        Err(e) => {
+            warn!(target: "ui.files", "failed to list transfers: {e}");
+            error.set(Some(format!("{e}")));
+        }
+    }
+    if *loading.peek() {
+        loading.set(false);
+    }
+}
+
 /// Props for the files view.
 #[derive(Props, Clone, PartialEq)]
 pub struct FilesViewProps {
@@ -42,20 +81,29 @@ pub fn FilesView(props: FilesViewProps) -> Element {
         let client = X0xClient::new();
 
         loop {
-            let _key = *refresh_key.read();
+            let _key = *refresh_key.peek();
             match client.transfers().await {
                 Ok(list) => {
-                    transfers.set(list);
-                    error.set(None);
+                    if !same_transfers(transfers.peek().as_slice(), list.as_slice()) {
+                        transfers.set(list);
+                    }
+                    if error.peek().is_some() {
+                        error.set(None);
+                    }
                 }
                 Err(e) => {
                     warn!(target: "ui.files", "failed to list transfers: {e}");
-                    error.set(Some(format!("{e}")));
+                    let next_error = Some(format!("{e}"));
+                    if error.peek().as_ref() != next_error.as_ref() {
+                        error.set(next_error);
+                    }
                 }
             }
-            loading.set(false);
+            if *loading.peek() {
+                loading.set(false);
+            }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+            crate::poll_sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
         }
     });
 
@@ -126,7 +174,7 @@ pub fn FilesView(props: FilesViewProps) -> Element {
             }
 
             // Send file form
-            {send_file_form(refresh_key)}
+            {send_file_form(transfers, error, loading, refresh_key)}
 
             // Incoming files requiring action
             if !incoming_pending.is_empty() {
@@ -186,6 +234,7 @@ pub fn FilesView(props: FilesViewProps) -> Element {
                                                     if let Err(e) = client.accept_file(&tid).await {
                                                         warn!(target: "ui.files", "failed to accept: {e}");
                                                     }
+                                                    refresh_transfers(transfers, error, loading).await;
                                                     refresh_key.set(refresh_key() + 1);
                                                 });
                                             }
@@ -209,6 +258,7 @@ pub fn FilesView(props: FilesViewProps) -> Element {
                                                     if let Err(e) = client.reject_file(&tid, None).await {
                                                         warn!(target: "ui.files", "failed to reject: {e}");
                                                     }
+                                                    refresh_transfers(transfers, error, loading).await;
                                                     refresh_key.set(refresh_key() + 1);
                                                 });
                                             }
@@ -331,7 +381,12 @@ pub fn FilesView(props: FilesViewProps) -> Element {
 }
 
 /// Send file form — agent ID + file path inputs.
-fn send_file_form(mut refresh_key: Signal<u64>) -> Element {
+fn send_file_form(
+    transfers: Signal<Vec<FileTransfer>>,
+    error: Signal<Option<String>>,
+    loading: Signal<bool>,
+    mut refresh_key: Signal<u64>,
+) -> Element {
     let mut agent_id_input = use_signal(String::new);
     let mut file_path_input = use_signal(String::new);
     let mut sending = use_signal(|| false);
@@ -420,7 +475,23 @@ fn send_file_form(mut refresh_key: Signal<u64>) -> Element {
 
                         spawn(async move {
                             let path = std::path::Path::new(&file_path);
-                            let meta = match tokio::fs::metadata(path).await {
+                            let canonical_path = match tokio::fs::canonicalize(path).await {
+                                Ok(path) => path,
+                                Err(e) => {
+                                    send_error.set(Some(format!("Cannot read file: {e}")));
+                                    sending.set(false);
+                                    return;
+                                }
+                            };
+                            let source_path = match canonical_path.to_str() {
+                                Some(path) => path.to_owned(),
+                                None => {
+                                    send_error.set(Some("File path must be valid UTF-8".into()));
+                                    sending.set(false);
+                                    return;
+                                }
+                            };
+                            let meta = match tokio::fs::metadata(&canonical_path).await {
                                 Ok(m) => m,
                                 Err(e) => {
                                     send_error.set(Some(format!("Cannot read file: {e}")));
@@ -435,7 +506,7 @@ fn send_file_form(mut refresh_key: Signal<u64>) -> Element {
                                 .unwrap_or_else(|| "file".to_string());
 
                             // Compute SHA-256
-                            let data = match tokio::fs::read(path).await {
+                            let data = match tokio::fs::read(&canonical_path).await {
                                 Ok(d) => d,
                                 Err(e) => {
                                     send_error.set(Some(format!("Failed to read file: {e}")));
@@ -448,7 +519,7 @@ fn send_file_form(mut refresh_key: Signal<u64>) -> Element {
 
                             let client = X0xClient::new();
                             match client
-                                .send_file(&agent_id, &filename, size, &sha256, Some(&file_path))
+                                .send_file(&agent_id, &filename, size, &sha256, Some(&source_path))
                                 .await
                             {
                                 Ok(transfer_id) => {
@@ -462,6 +533,7 @@ fn send_file_form(mut refresh_key: Signal<u64>) -> Element {
                                     )));
                                     agent_id_input.set(String::new());
                                     file_path_input.set(String::new());
+                                    refresh_transfers(transfers, error, loading).await;
                                     refresh_key.set(refresh_key() + 1);
                                 }
                                 Err(e) => send_error.set(Some(format!("Send failed: {e}"))),

@@ -175,9 +175,21 @@ jobs:
           </plist>
           EOF
 
-          # Ensure the binary can find Sparkle at @rpath
-          # SPM sets @rpath to the build directory; we need it to point into the .app bundle
-          install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/Communitas" 2>/dev/null || true
+          # Ensure the binary can find Sparkle at @rpath.
+          # SPM leaves build-directory rpaths in the binary; packaged apps must resolve
+          # frameworks from inside Contents/Frameworks.
+          add_bundle_rpath() {
+            local rpath="$1"
+            if otool -l "$MACOS_DIR/Communitas" | grep -A2 LC_RPATH | grep -Fq "path ${rpath} "; then
+              echo "Rpath already present: ${rpath}"
+            else
+              install_name_tool -add_rpath "$rpath" "$MACOS_DIR/Communitas"
+              echo "Added rpath: ${rpath}"
+            fi
+          }
+
+          add_bundle_rpath "@executable_path/../Frameworks"
+          add_bundle_rpath "@loader_path/../Frameworks"
           echo "Rpaths configured:"
           otool -l "$MACOS_DIR/Communitas" | grep -A2 LC_RPATH || true
 

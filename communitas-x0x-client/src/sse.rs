@@ -38,6 +38,10 @@ pub struct X0xSseStream {
 impl X0xSseStream {
     /// Connect to the daemon's general SSE endpoint (`/events`).
     pub async fn connect() -> Result<Self> {
+        if let Some((url, token)) = sse_url_from_env("/events") {
+            return Self::connect_with_optional_token(&url, token.as_deref()).await;
+        }
+
         match crate::config::discover() {
             Ok(cfg) => Self::connect_with_config(&cfg, "/events").await,
             Err(e) => {
@@ -51,6 +55,10 @@ impl X0xSseStream {
 
     /// Connect to the daemon's direct-message SSE endpoint (`/direct/events`).
     pub async fn connect_direct() -> Result<Self> {
+        if let Some((url, token)) = sse_url_from_env("/direct/events") {
+            return Self::connect_with_optional_token(&url, token.as_deref()).await;
+        }
+
         match crate::config::discover() {
             Ok(cfg) => Self::connect_with_config(&cfg, "/direct/events").await,
             Err(e) => {
@@ -64,6 +72,10 @@ impl X0xSseStream {
 
     /// Connect to the daemon's presence SSE endpoint (`/presence/events`).
     pub async fn connect_presence() -> Result<Self> {
+        if let Some((url, token)) = sse_url_from_env("/presence/events") {
+            return Self::connect_with_optional_token(&url, token.as_deref()).await;
+        }
+
         match crate::config::discover() {
             Ok(cfg) => Self::connect_with_config(&cfg, "/presence/events").await,
             Err(e) => {
@@ -77,6 +89,10 @@ impl X0xSseStream {
 
     /// Connect to the daemon's peer-lifecycle SSE endpoint (`/peers/events`).
     pub async fn connect_peer_events() -> Result<Self> {
+        if let Some((url, token)) = sse_url_from_env("/peers/events") {
+            return Self::connect_with_optional_token(&url, token.as_deref()).await;
+        }
+
         match crate::config::discover() {
             Ok(cfg) => Self::connect_with_config(&cfg, "/peers/events").await,
             Err(e) => {
@@ -104,6 +120,13 @@ impl X0xSseStream {
         let url = format!("http://{}{}", cfg.address.trim_end_matches('/'), path);
         let client = authenticated_client(&cfg.token)?;
         Self::connect_with_client(client, &url).await
+    }
+
+    async fn connect_with_optional_token(url: &str, token: Option<&str>) -> Result<Self> {
+        match token {
+            Some(token) => Self::connect_with_client(authenticated_client(token)?, url).await,
+            None => Self::connect_to(url).await,
+        }
     }
 
     async fn connect_with_client(client: reqwest::Client, url: &str) -> Result<Self> {
@@ -163,6 +186,31 @@ fn authenticated_client(token: &str) -> Result<reqwest::Client> {
         .default_headers(headers)
         .build()
         .map_err(X0xError::Http)
+}
+
+fn sse_url_from_env(path: &str) -> Option<(String, Option<String>)> {
+    let base_url = std::env::var("X0X_API_BASE").ok()?;
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let url = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        format!("{trimmed}{path}")
+    } else if let Some(address) = trimmed.strip_prefix("ws://") {
+        format!("http://{address}{path}")
+    } else if let Some(address) = trimmed.strip_prefix("wss://") {
+        format!("https://{address}{path}")
+    } else {
+        format!("http://{trimmed}{path}")
+    };
+
+    let token = match std::env::var("X0X_API_TOKEN") {
+        Ok(token) if !token.trim().is_empty() => Some(token.trim().to_owned()),
+        _ => None,
+    };
+
+    Some((url, token))
 }
 
 fn take_next_frame(buffer: &mut String) -> Option<String> {

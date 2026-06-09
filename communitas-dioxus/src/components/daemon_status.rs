@@ -18,7 +18,7 @@
 //! }
 //! ```
 
-use communitas_x0x_client::{DaemonManager, DaemonState, X0xClient};
+use communitas_x0x_client::{DaemonManager, DaemonState, X0xClient, is_running_health_status};
 use dioxus::prelude::*;
 use tracing::warn;
 
@@ -104,7 +104,7 @@ pub fn DaemonStatusBar() -> Element {
         loop {
             match client.health().await {
                 Ok(health) => {
-                    let daemon_state = if health.status == "healthy" || health.status == "running" {
+                    let daemon_state = if is_running_health_status(&health.status) {
                         DaemonState::Running
                     } else {
                         DaemonState::Degraded
@@ -132,7 +132,7 @@ pub fn DaemonStatusBar() -> Element {
                 }
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+            crate::poll_sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
         }
     });
 

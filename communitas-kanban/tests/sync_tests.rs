@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Sync tests for the Kanban CRDT system.
 //!
 //! These tests verify that concurrent edits merge correctly and data

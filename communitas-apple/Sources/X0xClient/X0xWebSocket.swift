@@ -22,7 +22,7 @@ public final class X0xWebSocket: NSObject, Sendable {
             rawPath = path
         }
 
-        guard let wsURL = URL(string: rawPath, relativeTo: baseURL) else {
+        guard let wsURL = URL(string: rawPath, relativeTo: baseURL)?.absoluteURL else {
             // Fall back to the base URL so we never crash; the connection will simply fail.
             self.url = baseURL
             self.task = URLSession.shared.webSocketTask(with: baseURL)

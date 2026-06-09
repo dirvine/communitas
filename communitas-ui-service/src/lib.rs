@@ -2,6 +2,8 @@
 
 //! Shared Rust service layer consumed by all Communitas UI surfaces (Dioxus + MCP).
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 pub mod audit;
 pub mod auth;
 pub mod canvas;

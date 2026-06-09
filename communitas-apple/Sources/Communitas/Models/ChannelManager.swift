@@ -46,6 +46,7 @@ final class ChannelManager: ObservableObject {
     /// and binds it to the current state-hash. MlsEncrypted (or
     /// unknown / legacy daemon) keeps the existing gossip path.
     @Published private(set) var confidentiality: GroupConfidentiality = .mlsEncrypted
+    private var confidentialityResolved = false
 
     /// IDs of SignedPublic messages already merged into `messages`.
     /// Bounded on long-running sessions. Shared by the WS-push path
@@ -85,6 +86,7 @@ final class ChannelManager: ObservableObject {
         if let info = try? await client.groupInfo(groupId: groupId),
            let policy = info.policy {
             self.confidentiality = policy.confidentiality
+            self.confidentialityResolved = true
         }
     }
 
@@ -96,29 +98,64 @@ final class ChannelManager: ObservableObject {
     ///    — the existing WebSocket session then streams events for
     ///    that topic into `handleWebSocketMessage`.
     /// 3. Start the 30 s poll backstop behind the push path.
-    private func startSignedPublicReceiveIfNeeded() async {
+    private func startSignedPublicReceiveIfNeeded(forceSubscribe: Bool = false) async {
         guard confidentiality == .signedPublic else { return }
 
-        if stableGroupId == nil,
-           let state = try? await client.getGroupState(groupId: groupId) {
-            stableGroupId = state.groupId
-        }
-        if let stableId = stableGroupId, publicTopic == nil {
-            let topic = "x0x.groups.public.\(stableId)"
-            do {
-                _ = try await client.subscribe(topic: topic)
-                publicTopic = topic
-            } catch {
-                // If the subscribe REST call fails, we still have the
-                // poll backstop. Log and continue.
-                errorMessage = "public topic subscribe failed: \(error.localizedDescription)"
-            }
+        do {
+            try await ensureSignedPublicSubscription(forceSubscribe: forceSubscribe)
+        } catch {
+            // If the subscribe REST call fails, we still have the
+            // poll backstop. Log and continue.
+            errorMessage = "public topic subscribe failed: \(error.localizedDescription)"
         }
         if signedPublicPollTask == nil {
             signedPublicPollTask = Task { [weak self] in
                 await self?.pollSignedPublicLoop()
             }
         }
+    }
+
+    private func ensureSignedPublicSubscription(forceSubscribe: Bool) async throws {
+        let stableId = try await resolveStableGroupId()
+        let topic = "x0x.groups.public.\(stableId)"
+        if forceSubscribe || publicTopic != topic {
+            _ = try await client.subscribe(topic: topic)
+            publicTopic = topic
+        }
+    }
+
+    @discardableResult
+    private func resolveStableGroupId() async throws -> String {
+        if let stableGroupId {
+            return stableGroupId
+        }
+        let state = try await client.getGroupState(groupId: groupId)
+        stableGroupId = state.groupId
+        return state.groupId
+    }
+
+    private func resolveConfidentialityForSend() async throws -> GroupConfidentiality {
+        if !confidentialityResolved {
+            let info = try await client.groupInfo(groupId: groupId)
+            guard let policy = info.policy else {
+                throw channelManagerError("Group policy is unavailable; cannot route the message safely.")
+            }
+            confidentiality = policy.confidentiality
+            confidentialityResolved = true
+        }
+        if confidentiality == .signedPublic {
+            _ = try await resolveStableGroupId()
+            await startSignedPublicReceiveIfNeeded(forceSubscribe: true)
+        }
+        return confidentiality
+    }
+
+    private func channelManagerError(_ message: String) -> NSError {
+        NSError(
+            domain: "Communitas.ChannelManager",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
     }
 
     /// Poll loop. Runs until the ChannelManager is torn down.
@@ -436,21 +473,54 @@ final class ChannelManager: ObservableObject {
     }
 
     private func startListening() {
-        let ws = X0xWebSocket(baseURL: client.webSocketBaseURL, path: "/ws", token: client.token)
-        self.webSocket = ws
-        ws.connect()
-
+        listeningTask?.cancel()
+        webSocket?.disconnect()
         listeningTask = Task { [weak self] in
+            var retryDelay: UInt64 = 1_000_000_000
             while !Task.isCancelled {
+                guard let self else { return }
+                let ws = await self.openWebSocketAndResubscribe()
                 do {
-                    let text = try await ws.receive()
-                    await self?.handleWebSocketMessage(text)
+                    retryDelay = 1_000_000_000
+                    while !Task.isCancelled {
+                        let text = try await ws.receive()
+                        await self.handleWebSocketMessage(text)
+                    }
                 } catch {
+                    self.clearWebSocket(ws)
                     if !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        try? await Task.sleep(nanoseconds: retryDelay)
+                        retryDelay = min(retryDelay * 2, 30_000_000_000)
                     }
                 }
             }
+        }
+    }
+
+    private func openWebSocketAndResubscribe() async -> X0xWebSocket {
+        let ws = X0xWebSocket(baseURL: client.webSocketBaseURL, path: "/ws", token: client.token)
+        self.webSocket = ws
+        ws.connect()
+        await resubscribeActiveTopics()
+        return ws
+    }
+
+    private func clearWebSocket(_ ws: X0xWebSocket) {
+        if webSocket === ws {
+            webSocket = nil
+        }
+        ws.disconnect()
+    }
+
+    private func resubscribeActiveTopics() async {
+        do {
+            _ = try await client.subscribe(topic: channelTopic(name: currentChannel))
+        } catch {
+            errorMessage = "Failed to resubscribe: \(error.localizedDescription)"
+        }
+        await refreshConfidentiality()
+        if confidentiality == .signedPublic {
+            await startSignedPublicReceiveIfNeeded(forceSubscribe: true)
         }
     }
 
@@ -657,6 +727,7 @@ final class ChannelManager: ObservableObject {
     ///   for these groups.
     /// - `MlsEncrypted` (default) → existing gossip path, unchanged.
     func sendMessage(text: String, replyToId: String? = nil) async throws {
+        let route = try await resolveConfidentialityForSend()
         let msg = ChannelChatMessage(
             id: UUID().uuidString,
             text: text,
@@ -667,7 +738,7 @@ final class ChannelManager: ObservableObject {
             replyToId: replyToId
         )
 
-        switch confidentiality {
+        switch route {
         case .signedPublic:
             _ = try await client.sendGroupPublicMessage(
                 groupId: groupId,

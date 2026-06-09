@@ -104,7 +104,7 @@ pub fn SwarmView(props: SwarmViewProps) -> Element {
     let mut task_desc = use_signal(String::new);
     let mut task_caps = use_signal(String::new);
     let mut posting = use_signal(|| false);
-    let mut ws_connected = use_signal(|| false);
+    let mut ws_connected = use_signal(|| !crate::live_streams_enabled());
 
     // Agent identity
     let mut own_agent_id = use_signal(|| Option::<String>::None);
@@ -130,59 +130,76 @@ pub fn SwarmView(props: SwarmViewProps) -> Element {
     use_coroutine(move |_: UnboundedReceiver<()>| {
         let group_id = ws_group_id.clone();
         async move {
+            if !crate::live_streams_enabled() {
+                return;
+            }
+
             let tasks_topic = swarm_tasks_topic(&group_id);
             let results_topic = swarm_results_topic(&group_id);
+            let mut retry_delay = std::time::Duration::from_secs(1);
 
-            let ws = match X0xWebSocket::connect().await {
-                Ok(ws) => {
-                    if let Err(e) = ws.subscribe(vec![tasks_topic.clone(), results_topic.clone()]) {
-                        error!(target: "ui.swarm", "Failed to subscribe to swarm topics: {e}");
-                        return;
-                    }
-                    info!(target: "ui.swarm", "Subscribed to swarm topics for group {group_id}");
-                    ws_connected.set(true);
-                    ws
-                }
-                Err(e) => {
-                    warn!(target: "ui.swarm", "WebSocket connect failed: {e}");
-                    return;
-                }
-            };
-
-            let mut ws = ws;
-            while let Some(inbound) = ws.recv().await {
-                match inbound {
-                    communitas_x0x_client::WsInbound::Message {
-                        topic: _, payload, ..
-                    } => {
-                        if let Ok(bytes) =
-                            base64::engine::general_purpose::STANDARD.decode(&payload)
+            loop {
+                let mut ws = match X0xWebSocket::connect().await {
+                    Ok(ws) => {
+                        if let Err(e) =
+                            ws.subscribe(vec![tasks_topic.clone(), results_topic.clone()])
                         {
-                            match serde_json::from_slice::<SwarmEvent>(&bytes) {
-                                Ok(evt) => {
-                                    events.with_mut(|list| {
-                                        if !list
-                                            .iter()
-                                            .any(|e| e.task_id == evt.task_id && e.kind == evt.kind)
-                                        {
-                                            list.insert(0, evt);
-                                        }
-                                    });
-                                }
-                                Err(e) => {
-                                    warn!(target: "ui.swarm", "Failed to parse swarm event: {e}");
+                            error!(target: "ui.swarm", "Failed to subscribe to swarm topics: {e}");
+                            ws_connected.set(false);
+                            crate::ui_sleep(retry_delay).await;
+                            retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                            continue;
+                        }
+                        info!(target: "ui.swarm", "Subscribed to swarm topics for group {group_id}");
+                        ws_connected.set(true);
+                        retry_delay = std::time::Duration::from_secs(1);
+                        ws
+                    }
+                    Err(e) => {
+                        warn!(target: "ui.swarm", "WebSocket connect failed: {e}");
+                        ws_connected.set(false);
+                        crate::ui_sleep(retry_delay).await;
+                        retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                        continue;
+                    }
+                };
+
+                while let Some(inbound) = ws.recv().await {
+                    match inbound {
+                        communitas_x0x_client::WsInbound::Message {
+                            topic: _, payload, ..
+                        } => {
+                            if let Ok(bytes) =
+                                base64::engine::general_purpose::STANDARD.decode(&payload)
+                            {
+                                match serde_json::from_slice::<SwarmEvent>(&bytes) {
+                                    Ok(evt) => {
+                                        events.with_mut(|list| {
+                                            if !list.iter().any(|e| {
+                                                e.task_id == evt.task_id && e.kind == evt.kind
+                                            }) {
+                                                list.insert(0, evt);
+                                            }
+                                        });
+                                    }
+                                    Err(e) => {
+                                        warn!(target: "ui.swarm", "Failed to parse swarm event: {e}");
+                                    }
                                 }
                             }
                         }
+                        communitas_x0x_client::WsInbound::Error { message } => {
+                            error!(target: "ui.swarm", "WebSocket error: {message}");
+                        }
+                        _ => {}
                     }
-                    communitas_x0x_client::WsInbound::Error { message } => {
-                        error!(target: "ui.swarm", "WebSocket error: {message}");
-                    }
-                    _ => {}
                 }
-            }
 
-            ws_connected.set(false);
+                ws_connected.set(false);
+                warn!(target: "ui.swarm", "WebSocket closed; reconnecting");
+                crate::ui_sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+            }
         }
     });
 

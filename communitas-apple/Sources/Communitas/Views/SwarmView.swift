@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import X0xClient
 
@@ -38,9 +39,8 @@ struct SwarmView: View {
     @EnvironmentObject var appState: AppState
 
     @State private var events: [SwarmEvent] = []
-    @State private var taskDescription = ""
-    @State private var taskCapabilities = ""
     @State private var isPosting = false
+    @State private var hasStartedSwarm = false
     @State private var webSocket: X0xWebSocket?
     @State private var listeningTask: Task<Void, Never>?
 
@@ -75,11 +75,11 @@ struct SwarmView: View {
                 eventFeed
             }
         }
-        .task {
-            await subscribeToTopics()
-            startListening()
+        .onAppear {
+            scheduleSwarmStartup()
         }
         .onDisappear {
+            hasStartedSwarm = false
             listeningTask?.cancel()
             webSocket?.disconnect()
         }
@@ -106,32 +106,10 @@ struct SwarmView: View {
 
     private var taskSubmission: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Post Task", systemImage: "plus.circle")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            TextEditor(text: $taskDescription)
-                .font(.body)
-                .frame(height: 80)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-
-            TextField("Required capabilities (optional)", text: $taskCapabilities)
-                .textFieldStyle(.plain)
-                .padding(8)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-
-            Button {
-                Task { await postTask() }
-            } label: {
-                HStack {
-                    Image(systemName: "paperplane.fill")
-                    Text("Post Task")
-                }
+            SwarmTaskSubmissionPanel(isPosting: isPosting) { description, capabilities in
+                postTask(description: description, capabilities: capabilities)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(taskDescription.trimmingCharacters(in: .whitespaces).isEmpty || isPosting)
+            .frame(height: 164)
         }
     }
 
@@ -303,35 +281,63 @@ struct SwarmView: View {
 
     // MARK: - Actions
 
-    private func postTask() async {
-        let desc = taskDescription.trimmingCharacters(in: .whitespaces)
-        guard !desc.isEmpty else { return }
+    private func scheduleSwarmStartup() {
+        guard !hasStartedSwarm else { return }
+        hasStartedSwarm = true
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                await subscribeToTopics()
+                startListening()
+            }
+        }
+    }
+
+    private func postTask(description rawDescription: String, capabilities rawCapabilities: String) -> Bool {
+        let desc = rawDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !desc.isEmpty, !isPosting else { return false }
         isPosting = true
-        defer { isPosting = false }
 
         let event = SwarmEvent(
             id: UUID().uuidString,
             type: .posted,
             taskId: UUID().uuidString,
             description: desc,
-            capabilities: taskCapabilities.trimmingCharacters(in: .whitespaces).isEmpty
-                ? nil : taskCapabilities.trimmingCharacters(in: .whitespaces),
+            capabilities: rawCapabilities.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? nil : rawCapabilities.trimmingCharacters(in: .whitespacesAndNewlines),
             agentId: appState.agentIdentity?.agentId,
             agentName: appState.displayName,
             timestamp: Int64(Date().timeIntervalSince1970 * 1000),
             result: nil
         )
 
+        let payload: String
         do {
             let data = try JSONEncoder().encode(event)
-            let payload = data.base64EncodedString()
-            try await appState.client.publish(topic: tasksTopic, payload: payload)
-            events.append(event)
-            taskDescription = ""
-            taskCapabilities = ""
+            payload = data.base64EncodedString()
         } catch {
+            isPosting = false
             appState.errorMessage = "Failed to post task: \(error.localizedDescription)"
+            return false
         }
+
+        let client = appState.client
+        let topic = tasksTopic
+        events.append(event)
+
+        Task {
+            do {
+                try await client.publish(topic: topic, payload: payload)
+            } catch {
+                await MainActor.run {
+                    appState.errorMessage = "Failed to post task: \(error.localizedDescription)"
+                }
+            }
+            await MainActor.run {
+                isPosting = false
+            }
+        }
+
+        return true
     }
 
     private func subscribeToTopics() async {
@@ -344,19 +350,29 @@ struct SwarmView: View {
     }
 
     private func startListening() {
-        let ws = X0xWebSocket(baseURL: appState.client.webSocketBaseURL, path: "/ws", token: appState.client.token)
-        self.webSocket = ws
-        ws.connect()
-
-        listeningTask = Task { [weak appState] in
-            _ = appState
+        listeningTask?.cancel()
+        webSocket?.disconnect()
+        listeningTask = Task { @MainActor in
+            var retryDelay: UInt64 = 1_000_000_000
             while !Task.isCancelled {
+                await subscribeToTopics()
+                let ws = X0xWebSocket(baseURL: appState.client.webSocketBaseURL, path: "/ws", token: appState.client.token)
+                self.webSocket = ws
+                ws.connect()
                 do {
-                    let text = try await ws.receive()
-                    await handleWebSocketMessage(text)
+                    retryDelay = 1_000_000_000
+                    while !Task.isCancelled {
+                        let text = try await ws.receive()
+                        await handleWebSocketMessage(text)
+                    }
                 } catch {
+                    if webSocket === ws {
+                        webSocket = nil
+                    }
+                    ws.disconnect()
                     if !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        try? await Task.sleep(nanoseconds: retryDelay)
+                        retryDelay = min(retryDelay * 2, 30_000_000_000)
                     }
                 }
             }
@@ -385,6 +401,101 @@ struct SwarmView: View {
                 if !events.contains(where: { $0.id == swarmEvent.id }) {
                     events.append(swarmEvent)
                 }
+            }
+        }
+    }
+}
+
+private struct SwarmTaskSubmissionPanel: NSViewRepresentable {
+    let isPosting: Bool
+    let onSubmit: (String, String) -> Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSubmit: onSubmit)
+    }
+
+    func makeNSView(context: Context) -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: "Post Task")
+        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        label.setAccessibilityIdentifier("swarm-post-task-label")
+
+        let textView = NSTextView()
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.drawsBackground = true
+        textView.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.45)
+        textView.textContainerInset = NSSize(width: 6, height: 6)
+        textView.setAccessibilityIdentifier("swarm-task-description")
+
+        let textScroll = NSScrollView()
+        textScroll.hasVerticalScroller = true
+        textScroll.borderType = .bezelBorder
+        textScroll.documentView = textView
+        textScroll.translatesAutoresizingMaskIntoConstraints = false
+        textScroll.setAccessibilityIdentifier("swarm-task-description-scroll")
+        NSLayoutConstraint.activate([
+            textScroll.widthAnchor.constraint(equalToConstant: 308),
+            textScroll.heightAnchor.constraint(equalToConstant: 80)
+        ])
+
+        let capabilitiesField = NSTextField()
+        capabilitiesField.placeholderString = "Required capabilities (optional)"
+        capabilitiesField.bezelStyle = .roundedBezel
+        capabilitiesField.translatesAutoresizingMaskIntoConstraints = false
+        capabilitiesField.setAccessibilityIdentifier("swarm-task-capabilities")
+        capabilitiesField.widthAnchor.constraint(equalToConstant: 304).isActive = true
+
+        let button = NSButton(
+            title: "Post Task",
+            target: context.coordinator,
+            action: #selector(Coordinator.submit(_:))
+        )
+        button.bezelStyle = .rounded
+        button.controlSize = .regular
+        button.image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Post Task")
+        button.imagePosition = .imageLeading
+        button.setAccessibilityIdentifier("swarm-post-task-button")
+
+        stack.addArrangedSubview(label)
+        stack.addArrangedSubview(textScroll)
+        stack.addArrangedSubview(capabilitiesField)
+        stack.addArrangedSubview(button)
+
+        context.coordinator.textView = textView
+        context.coordinator.capabilitiesField = capabilitiesField
+        context.coordinator.button = button
+
+        return stack
+    }
+
+    func updateNSView(_ stack: NSStackView, context: Context) {
+        context.coordinator.onSubmit = onSubmit
+        context.coordinator.button?.isEnabled = !isPosting
+    }
+
+    final class Coordinator: NSObject {
+        weak var textView: NSTextView?
+        weak var capabilitiesField: NSTextField?
+        weak var button: NSButton?
+        var onSubmit: (String, String) -> Bool
+
+        init(onSubmit: @escaping (String, String) -> Bool) {
+            self.onSubmit = onSubmit
+        }
+
+        @objc func submit(_ sender: NSButton) {
+            let description = textView?.string ?? ""
+            let capabilities = capabilitiesField?.stringValue ?? ""
+            if onSubmit(description, capabilities) {
+                textView?.string = ""
+                capabilitiesField?.stringValue = ""
             }
         }
     }

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use communitas_x0x_client::X0xClient;
 use dioxus::prelude::*;
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::tokens::{colors, radius, spacing, typography};
@@ -34,6 +35,61 @@ fn format_uptime(secs: u64) -> String {
 
 const SETTINGS_LOAD_TIMEOUT_SECS: u64 = 3;
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct LocalProfileSettings {
+    display_name: String,
+}
+
+fn profile_settings_path() -> std::path::PathBuf {
+    if let Some(base) = std::env::var_os("COMMUNITAS_X0X_SETTINGS_DIR") {
+        std::path::PathBuf::from(base).join("profile-settings.json")
+    } else {
+        dirs::data_local_dir()
+            .or_else(dirs::data_dir)
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("communitas")
+            .join("profile-settings.json")
+    }
+}
+
+async fn load_saved_display_name() -> Option<String> {
+    let path = profile_settings_path();
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => match serde_json::from_slice::<LocalProfileSettings>(&bytes) {
+            Ok(settings) => {
+                let name = settings.display_name.trim();
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(name.to_string())
+                }
+            }
+            Err(err) => {
+                warn!(target: "ui.settings", "failed to parse profile settings {}: {err}", path.display());
+                None
+            }
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => {
+            warn!(target: "ui.settings", "failed to read profile settings {}: {err}", path.display());
+            None
+        }
+    }
+}
+
+async fn save_display_name(display_name: &str) -> Result<(), std::io::Error> {
+    let path = profile_settings_path();
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let bytes = serde_json::to_vec_pretty(&LocalProfileSettings {
+        display_name: display_name.to_string(),
+    })
+    .map_err(std::io::Error::other)?;
+    tokio::fs::write(path, bytes).await
+}
+
 /// Settings page component.
 #[component]
 pub fn SettingsView() -> Element {
@@ -57,16 +113,32 @@ pub fn SettingsView() -> Element {
     use_future(move || async move {
         let client = X0xClient::new();
         let timeout = Duration::from_secs(SETTINGS_LOAD_TIMEOUT_SECS);
+        let saved_display_name = load_saved_display_name().await;
 
-        if let Ok(Ok(card_resp)) =
-            tokio::time::timeout(timeout, client.agent_card(None, Some(false))).await
-        {
-            display_name.set(card_resp.card.display_name.clone());
-            display_name_original.set(card_resp.card.display_name);
+        if let Some(ref name) = saved_display_name {
+            display_name.set(name.clone());
+            display_name_original.set(name.clone());
         }
 
-        if let Ok(Ok(card_resp)) =
-            tokio::time::timeout(timeout, client.agent_card(None, Some(true))).await
+        if let Ok(Ok(card_resp)) = tokio::time::timeout(
+            timeout,
+            client.agent_card(saved_display_name.as_deref(), Some(false)),
+        )
+        .await
+        {
+            let name = saved_display_name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or(card_resp.card.display_name);
+            display_name.set(name.clone());
+            display_name_original.set(name);
+        }
+
+        if let Ok(Ok(card_resp)) = tokio::time::timeout(
+            timeout,
+            client.agent_card_for_local_share(saved_display_name.as_deref(), Some(true)),
+        )
+        .await
         {
             agent_card_link.set(Some(card_resp.link));
         }
@@ -212,12 +284,24 @@ pub fn SettingsView() -> Element {
 
                             spawn(async move {
                                 let client = X0xClient::new();
-                                // Generate a new card with the updated name
-                                match client.agent_card(Some(&new_name), Some(false)).await {
-                                    Ok(_) => {
+                                match client
+                                    .agent_card_for_local_share(Some(&new_name), Some(true))
+                                    .await
+                                {
+                                    Ok(resp) => {
                                         info!(target: "ui.settings", "display name updated to: {new_name}");
-                                        display_name_original.set(new_name);
-                                        save_success.set(true);
+                                        let saved_name = resp.card.display_name.clone();
+                                        match save_display_name(&saved_name).await {
+                                            Ok(()) => {
+                                                display_name.set(saved_name.clone());
+                                                display_name_original.set(saved_name);
+                                                agent_card_link.set(Some(resp.link));
+                                                save_success.set(true);
+                                            }
+                                            Err(err) => {
+                                                save_error.set(Some(format!("Failed to persist display name: {err}")));
+                                            }
+                                        }
                                     }
                                     Err(e) => {
                                         save_error.set(Some(format!("{e}")));
@@ -262,10 +346,16 @@ pub fn SettingsView() -> Element {
                     div {
                         style: format!(
                             "font-family: {}; font-size: {}; color: {}; \
-                             word-break: break-all; margin-bottom: {};",
+                             word-break: break-all; margin-bottom: {}; max-height: 160px; \
+                             overflow-y: auto; background: {}; border: 1px solid {}; \
+                             border-radius: {}; padding: {}; line-height: 1.45;",
                             typography::FONT_MONO,
                             typography::TEXT_XS,
                             colors::TEXT_SECONDARY,
+                            spacing::SM,
+                            colors::SURFACE_BG,
+                            colors::BORDER_DEFAULT,
+                            radius::MD,
                             spacing::SM,
                         ),
                         "{link}"
@@ -280,9 +370,15 @@ pub fn SettingsView() -> Element {
                         disabled: generating_card(),
                         onclick: move |_| {
                             generating_card.set(true);
+                            let current_name = display_name().trim().to_string();
                             spawn(async move {
                                 let client = X0xClient::new();
-                                match client.agent_card(None, Some(true)).await {
+                                let display_name = if current_name.is_empty() {
+                                    None
+                                } else {
+                                    Some(current_name.as_str())
+                                };
+                                match client.agent_card_for_local_share(display_name, Some(true)).await {
                                     Ok(resp) => {
                                         agent_card_link.set(Some(resp.link));
                                     }
@@ -311,7 +407,7 @@ pub fn SettingsView() -> Element {
                                     copy_text(link);
                                     card_copied.set(true);
                                     spawn(async move {
-                                        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                                        crate::ui_sleep(tokio::time::Duration::from_secs(2)).await;
                                         card_copied.set(false);
                                     });
                                 }

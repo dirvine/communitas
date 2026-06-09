@@ -173,6 +173,7 @@ struct DirectMessageView: View {
             startListening(contact: contact)
         }
         .onDisappear {
+            hasConnected = false
             listeningTask?.cancel()
             webSocket?.disconnect()
         }
@@ -320,7 +321,11 @@ struct DirectMessageView: View {
                 )
                 let payloadData = try JSONEncoder().encode(wire)
                 let payload = payloadData.base64EncodedString()
-                try await appState.client.sendDirect(agentId: contact.agentId, payload: payload)
+                try await appState.client.sendDirect(
+                    agentId: contact.agentId,
+                    payload: payload,
+                    requireGossipAck: true
+                )
                 messages.append(msg)
                 saveHistory(agentId: contact.agentId)
             } catch {
@@ -329,8 +334,8 @@ struct DirectMessageView: View {
         }
     }
 
-    private func connectToAgent(contact: Contact) async {
-        guard !hasConnected else { return }
+    private func connectToAgent(contact: Contact, force: Bool = false) async {
+        guard force || !hasConnected else { return }
         do {
             try await appState.client.connectAgent(agentId: contact.agentId)
             hasConnected = true
@@ -340,18 +345,29 @@ struct DirectMessageView: View {
     }
 
     private func startListening(contact: Contact) {
-        let ws = X0xWebSocket(baseURL: appState.client.webSocketBaseURL, path: "/ws/direct", token: appState.client.token)
-        self.webSocket = ws
-        ws.connect()
-
-        listeningTask = Task {
+        listeningTask?.cancel()
+        webSocket?.disconnect()
+        listeningTask = Task { @MainActor in
+            var retryDelay: UInt64 = 1_000_000_000
             while !Task.isCancelled {
+                await connectToAgent(contact: contact, force: true)
+                let ws = X0xWebSocket(baseURL: appState.client.webSocketBaseURL, path: "/ws/direct", token: appState.client.token)
+                self.webSocket = ws
+                ws.connect()
                 do {
-                    let text = try await ws.receive()
-                    await handleDirectMessage(text, from: contact)
+                    retryDelay = 1_000_000_000
+                    while !Task.isCancelled {
+                        let text = try await ws.receive()
+                        await handleDirectMessage(text, from: contact)
+                    }
                 } catch {
+                    if webSocket === ws {
+                        webSocket = nil
+                    }
+                    ws.disconnect()
                     if !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        try? await Task.sleep(nanoseconds: retryDelay)
+                        retryDelay = min(retryDelay * 2, 30_000_000_000)
                     }
                 }
             }

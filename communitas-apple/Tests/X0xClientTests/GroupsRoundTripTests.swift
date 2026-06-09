@@ -66,7 +66,7 @@ struct GroupsRoundTripTests {
             name: "ban-\(UUID().uuidString.prefix(8))",
             description: nil,
             displayName: nil,
-            preset: .privateSecure
+            preset: .publicOpen
         )
         let target = Self.hex64(0x99)
 

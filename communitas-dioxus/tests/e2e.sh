@@ -41,6 +41,7 @@ TESTS=(
     e2e_identity
     e2e_trust_contacts
     e2e_connectivity
+    e2e_messaging
     e2e_groups
     e2e_kv_store
     e2e_presence

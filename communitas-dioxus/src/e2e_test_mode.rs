@@ -12,10 +12,14 @@
 use std::io::{self, BufRead, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use communitas_x0x_client::{
-    GroupPolicyPreset, GroupRole, TrustLevel, UpdateGroupPolicyRequest, X0xClient,
+    GroupPolicyPreset, GroupRole, TrustLevel, UpdateGroupPolicyRequest, WsInbound, X0xClient,
+    X0xWebSocket,
 };
 use serde_json::{Value, json};
+use tokio::time::timeout;
 
 /// Run the line-delimited JSON E2E command loop.
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,6 +92,7 @@ async fn handle_operation(op: &str, command: &Value) -> Result<Value, String> {
         "trust.evaluate" => trust_evaluate(&client, command).await,
         "connectivity.discover_agents" => connectivity_discover_agents(&client).await,
         "connectivity.four_word_bootstrap" => connectivity_four_word_bootstrap(&client).await,
+        "messaging.pubsub_roundtrip" => messaging_pubsub_roundtrip(&client).await,
         "groups.policy" => groups_policy(&client, command).await,
         "groups.discover" => groups_discover(&client).await,
         "kv.create_list" => kv_create_list(&client).await,
@@ -289,6 +294,73 @@ async fn connectivity_four_word_bootstrap(client: &X0xClient) -> Result<Value, S
         "can_receive_direct": network.can_receive_direct,
         "external_addresses": network.external_addrs.len(),
     }))
+}
+
+async fn messaging_pubsub_roundtrip(client: &X0xClient) -> Result<Value, String> {
+    let mut ws = X0xWebSocket::connect()
+        .await
+        .map_err(|err| format!("connect /ws: {err}"))?;
+    let topic = unique_suffix("dioxus-pubsub");
+    let message = format!("hello-{topic}");
+
+    let connected = timeout(Duration::from_secs(5), ws.recv())
+        .await
+        .map_err(|_| "timed out waiting for /ws connected frame".to_string())?
+        .ok_or_else(|| "websocket closed before connected frame".to_string())?;
+    if !matches!(connected, WsInbound::Connected { .. }) {
+        return Err(format!("expected connected frame, got {connected:?}"));
+    }
+
+    ws.subscribe(vec![topic.clone()])
+        .map_err(|err| format!("subscribe {topic}: {err}"))?;
+
+    loop {
+        let inbound = timeout(Duration::from_secs(5), ws.recv())
+            .await
+            .map_err(|_| format!("timed out waiting for subscribed frame on {topic}"))?
+            .ok_or_else(|| "websocket closed before subscribed frame".to_string())?;
+        match inbound {
+            WsInbound::Subscribed { topics } if topics.contains(&topic) => break,
+            WsInbound::Connected { .. } => continue,
+            _ => continue,
+        }
+    }
+
+    client
+        .publish(&topic, message.as_bytes())
+        .await
+        .map_err(|err| format!("publish {topic}: {err}"))?;
+
+    loop {
+        let inbound = timeout(Duration::from_secs(10), ws.recv())
+            .await
+            .map_err(|_| format!("timed out waiting for message on {topic}"))?
+            .ok_or_else(|| "websocket closed before message frame".to_string())?;
+        match inbound {
+            WsInbound::Message {
+                topic: inbound_topic,
+                payload,
+                ..
+            } if inbound_topic == topic => {
+                let decoded = BASE64
+                    .decode(payload.as_bytes())
+                    .map_err(|err| format!("decode payload: {err}"))?;
+                let echoed = String::from_utf8(decoded)
+                    .map_err(|err| format!("payload was not UTF-8: {err}"))?;
+                if echoed != message {
+                    return Err(format!(
+                        "expected echoed payload {message:?}, got {echoed:?}"
+                    ));
+                }
+                return Ok(json!({
+                    "topic": topic,
+                    "payload": echoed,
+                    "stream": "ws",
+                }));
+            }
+            _ => continue,
+        }
+    }
 }
 
 async fn groups_policy(client: &X0xClient, command: &Value) -> Result<Value, String> {

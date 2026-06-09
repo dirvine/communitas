@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Integration tests for sync state transitions in the Communitas UI services.
 //!
 //! These tests verify the offline-first UX behavior including:

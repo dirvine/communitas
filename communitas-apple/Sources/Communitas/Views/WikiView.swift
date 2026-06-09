@@ -11,9 +11,8 @@ struct WikiView: View {
     @State private var pageContent = ""
     @State private var isEditing = false
     @State private var editBuffer = ""
-    @State private var isLoading = true
-    @State private var newSlug = ""
-    @State private var showCreatePage = false
+    @State private var isLoading = false
+    @State private var hasLoadedIndex = false
 
     private var prefix: String {
         appState.groupPrefix(for: groupId)
@@ -35,15 +34,15 @@ struct WikiView: View {
         VStack(spacing: 0) {
             wikiHeader
             Divider()
-            HSplitView {
+            HStack(spacing: 0) {
                 pageList
-                    .frame(minWidth: 180, maxWidth: 240)
+                    .frame(width: 220)
+                Divider()
                 pageDetail
             }
         }
-        .task {
-            await loadIndex()
-            isLoading = false
+        .onAppear {
+            scheduleInitialLoad()
         }
     }
 
@@ -54,17 +53,6 @@ struct WikiView: View {
             Text("Wiki")
                 .font(.headline)
             Spacer()
-            Button {
-                showCreatePage = true
-            } label: {
-                Label("New Page", systemImage: "plus")
-                    .font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .popover(isPresented: $showCreatePage) {
-                createPagePopover
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -74,23 +62,57 @@ struct WikiView: View {
     // MARK: - Page List
 
     private var pageList: some View {
-        List(pageSlugs, id: \.self, selection: $selectedSlug) { slug in
-            HStack {
-                Image(systemName: "doc.text")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Pages")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            AppKitPageCreatePanel(
+                placeholder: "Page slug",
+                buttonTitle: "Create",
+                accessibilityPrefix: "wiki-create-page"
+            ) { rawSlug in
+                Task { await createPage(rawSlug: rawSlug) }
+                return true
+            }
+            .frame(height: 58)
+
+            Divider()
+
+            if pageSlugs.isEmpty {
+                Text("No pages yet")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(slug)
-                    .font(.body)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(pageSlugs, id: \.self) { slug in
+                            Button {
+                                selectPage(slug)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "doc.text")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(slug)
+                                        .font(.body)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    selectedSlug == slug ? Color.accentColor.opacity(0.12) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 6)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
-            .tag(slug)
         }
-        .listStyle(.sidebar)
-        .onChange(of: selectedSlug) {
-            isEditing = false
-            if let slug = selectedSlug {
-                Task { await loadPage(slug: slug) }
-            }
-        }
+        .padding(12)
     }
 
     // MARK: - Page Detail
@@ -126,15 +148,15 @@ struct WikiView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                 Spacer()
-                Button {
+                AppKitInlineButton(
+                    title: "Edit",
+                    systemSymbolName: "pencil",
+                    accessibilityIdentifier: "wiki-edit-page-button"
+                ) {
                     editBuffer = pageContent
                     isEditing = true
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                        .font(.caption)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .frame(width: 74, height: 26)
             }
 
             ScrollView {
@@ -149,68 +171,39 @@ struct WikiView: View {
     }
 
     private func editorView(slug: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Editing: \(slug)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Spacer()
-                Button("Cancel") {
-                    isEditing = false
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button("Save") {
-                    Task { await savePage(slug: slug) }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-
-            TextEditor(text: $editBuffer)
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        AppKitTextEditorPanel(
+            title: "Editing: \(slug)",
+            content: editBuffer,
+            saveTitle: "Save",
+            accessibilityPrefix: "wiki-editor",
+            isMonospaced: false
+        ) {
+            isEditing = false
+        } onSave: { content in
+            Task { await savePage(slug: slug, content: content) }
+            return true
         }
         .padding(16)
-    }
-
-    // MARK: - Create Page
-
-    private var createPagePopover: some View {
-        VStack(spacing: 12) {
-            Text("Create Page")
-                .font(.headline)
-
-            TextField("Page slug", text: $newSlug)
-                .textFieldStyle(.plain)
-                .padding(8)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                .help("Lowercase, hyphens for spaces")
-
-            HStack {
-                Button("Cancel") {
-                    newSlug = ""
-                    showCreatePage = false
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button("Create") {
-                    Task { await createPage() }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(newSlug.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(16)
-        .frame(width: 280)
     }
 
     // MARK: - Actions
+
+    private func scheduleInitialLoad() {
+        guard !hasLoadedIndex else { return }
+        hasLoadedIndex = true
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                await loadIndex()
+                isLoading = false
+            }
+        }
+    }
+
+    private func selectPage(_ slug: String) {
+        selectedSlug = slug
+        isEditing = false
+        Task { await loadPage(slug: slug) }
+    }
 
     private func ensureStore() async {
         do {
@@ -242,18 +235,19 @@ struct WikiView: View {
         }
     }
 
-    private func savePage(slug: String) async {
+    private func savePage(slug: String, content: String) async {
         do {
-            try await appState.client.storePut(storeId: storeName, key: pageKey(slug), value: editBuffer)
-            pageContent = editBuffer
+            try await appState.client.storePut(storeId: storeName, key: pageKey(slug), value: content)
+            pageContent = content
+            editBuffer = content
             isEditing = false
         } catch {
             appState.errorMessage = "Failed to save: \(error.localizedDescription)"
         }
     }
 
-    private func createPage() async {
-        let slug = newSlug
+    private func createPage(rawSlug: String) async {
+        let slug = rawSlug
             .trimmingCharacters(in: .whitespaces)
             .lowercased()
             .replacingOccurrences(of: " ", with: "-")
@@ -275,8 +269,9 @@ struct WikiView: View {
 
             pageSlugs = slugs
             selectedSlug = slug
-            newSlug = ""
-            showCreatePage = false
+            pageContent = ""
+            editBuffer = ""
+            isEditing = true
         } catch {
             appState.errorMessage = "Failed to create page: \(error.localizedDescription)"
         }

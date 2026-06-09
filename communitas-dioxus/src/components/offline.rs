@@ -844,7 +844,7 @@ pub fn Toast(props: ToastProps) -> Element {
         let toast_id = toast_id_for_timer.clone();
         async move {
             if auto_dismiss {
-                tokio::time::sleep(std::time::Duration::from_millis(duration as u64)).await;
+                crate::ui_sleep(std::time::Duration::from_millis(duration as u64)).await;
                 on_dismiss_timer.call(toast_id);
             }
         }

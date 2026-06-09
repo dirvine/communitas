@@ -2,7 +2,7 @@
 
 //! Bottom status bar showing daemon connectivity, peer count, and agent identity.
 
-use communitas_x0x_client::{DaemonManager, DaemonState, X0xClient};
+use communitas_x0x_client::{DaemonManager, DaemonState, X0xClient, is_running_health_status};
 use dioxus::prelude::*;
 
 use crate::tokens::{colors, radius, spacing, typography};
@@ -54,33 +54,55 @@ pub fn StatusBar() -> Element {
         loop {
             match client.health().await {
                 Ok(health) => {
-                    let state = if health.status == "healthy" || health.status == "running" {
+                    let state = if is_running_health_status(&health.status) {
                         DaemonState::Running
                     } else {
                         DaemonState::Degraded
                     };
-                    daemon_state.set(state);
-                    peers.set(health.peers);
-                    version.set(Some(health.version.clone()));
+                    if *daemon_state.peek() != state {
+                        daemon_state.set(state);
+                    }
+                    if *peers.peek() != health.peers {
+                        peers.set(health.peers);
+                    }
+                    let next_version = Some(health.version.clone());
+                    if version.peek().as_ref() != next_version.as_ref() {
+                        version.set(next_version);
+                    }
 
                     match client.agent().await {
-                        Ok(identity) => agent_id.set(Some(identity.agent_id)),
+                        Ok(identity) => {
+                            let next_agent_id = Some(identity.agent_id);
+                            if agent_id.peek().as_ref() != next_agent_id.as_ref() {
+                                agent_id.set(next_agent_id);
+                            }
+                        }
                         Err(e) => {
                             warn!(target: "ui.status_bar", "failed to fetch agent: {e}");
-                            agent_id.set(None);
+                            if agent_id.peek().is_some() {
+                                agent_id.set(None);
+                            }
                         }
                     }
                 }
                 Err(_) => {
                     let state = manager.state().await;
-                    daemon_state.set(state);
-                    agent_id.set(None);
-                    peers.set(0);
-                    version.set(None);
+                    if *daemon_state.peek() != state {
+                        daemon_state.set(state);
+                    }
+                    if agent_id.peek().is_some() {
+                        agent_id.set(None);
+                    }
+                    if *peers.peek() != 0 {
+                        peers.set(0);
+                    }
+                    if version.peek().is_some() {
+                        version.set(None);
+                    }
                 }
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+            crate::poll_sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
         }
     });
 
@@ -153,7 +175,7 @@ pub fn StatusBar() -> Element {
                     format!("navigator.clipboard.writeText(\"{escaped}\").catch(()=>{{}});",);
                 let _ = dioxus::document::eval(&script);
                 copied.set(true);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                crate::ui_sleep(tokio::time::Duration::from_secs(2)).await;
                 copied.set(false);
             });
         }

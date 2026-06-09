@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Parity proof: every x0x REST endpoint in the `named-groups` category
 //! has a corresponding client method.
 //!

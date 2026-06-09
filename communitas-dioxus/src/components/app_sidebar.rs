@@ -707,7 +707,16 @@ fn SpaceAccordionItem(props: SpaceAccordionItemProps) -> Element {
             button {
                 style: "{header_style}",
                 aria_expanded: if props.is_expanded { "true" } else { "false" },
-                onclick: move |_| props.on_toggle.call(()),
+                onclick: {
+                    let space_path = space_path.clone();
+                    let should_expand = !props.is_expanded;
+                    move |_| {
+                        props.on_navigate.call(space_path.clone());
+                        if should_expand {
+                            props.on_toggle.call(());
+                        }
+                    }
+                },
 
                 // Presence / expand indicator dot
                 span {

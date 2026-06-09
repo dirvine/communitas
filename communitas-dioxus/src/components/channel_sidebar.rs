@@ -38,9 +38,22 @@ pub struct SelectedChannel {
     pub meta: Option<ChannelMeta>,
 }
 
+fn set_signal_if_changed<T: PartialEq + 'static>(signal: &mut Signal<T>, next: T) {
+    let changed = {
+        let current = signal.peek();
+        *current != next
+    };
+    if changed {
+        signal.set(next);
+    }
+}
+
 /// Channel sidebar showing spaces and their channels.
 #[component]
 pub fn ChannelSidebar(
+    /// Restrict the channel list to one active space.
+    #[props(default)]
+    active_space_id: Option<String>,
     /// The currently selected channel, if any.
     #[props(default)]
     selected: Option<SelectedChannel>,
@@ -62,20 +75,29 @@ pub fn ChannelSidebar(
         use_signal(std::collections::HashSet::new);
 
     let selected_for_load = selected.clone();
+    let active_space_id_for_load = active_space_id.clone();
     let on_select_for_load = on_select;
     use_future(move || {
         let refresh_key = refresh_key;
         let selected = selected_for_load.clone();
+        let active_space_id = active_space_id_for_load.clone();
         let on_select = on_select_for_load;
         async move {
             let _ = refresh_key;
-            loading.set(true);
-            error_msg.set(None);
+            set_signal_if_changed(&mut loading, true);
+            set_signal_if_changed(&mut error_msg, None);
 
             let client = X0xClient::new();
-            match load_spaces(&client).await {
+            match load_spaces(&client, active_space_id.as_deref()).await {
                 Ok(loaded_spaces) => {
-                    if selected.is_none()
+                    let should_auto_select = match (&selected, &active_space_id) {
+                        (None, _) => true,
+                        (Some(selected), Some(active_space_id)) => {
+                            selected.group_id != *active_space_id
+                        }
+                        (Some(_), None) => false,
+                    };
+                    if should_auto_select
                         && let Some(first_space) = loaded_spaces.first()
                         && let Some(first_channel) = first_space.channels.first()
                     {
@@ -86,15 +108,15 @@ pub fn ChannelSidebar(
                             meta: Some(first_channel.clone()),
                         });
                     }
-                    spaces.set(loaded_spaces)
+                    set_signal_if_changed(&mut spaces, loaded_spaces);
                 }
                 Err(err) => {
                     error!(target: "ui.channel_sidebar", "Failed to load spaces: {err}");
-                    error_msg.set(Some(err));
+                    set_signal_if_changed(&mut error_msg, Some(err));
                 }
             }
 
-            loading.set(false);
+            set_signal_if_changed(&mut loading, false);
         }
     });
 
@@ -263,7 +285,10 @@ fn fallback_group_info(summary: &GroupSummary) -> GroupInfo {
     }
 }
 
-async fn load_spaces(client: &X0xClient) -> Result<Vec<SpaceEntry>, String> {
+async fn load_spaces(
+    client: &X0xClient,
+    active_space_id: Option<&str>,
+) -> Result<Vec<SpaceEntry>, String> {
     let groups = client
         .list_groups()
         .await
@@ -271,7 +296,10 @@ async fn load_spaces(client: &X0xClient) -> Result<Vec<SpaceEntry>, String> {
 
     let mut loaded_spaces = Vec::new();
 
-    for group in groups {
+    for group in groups.into_iter().filter(|group| match active_space_id {
+        Some(active_space_id) => group.group_id == active_space_id,
+        None => true,
+    }) {
         let group_info = match client.get_group(&group.group_id).await {
             Ok(group_info) => group_info,
             Err(err) => {

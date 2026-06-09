@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Stress tests for the Communitas UI services.
 //!
 //! These tests are marked `#[ignore]` and should be run in CI nightly builds

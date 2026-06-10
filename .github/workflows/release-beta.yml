@@ -319,7 +319,7 @@ jobs:
         run: |
           cargo install --locked \
             --git https://github.com/saorsa-labs/x0x \
-            --branch wip/daemon-app-integration \
+            --tag v0.21.4 \
             --bin x0x-keygen \
             x0x
           x0x-keygen --help

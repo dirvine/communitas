@@ -6,7 +6,7 @@ on:
       x0x_ref:
         description: "x0x git ref to test against"
         required: true
-        default: "wip/daemon-app-integration"
+        default: "v0.21.4"
   schedule:
     - cron: "23 2 * * *"
 
@@ -15,10 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Temporary integration pin while the fixed x0x daemon-integration release
-  # is still unreleased. Move this back to a tag once x0x cuts the replacement
-  # for the canceled v0.22.0.
-  X0X_REF: ${{ inputs.x0x_ref || 'wip/daemon-app-integration' }}
+  X0X_REF: ${{ inputs.x0x_ref || 'v0.21.4' }}
 
 jobs:
   dioxus-live-messaging:

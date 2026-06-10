@@ -30,14 +30,17 @@ pub fn use_presence() -> Signal<HashSet<String>> {
         loop {
             match client.presence().await {
                 Ok(agents) => {
-                    online.set(agents.into_iter().collect());
+                    let next_online = agents.into_iter().collect();
+                    if *online.peek() != next_online {
+                        online.set(next_online);
+                    }
                 }
                 Err(e) => {
                     // Best-effort — silently ignore like Swift
                     warn!(target: "ui.presence", "presence poll failed: {e}");
                 }
             }
-            tokio::time::sleep(tokio::time::Duration::from_secs(PRESENCE_POLL_SECS)).await;
+            crate::poll_sleep(tokio::time::Duration::from_secs(PRESENCE_POLL_SECS)).await;
         }
     });
 

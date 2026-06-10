@@ -167,7 +167,7 @@ pub fn NetworkView() -> Element {
             data.set(d);
             loading.set(false);
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+            crate::poll_sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
         }
     });
 

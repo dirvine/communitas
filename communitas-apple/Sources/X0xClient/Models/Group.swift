@@ -416,6 +416,23 @@ public struct SendGroupMessageRequest: Codable, Sendable {
     }
 }
 
+/// Response from `POST /groups/:id/send`.
+public struct GroupPublicSendResponse: Codable, Sendable, Hashable {
+    public let ok: Bool?
+    public let groupId: String
+    public let topic: String
+    public let fallbackTopic: String?
+    public let timestamp: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case groupId = "group_id"
+        case topic
+        case fallbackTopic = "fallback_topic"
+        case timestamp
+    }
+}
+
 /// Response wrapper for `GET /groups/:id/messages`.
 public struct GroupMessagesResponse: Codable, Sendable {
     public let ok: Bool?
@@ -669,15 +686,22 @@ public struct UpdateMemberRoleRequest: Codable, Sendable {
 public struct AddNamedGroupMemberRequest: Codable, Sendable {
     public let agentId: String
     public let displayName: String?
+    public let treekemKeyPackageB64: String?
 
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
         case displayName = "display_name"
+        case treekemKeyPackageB64 = "treekem_key_package_b64"
     }
 
-    public init(agentId: String, displayName: String? = nil) {
+    public init(
+        agentId: String,
+        displayName: String? = nil,
+        treekemKeyPackageB64: String? = nil
+    ) {
         self.agentId = agentId
         self.displayName = displayName
+        self.treekemKeyPackageB64 = treekemKeyPackageB64
     }
 }
 
@@ -716,14 +740,16 @@ public struct SecureEncryptRequest: Codable, Sendable {
 public struct SecureEncryptResponse: Codable, Sendable {
     public let ok: Bool?
     public let ciphertextB64: String
-    public let nonceB64: String
+    public let nonceB64: String?
     public let secretEpoch: UInt64
+    public let securePlane: String?
 
     enum CodingKeys: String, CodingKey {
         case ok
         case ciphertextB64 = "ciphertext_b64"
         case nonceB64 = "nonce_b64"
         case secretEpoch = "secret_epoch"
+        case securePlane = "secure_plane"
     }
 }
 
@@ -750,10 +776,32 @@ public struct SecureDecryptRequest: Codable, Sendable {
 public struct SecureDecryptResponse: Codable, Sendable {
     public let ok: Bool?
     public let plaintextB64: String
+    public let secretEpoch: UInt64?
+    public let securePlane: String?
 
     enum CodingKeys: String, CodingKey {
         case ok
         case plaintextB64 = "plaintext_b64"
+        case payloadB64 = "payload_b64"
+        case secretEpoch = "secret_epoch"
+        case securePlane = "secure_plane"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.ok = try container.decodeIfPresent(Bool.self, forKey: .ok)
+        self.plaintextB64 = try container.decodeIfPresent(String.self, forKey: .plaintextB64)
+            ?? container.decode(String.self, forKey: .payloadB64)
+        self.secretEpoch = try container.decodeIfPresent(UInt64.self, forKey: .secretEpoch)
+        self.securePlane = try container.decodeIfPresent(String.self, forKey: .securePlane)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(ok, forKey: .ok)
+        try container.encode(plaintextB64, forKey: .plaintextB64)
+        try container.encodeIfPresent(secretEpoch, forKey: .secretEpoch)
+        try container.encodeIfPresent(securePlane, forKey: .securePlane)
     }
 }
 
@@ -799,4 +847,3 @@ public struct SecureShareEnvelope: Codable, Sendable, Hashable {
         self.aeadCiphertextB64 = aeadCiphertextB64
     }
 }
-

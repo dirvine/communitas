@@ -17,7 +17,8 @@ communitas-core = { version = "0.12.4", package = "communitas-core", path = "../
 communitas-ui-api = { version = "0.12.4", path = "../communitas-ui-api" }
 communitas-ui-service = { version = "0.12.4", path = "../communitas-ui-service" }
 dioxus = { version = "0.7", features = ["desktop", "router", "signals"] }
-dioxus-logger = "0.5.1"
+dioxus-logger = "0.7"
+futures-timer = "3"
 tracing.workspace = true
 futures.workspace = true
 chrono.workspace = true
@@ -31,6 +32,10 @@ uuid.workspace = true
 pulldown-cmark = "0.12"
 sha2 = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSResponder", "NSWindow"] }
 
 
 [dependencies.tokio]

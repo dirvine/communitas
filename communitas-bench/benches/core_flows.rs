@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Core flow benchmarks for messaging, drive, kanban, and canvas services.
 //!
 //! Note: Benchmarks use `expect()` for error handling clarity, similar to tests.
-#![allow(clippy::expect_used)]
 
 use std::sync::Arc;
 

@@ -73,6 +73,53 @@ fn relative_time(last_seen_secs: u64) -> String {
     }
 }
 
+fn same_contacts(left: &[Contact], right: &[Contact]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.agent_id == right.agent_id
+                && left.trust_level == right.trust_level
+                && left.label == right.label
+                && left.added_at == right.added_at
+                && left.last_seen == right.last_seen
+                && left.identity_type == right.identity_type
+        })
+}
+
+fn same_discovered_agents(left: &[DiscoveredAgent], right: &[DiscoveredAgent]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.agent_id == right.agent_id
+                && left.machine_id == right.machine_id
+                && left.user_id == right.user_id
+                && left.addresses == right.addresses
+                && left.announced_at == right.announced_at
+                && left.last_seen == right.last_seen
+        })
+}
+
+async fn refresh_contacts(
+    client: &X0xClient,
+    mut contacts: Signal<Vec<Contact>>,
+    mut error: Signal<Option<String>>,
+    mut loading: Signal<bool>,
+) {
+    match client.list_contacts().await {
+        Ok(list) => {
+            contacts.set(list);
+            if error.peek().is_some() {
+                error.set(None);
+            }
+        }
+        Err(e) => {
+            warn!(target: "ui.people", "failed to list contacts: {e}");
+            error.set(Some(format!("Failed to load contacts: {e}")));
+        }
+    }
+    if *loading.peek() {
+        loading.set(false);
+    }
+}
+
 /// People view component.
 #[component]
 pub fn PeopleView() -> Element {
@@ -101,20 +148,29 @@ pub fn PeopleView() -> Element {
         let client = X0xClient::new();
 
         loop {
-            let _key = *refresh_key.read(); // reactive dependency
+            let _key = *refresh_key.peek();
             match client.list_contacts().await {
                 Ok(list) => {
-                    contacts.set(list);
-                    error.set(None);
+                    if !same_contacts(contacts.peek().as_slice(), list.as_slice()) {
+                        contacts.set(list);
+                    }
+                    if error.peek().is_some() {
+                        error.set(None);
+                    }
                 }
                 Err(e) => {
                     warn!(target: "ui.people", "failed to list contacts: {e}");
-                    error.set(Some(format!("Failed to load contacts: {e}")));
+                    let next_error = Some(format!("Failed to load contacts: {e}"));
+                    if error.peek().as_ref() != next_error.as_ref() {
+                        error.set(next_error);
+                    }
                 }
             }
-            loading.set(false);
+            if *loading.peek() {
+                loading.set(false);
+            }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+            crate::poll_sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
         }
     });
 
@@ -124,14 +180,21 @@ pub fn PeopleView() -> Element {
         loop {
             match client.discovered_agents().await {
                 Ok(agents) => {
-                    discovered_agents.set(agents);
+                    if !same_discovered_agents(
+                        discovered_agents.peek().as_slice(),
+                        agents.as_slice(),
+                    ) {
+                        discovered_agents.set(agents);
+                    }
                 }
                 Err(e) => {
                     warn!(target: "ui.people", "failed to list discovered agents: {e}");
                 }
             }
-            agents_loading.set(false);
-            tokio::time::sleep(tokio::time::Duration::from_secs(AGENT_REFRESH_SECS)).await;
+            if *agents_loading.peek() {
+                agents_loading.set(false);
+            }
+            crate::poll_sleep(tokio::time::Duration::from_secs(AGENT_REFRESH_SECS)).await;
         }
     });
 
@@ -256,6 +319,7 @@ pub fn PeopleView() -> Element {
                                     Ok(resp) => {
                                         info!(target: "ui.people", "imported agent card: {}", resp.agent_id);
                                         import_input.set(String::new());
+                                        refresh_contacts(&client, contacts, error, loading).await;
                                         refresh_key.set(refresh_key() + 1);
                                     }
                                     Err(e) => {
@@ -325,6 +389,7 @@ pub fn PeopleView() -> Element {
                                     Ok(_) => {
                                         add_agent_id.set(String::new());
                                         add_label.set(String::new());
+                                        refresh_contacts(&client, contacts, error, loading).await;
                                         refresh_key.set(refresh_key() + 1);
                                     }
                                     Err(e) => add_error.set(Some(format!("{e}"))),
@@ -585,6 +650,8 @@ pub fn PeopleView() -> Element {
                                                         let client = X0xClient::new();
                                                         if let Err(e) = client.set_trust(&aid, level).await {
                                                             warn!(target: "ui.people", "failed to set trust: {e}");
+                                                        } else {
+                                                            refresh_contacts(&client, contacts, error, loading).await;
                                                         }
                                                         refresh_key.set(refresh_key() + 1);
                                                     });
@@ -741,6 +808,8 @@ pub fn PeopleView() -> Element {
                                                 let client = X0xClient::new();
                                                 if let Err(e) = client.add_contact(&aid, TrustLevel::Known, None).await {
                                                     warn!(target: "ui.people", "failed to add discovered agent as contact: {e}");
+                                                } else {
+                                                    refresh_contacts(&client, contacts, error, loading).await;
                                                 }
                                                 refresh_key.set(refresh_key() + 1);
                                             });

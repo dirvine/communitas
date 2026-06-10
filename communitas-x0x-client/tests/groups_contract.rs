@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use communitas_x0x_client::X0xClient;
 use std::time::{SystemTime, UNIX_EPOCH};
 

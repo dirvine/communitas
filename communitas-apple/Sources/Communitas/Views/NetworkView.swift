@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import X0xClient
 
@@ -6,7 +7,25 @@ private struct PeerDiagnostic {
     let probe: String
 }
 
-/// Network view showing connection stats, external addresses, and connected peers.
+private struct NetworkMetric: Identifiable {
+    let id: String
+    let title: String
+    let value: String
+    let systemImage: String
+    let color: Color
+}
+
+private struct NetworkInfoRow: Identifiable {
+    let id: String
+    let label: String
+    let value: String
+}
+
+/// Network view showing connection stats, diagnostics, discovered machines, and peers.
+///
+/// The layout intentionally stays flat and bounded. A previous version used a
+/// deeply nested GroupBox/table tree and crashed in SwiftUI constraint/body
+/// evaluation on macOS while opening the page.
 struct NetworkView: View {
     @EnvironmentObject var appState: AppState
 
@@ -26,512 +45,406 @@ struct NetworkView: View {
     @State private var connectMachineResult: ConnectMachineResponse?
     @State private var peerDiagnostics: [String: PeerDiagnostic] = [:]
     @State private var isRefreshing = false
+    @State private var lastUpgradeCheckAt: Date?
 
-    private let statsColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+    private let upgradeCheckCooldown: TimeInterval = 6 * 60 * 60
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                statsGrid
-                nodeHealthSection
-                externalAddressesSection
-                networkStatsSection
-                diagnosticsSection
-                discoveredMachinesSection
-                peersTable
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                metricGrid
+                sectionPanel(title: "Node Health", systemImage: "server.rack") {
+                    infoRows(nodeHealthRows)
+                }
+                sectionPanel(title: "Network Statistics", systemImage: "chart.bar") {
+                    infoRows(networkRows, emptyMessage: "Connect to peers to see statistics")
+                }
+                sectionPanel(title: "External Addresses", systemImage: "globe") {
+                    addressList
+                }
+                sectionPanel(title: "Daemon Diagnostics", systemImage: "stethoscope") {
+                    infoRows(diagnosticRows, emptyMessage: "No extended diagnostics available")
+                }
+                sectionPanel(title: "Discovered Machines", systemImage: "network") {
+                    discoveredMachineList
+                }
+                sectionPanel(title: "Connected Peers (\(peers.count))", systemImage: "person.2") {
+                    peerList
+                }
             }
             .padding(24)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DeepSpace.bg)
         .navigationTitle("Network")
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    Task { await pollData() }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .disabled(isRefreshing)
-            }
-        }
         .task {
             await pollData()
-            startPolling()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await pollData()
+            }
         }
     }
 
-    // MARK: - Stats Grid
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Network")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(DeepSpace.textPrimary)
+                Text(healthLabel)
+                    .font(.caption)
+                    .foregroundStyle(DeepSpace.textSecondary)
+            }
+            Spacer()
+            ProgressView()
+                .controlSize(.small)
+                .opacity(isRefreshing ? 1 : 0)
+            AppKitInlineButton(
+                title: "Refresh",
+                systemSymbolName: "arrow.clockwise",
+                accessibilityIdentifier: "network-refresh-button"
+            ) {
+                Task { await pollData() }
+            }
+            .frame(width: 96, height: 28)
+        }
+    }
 
-    private var statsGrid: some View {
-        LazyVGrid(columns: statsColumns, spacing: 12) {
-            StatCard(
+    private var metricGrid: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                ForEach(Array(metricCards.prefix(2))) { metric in
+                    metricCard(metric)
+                }
+            }
+            HStack(spacing: 12) {
+                ForEach(Array(metricCards.dropFirst(2))) { metric in
+                    metricCard(metric)
+                }
+            }
+        }
+    }
+
+    private func metricCard(_ metric: NetworkMetric) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: metric.systemImage)
+                .font(.title3)
+                .foregroundStyle(metric.color)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(metric.title)
+                    .font(.caption2)
+                    .foregroundStyle(DeepSpace.textMuted)
+                Text(metric.value)
+                    .font(.headline)
+                    .foregroundStyle(DeepSpace.textPrimary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 70)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(DeepSpace.surface1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(DeepSpace.border, lineWidth: 1)
+        )
+    }
+
+    private func sectionPanel<Content: View>(
+        title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+                .foregroundStyle(DeepSpace.textPrimary)
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(DeepSpace.surface1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(DeepSpace.border, lineWidth: 1)
+        )
+    }
+
+    private func infoRows(_ rows: [NetworkInfoRow], emptyMessage: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if rows.isEmpty, let emptyMessage {
+                Text(emptyMessage)
+                    .font(.caption)
+                    .foregroundStyle(DeepSpace.textMuted)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(rows) { row in
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(row.label)
+                            .font(.caption)
+                            .foregroundStyle(DeepSpace.textSecondary)
+                            .frame(width: 160, alignment: .leading)
+                        Text(row.value)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(DeepSpace.textPrimary)
+                            .textSelection(.enabled)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    private var addressList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            let addresses = networkStatus?.externalAddrs ?? []
+            if addresses.isEmpty {
+                Text("No external addresses detected")
+                    .font(.caption)
+                    .foregroundStyle(DeepSpace.textMuted)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(addresses.prefix(12), id: \.self) { address in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(addressFamily(address))
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(DeepSpace.textMuted)
+                            .frame(width: 42, alignment: .leading)
+                        Text(address)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(DeepSpace.textPrimary)
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    private var discoveredMachineList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if discoveredMachines.isEmpty {
+                Text("No machine announcements discovered")
+                    .font(.caption)
+                    .foregroundStyle(DeepSpace.textMuted)
+                    .padding(.vertical, 4)
+            } else {
+                if let agentMachine {
+                    infoRows([
+                        NetworkInfoRow(
+                            id: "agent-machine",
+                            label: "Current Agent Machine",
+                            value: truncatedId(agentMachine.machine.machineId)
+                        )
+                    ])
+                }
+                if let userMachines {
+                    infoRows([
+                        NetworkInfoRow(
+                            id: "user-machines",
+                            label: "Machines for User",
+                            value: "\(userMachines.machines.count)"
+                        )
+                    ])
+                }
+                if let connectMachineResult {
+                    infoRows([
+                        NetworkInfoRow(id: "last-connect", label: "Last Connect", value: connectMachineResult.outcome)
+                    ])
+                }
+                ForEach(discoveredMachines.prefix(12)) { machine in
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(truncatedId(machine.machineId))
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(DeepSpace.textPrimary)
+                                .textSelection(.enabled)
+                            Text("\(machine.addresses.count) addresses")
+                                .font(.caption2)
+                                .foregroundStyle(DeepSpace.textMuted)
+                        }
+                        Spacer(minLength: 0)
+                        AppKitInlineButton(
+                            title: "Connect",
+                            systemSymbolName: "link",
+                            accessibilityIdentifier: "network-connect-\(machine.machineId)"
+                        ) {
+                            Task { await connect(machine: machine) }
+                        }
+                        .frame(width: 92, height: 26)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    private var peerList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if peers.isEmpty {
+                Text("No connected peers")
+                    .font(.caption)
+                    .foregroundStyle(DeepSpace.textMuted)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(peers.prefix(25)) { peer in
+                    HStack(alignment: .top, spacing: 10) {
+                        Circle()
+                            .fill(DeepSpace.green)
+                            .frame(width: 7, height: 7)
+                            .padding(.top, 5)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(truncatedId(peer.peerId))
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(DeepSpace.textPrimary)
+                                .textSelection(.enabled)
+                            if let diagnostic = peerDiagnostics[peer.peerId] {
+                                Text("Health: \(diagnostic.health)")
+                                    .font(.caption2)
+                                    .foregroundStyle(DeepSpace.textSecondary)
+                                    .lineLimit(2)
+                                Text("Probe: \(diagnostic.probe)")
+                                    .font(.caption2)
+                                    .foregroundStyle(DeepSpace.cyan)
+                                    .lineLimit(1)
+                            } else {
+                                Text("Diagnostics not checked yet")
+                                    .font(.caption2)
+                                    .foregroundStyle(DeepSpace.textMuted)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    private var metricCards: [NetworkMetric] {
+        [
+            NetworkMetric(
+                id: "status",
                 title: "Status",
                 value: connectionStatusLabel,
-                icon: "wifi",
+                systemImage: "wifi",
                 color: (networkStatus?.connectedPeers ?? 0) > 0 ? DeepSpace.green : DeepSpace.red
-            )
-            StatCard(
+            ),
+            NetworkMetric(
+                id: "peers",
                 title: "Peers",
                 value: "\(networkStatus?.connectedPeers ?? 0)",
-                icon: "person.2",
+                systemImage: "person.2",
                 color: DeepSpace.cyan
-            )
-            StatCard(
+            ),
+            NetworkMetric(
+                id: "addresses",
                 title: "Addresses",
                 value: "\(networkStatus?.externalAddrs?.count ?? 0)",
-                icon: "globe",
+                systemImage: "globe",
                 color: DeepSpace.amber
-            )
-            StatCard(
+            ),
+            NetworkMetric(
+                id: "direct",
                 title: "Direct",
                 value: "\(directConnections.count)",
-                icon: "bolt.horizontal.circle",
+                systemImage: "bolt.horizontal.circle",
                 color: DeepSpace.green
             )
+        ]
+    }
+
+    private var nodeHealthRows: [NetworkInfoRow] {
+        var rows = [
+            NetworkInfoRow(id: "health", label: "Health", value: healthLabel)
+        ]
+        if let agentId = appState.agentIdentity?.agentId {
+            rows.append(NetworkInfoRow(id: "agent", label: "Agent ID", value: agentId))
         }
+        if let version = healthStatus?.version ?? daemonStatus?.version {
+            rows.append(NetworkInfoRow(id: "version", label: "Version", value: version))
+        }
+        if let uptime = healthStatus?.uptimeSecs ?? daemonStatus?.uptimeSecs {
+            rows.append(NetworkInfoRow(id: "uptime", label: "Uptime", value: formatUptime(uptime)))
+        }
+        return rows
+    }
+
+    private var networkRows: [NetworkInfoRow] {
+        var rows: [NetworkInfoRow] = []
+        if let rtt = networkStatus?.avgRttMs {
+            rows.append(NetworkInfoRow(id: "rtt", label: "Avg RTT", value: String(format: "%.0f ms", rtt)))
+        }
+        if let direct = networkStatus?.directConnections {
+            rows.append(NetworkInfoRow(id: "direct", label: "Direct Connections", value: "\(direct)"))
+        }
+        if let canReceive = networkStatus?.canReceiveDirect {
+            rows.append(NetworkInfoRow(id: "can-receive", label: "Can Receive Direct", value: canReceive ? "Yes" : "No"))
+        }
+        if let holePunch = networkStatus?.holePunchSuccessRate {
+            rows.append(NetworkInfoRow(id: "hole-punch", label: "Hole Punch Rate", value: String(format: "%.0f%%", holePunch * 100)))
+        }
+        return rows
+    }
+
+    private var diagnosticRows: [NetworkInfoRow] {
+        var rows: [NetworkInfoRow] = []
+        if let bootstrapCount = bootstrapCache?.connectionCount {
+            rows.append(NetworkInfoRow(id: "bootstrap", label: "Bootstrap Cache", value: "\(bootstrapCount) connected"))
+        }
+        if let diagnostics = connectivityDiagnostics {
+            rows.append(NetworkInfoRow(id: "conn-peer", label: "Connectivity Peer", value: truncatedId(diagnostics.peerId)))
+            rows.append(NetworkInfoRow(id: "mdns", label: "mDNS Peers", value: "\(diagnostics.mdns.discoveredPeers)"))
+            rows.append(NetworkInfoRow(id: "relay", label: "Relay Enabled", value: diagnostics.services.relayEnabled ? "Yes" : "No"))
+            rows.append(NetworkInfoRow(id: "coordinator", label: "Coordinator Enabled", value: diagnostics.services.coordinatorEnabled ? "Yes" : "No"))
+        }
+        if let sessions = webSocketSessions?.sessions.count {
+            rows.append(NetworkInfoRow(id: "ws", label: "WebSocket Sessions", value: "\(sessions)"))
+        }
+        if let shared = webSocketSessions?.sharedSubscriptions, !shared.isEmpty {
+            rows.append(NetworkInfoRow(id: "shared-subs", label: "Shared Topic Subs", value: "\(shared.count)"))
+        }
+        if let stats = gossipStats {
+            rows.append(NetworkInfoRow(id: "gossip-pub", label: "Gossip Published", value: "\(stats.publishTotal)"))
+            rows.append(NetworkInfoRow(id: "gossip-in", label: "Gossip Incoming", value: "\(stats.incomingTotal)"))
+            rows.append(NetworkInfoRow(id: "gossip-delivered", label: "Gossip Delivered", value: "\(stats.deliveredToSubscriber)"))
+            rows.append(NetworkInfoRow(id: "gossip-drops", label: "Decode to Delivery Drops", value: "\(stats.decodeToDeliveryDrops)"))
+        }
+        if let available = upgradeStatus?.updateAvailable {
+            let value = available
+                ? "Update available: \(upgradeStatus?.version ?? "unknown")"
+                : "Up to date (\(upgradeStatus?.currentVersion ?? upgradeStatus?.version ?? "unknown"))"
+            rows.append(NetworkInfoRow(id: "upgrade", label: "Upgrade", value: value))
+        }
+        return rows
     }
 
     private var connectionStatusLabel: String {
         (networkStatus?.connectedPeers ?? 0) > 0 ? "Connected" : "Disconnected"
     }
 
-    // MARK: - Node Health Section
-
-    private var nodeHealthSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(healthColor)
-                        .frame(width: 10, height: 10)
-                    Text(healthLabel)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(DeepSpace.textPrimary)
-                    Spacer()
-                }
-
-                Divider().background(DeepSpace.border)
-
-                if let agentId = appState.agentIdentity?.agentId {
-                    copyableRow(label: "Agent ID", value: agentId)
-                }
-
-                if let version = healthStatus?.version ?? daemonStatus?.version {
-                    HStack {
-                        Text("Version")
-                            .font(.caption)
-                            .foregroundStyle(DeepSpace.textSecondary)
-                            .frame(width: 100, alignment: .leading)
-                        Text(version)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(DeepSpace.textPrimary)
-                        Spacer()
-                    }
-                }
-
-                if let uptime = healthStatus?.uptimeSecs ?? daemonStatus?.uptimeSecs {
-                    HStack {
-                        Text("Uptime")
-                            .font(.caption)
-                            .foregroundStyle(DeepSpace.textSecondary)
-                            .frame(width: 100, alignment: .leading)
-                        Text(formatUptime(uptime))
-                            .font(.caption)
-                            .foregroundStyle(DeepSpace.textPrimary)
-                        Spacer()
-                    }
-                }
-            }
-            .padding(4)
-        } label: {
-            Label("Node Health", systemImage: "server.rack")
-                .foregroundStyle(DeepSpace.textPrimary)
-        }
-        .backgroundStyle(DeepSpace.surface1)
-    }
-
-    private var healthColor: Color {
-        switch appState.daemonState {
-        case .running:
-            if (networkStatus?.connectedPeers ?? 0) > 0 { return DeepSpace.green }
-            return .yellow
-        case .starting: return .yellow
-        case .notRunning, .notInstalled, .error: return DeepSpace.red
-        }
-    }
-
     private var healthLabel: String {
         switch appState.daemonState {
         case .running:
-            if (networkStatus?.connectedPeers ?? 0) > 0 { return "Online — Connected to network" }
-            return "Running — No peers yet"
+            if (networkStatus?.connectedPeers ?? 0) > 0 { return "Online - connected to network" }
+            return "Running - no peers yet"
         case .starting: return "Starting..."
-        case .notRunning: return "Not Running"
-        case .notInstalled: return "Not Installed"
+        case .notRunning: return "Not running"
+        case .notInstalled: return "Not installed"
         case .error: return "Error"
-        }
-    }
-
-    // MARK: - External Addresses Section
-
-    private var externalAddressesSection: some View {
-        GroupBox {
-            if let addrs = networkStatus?.externalAddrs, !addrs.isEmpty {
-                let ipv4 = addrs.filter { isIPv4($0) }
-                let ipv6 = addrs.filter { !isIPv4($0) }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    if !ipv4.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("IPv4")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(DeepSpace.textMuted)
-                                .textCase(.uppercase)
-
-                            ForEach(ipv4, id: \.self) { addr in
-                                addressRow(addr)
-                            }
-                        }
-                    }
-
-                    if !ipv6.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("IPv6")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(DeepSpace.textMuted)
-                                .textCase(.uppercase)
-
-                            ForEach(ipv6, id: \.self) { addr in
-                                addressRow(addr)
-                            }
-                        }
-                    }
-                }
-                .padding(4)
-            } else {
-                emptyState(icon: "globe", message: "No external addresses detected")
-            }
-        } label: {
-            Label("External Addresses", systemImage: "globe")
-                .foregroundStyle(DeepSpace.textPrimary)
-        }
-        .backgroundStyle(DeepSpace.surface1)
-    }
-
-    private func addressRow(_ addr: String) -> some View {
-        HStack {
-            Text(addr)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(DeepSpace.textPrimary)
-                .textSelection(.enabled)
-            Spacer()
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(addr, forType: .string)
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .font(.caption2)
-                    .foregroundStyle(DeepSpace.textMuted)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, 2)
-    }
-
-    // MARK: - Network Statistics Section
-
-    private var networkStatsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                if let rtt = networkStatus?.avgRttMs {
-                    statRow(label: "Avg RTT", value: String(format: "%.0f ms", rtt))
-                }
-
-                if let direct = networkStatus?.directConnections {
-                    statRow(label: "Direct Connections", value: "\(direct)")
-                }
-
-                if let canReceive = networkStatus?.canReceiveDirect {
-                    statRow(label: "Can Receive Direct", value: canReceive ? "Yes" : "No")
-                }
-
-                if let holePunch = networkStatus?.holePunchSuccessRate {
-                    statRow(label: "Hole Punch Rate", value: String(format: "%.0f%%", holePunch * 100))
-                }
-
-                if networkStatus?.avgRttMs == nil
-                    && networkStatus?.directConnections == nil
-                    && networkStatus?.canReceiveDirect == nil {
-                    Text("Connect to peers to see statistics")
-                        .font(.caption)
-                        .foregroundStyle(DeepSpace.textMuted)
-                        .padding(.vertical, 4)
-                }
-            }
-            .padding(4)
-        } label: {
-            Label("Network Statistics", systemImage: "chart.bar")
-                .foregroundStyle(DeepSpace.textPrimary)
-        }
-        .backgroundStyle(DeepSpace.surface1)
-    }
-
-    private func statRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(DeepSpace.textSecondary)
-                .frame(minWidth: 160, alignment: .leading)
-            Text(value)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(DeepSpace.textPrimary)
-            Spacer()
-        }
-    }
-
-    // MARK: - Diagnostics Section
-
-    private var diagnosticsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                if let bootstrapCount = bootstrapCache?.connectionCount {
-                    statRow(label: "Bootstrap Cache", value: "\(bootstrapCount) connected")
-                }
-
-                if let diagnostics = connectivityDiagnostics {
-                    statRow(label: "Connectivity Peer", value: truncatedId(diagnostics.peerId))
-                    statRow(label: "mDNS Peers", value: "\(diagnostics.mdns.discoveredPeers)")
-                    statRow(label: "Relay Enabled", value: diagnostics.services.relayEnabled ? "Yes" : "No")
-                    statRow(label: "Coordinator Enabled", value: diagnostics.services.coordinatorEnabled ? "Yes" : "No")
-                }
-
-                if let sessions = webSocketSessions?.sessions.count {
-                    statRow(label: "WebSocket Sessions", value: "\(sessions)")
-                }
-
-                if let shared = webSocketSessions?.sharedSubscriptions, !shared.isEmpty {
-                    statRow(label: "Shared Topic Subs", value: "\(shared.count)")
-                }
-
-                if let stats = gossipStats {
-                    statRow(label: "Gossip Published", value: "\(stats.publishTotal)")
-                    statRow(label: "Gossip Incoming", value: "\(stats.incomingTotal)")
-                    statRow(label: "Gossip Delivered", value: "\(stats.deliveredToSubscriber)")
-                    statRow(
-                        label: "Decode to Delivery Drops",
-                        value: "\(stats.decodeToDeliveryDrops)"
-                    )
-                }
-
-                if let available = upgradeStatus?.updateAvailable {
-                    if available {
-                        statRow(label: "Upgrade", value: "Update available: \(upgradeStatus?.version ?? "unknown")")
-                    } else if let current = upgradeStatus?.currentVersion ?? upgradeStatus?.version {
-                        statRow(label: "Upgrade", value: "Up to date (\(current))")
-                    }
-                }
-
-                if bootstrapCache == nil
-                    && connectivityDiagnostics == nil
-                    && webSocketSessions == nil
-                    && upgradeStatus == nil
-                    && gossipStats == nil {
-                    Text("No extended diagnostics available")
-                        .font(.caption)
-                        .foregroundStyle(DeepSpace.textMuted)
-                        .padding(.vertical, 4)
-                }
-            }
-            .padding(4)
-        } label: {
-            Label("Daemon Diagnostics", systemImage: "stethoscope")
-                .foregroundStyle(DeepSpace.textPrimary)
-        }
-        .backgroundStyle(DeepSpace.surface1)
-    }
-
-    // MARK: - Discovered Machines
-
-    private var discoveredMachinesSection: some View {
-        GroupBox {
-            if discoveredMachines.isEmpty {
-                emptyState(icon: "network.slash", message: "No machine announcements discovered")
-            } else {
-                VStack(spacing: 0) {
-                    if let agentMachine {
-                        statRow(
-                            label: "Current Agent Machine",
-                            value: truncatedId(agentMachine.machine.machineId)
-                        )
-                    }
-
-                    if let userMachines {
-                        statRow(label: "Machines for User", value: "\(userMachines.machines.count)")
-                    }
-
-                    if let connectMachineResult {
-                        statRow(label: "Last Connect", value: connectMachineResult.outcome)
-                    }
-
-                    Divider()
-                        .background(DeepSpace.border)
-                        .padding(.vertical, 6)
-
-                    ForEach(discoveredMachines) { machine in
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(truncatedId(machine.machineId))
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(DeepSpace.textPrimary)
-                                Text("\(machine.addresses.count) addresses")
-                                    .font(.caption2)
-                                    .foregroundStyle(DeepSpace.textMuted)
-                            }
-
-                            Spacer()
-
-                            Button {
-                                Task { await connect(machine: machine) }
-                            } label: {
-                                Image(systemName: "link")
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Connect")
-                        }
-                        .padding(.vertical, 5)
-                    }
-                }
-                .padding(4)
-            }
-        } label: {
-            Label("Discovered Machines", systemImage: "network")
-                .foregroundStyle(DeepSpace.textPrimary)
-        }
-        .backgroundStyle(DeepSpace.surface1)
-    }
-
-    // MARK: - Peers Table
-
-    private var peersTable: some View {
-        GroupBox {
-            if peers.isEmpty {
-                emptyState(icon: "person.2.slash", message: "No connected peers")
-            } else {
-                VStack(spacing: 0) {
-                    // Header
-                    HStack {
-                        Text("Peer ID")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Health")
-                            .frame(width: 180, alignment: .leading)
-                        Text("Probe")
-                            .frame(width: 96, alignment: .leading)
-                    }
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(DeepSpace.textMuted)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-
-                    Divider()
-                        .background(DeepSpace.border)
-
-                    // Rows
-                    ForEach(peers) { peer in
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(DeepSpace.green)
-                                .frame(width: 6, height: 6)
-                            Text(truncatedId(peer.peerId))
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(DeepSpace.textPrimary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .lineLimit(1)
-                            let diagnostics = peerDiagnostics[peer.peerId]
-                            Text(diagnostics?.health ?? "Not checked")
-                                .font(.caption)
-                                .foregroundStyle(DeepSpace.textSecondary)
-                                .frame(width: 180, alignment: .leading)
-                                .lineLimit(1)
-                                .help(diagnostics?.health ?? "Not checked")
-                            Text(diagnostics?.probe ?? "-")
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(DeepSpace.cyan)
-                                .frame(width: 96, alignment: .leading)
-                                .lineLimit(1)
-                            Button {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(peer.peerId, forType: .string)
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.caption2)
-                                    .foregroundStyle(DeepSpace.textMuted)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .contextMenu {
-                            Button("Copy Peer ID") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(peer.peerId, forType: .string)
-                            }
-                        }
-                    }
-                }
-            }
-        } label: {
-            Label("Connected Peers (\(peers.count))", systemImage: "person.2")
-                .foregroundStyle(DeepSpace.textPrimary)
-        }
-        .backgroundStyle(DeepSpace.surface1)
-    }
-
-    // MARK: - Helpers
-
-    private func emptyState(icon: String, message: String) -> some View {
-        HStack {
-            Spacer()
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(DeepSpace.textMuted)
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(DeepSpace.textMuted)
-            }
-            .padding(.vertical, 16)
-            Spacer()
-        }
-    }
-
-    private func copyableRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(DeepSpace.textSecondary)
-                .frame(width: 100, alignment: .leading)
-            Text(truncatedId(value))
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(DeepSpace.textPrimary)
-                .textSelection(.enabled)
-                .lineLimit(1)
-            Spacer()
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(value, forType: .string)
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .font(.caption2)
-                    .foregroundStyle(DeepSpace.textMuted)
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -542,17 +455,23 @@ struct NetworkView: View {
         return id
     }
 
-    private func isIPv4(_ addr: String) -> Bool {
-        // Quick heuristic: IPv6 addresses contain colons, IPv4 do not (before the port)
-        let hostPart = addr.split(separator: ":").first.map(String.init) ?? addr
-        return !hostPart.contains(":")
+    private func addressFamily(_ address: String) -> String {
+        let host: String
+        if address.hasPrefix("[") {
+            host = String(address.dropFirst().prefix { $0 != "]" })
+        } else {
+            host = String(address.split(separator: ":").first ?? "")
+        }
+        if host.contains(".") { return "IPv4" }
+        if address.contains(":") { return "IPv6" }
+        return "Addr"
     }
 
     private func formatUptime(_ seconds: UInt64) -> String {
         if seconds < 60 { return "\(seconds)s" }
-        if seconds < 3600 { return "\(seconds / 60)m \(seconds % 60)s" }
-        if seconds < 86400 { return "\(seconds / 3600)h \((seconds % 3600) / 60)m" }
-        return "\(seconds / 86400)d \((seconds % 86400) / 3600)h"
+        if seconds < 3_600 { return "\(seconds / 60)m \(seconds % 60)s" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h \((seconds % 3_600) / 60)m" }
+        return "\(seconds / 86_400)d \((seconds % 86_400) / 3_600)h"
     }
 
     private func formatPeerHealth(_ health: PeerHealth) -> String {
@@ -578,140 +497,88 @@ struct NetworkView: View {
         return (result.ok ?? false) ? "OK" : "No RTT"
     }
 
+    @MainActor
     private func pollData() async {
+        guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
         guard appState.daemonState == .running else { return }
 
-        do {
-            networkStatus = try await appState.client.networkStatus()
-        } catch {
-            networkStatus = nil
-        }
+        networkStatus = try? await appState.client.networkStatus()
+        connectivityDiagnostics = try? await appState.client.connectivityDiagnostics()
 
-        do {
-            connectivityDiagnostics = try await appState.client.connectivityDiagnostics()
-        } catch {
-            connectivityDiagnostics = nil
-        }
-
-        do {
-            let machines = try await appState.client.discoveredMachines()
+        if let machines = try? await appState.client.discoveredMachines() {
             discoveredMachines = machines
-            if let first = machines.first {
-                _ = try? await appState.client.discoveredMachine(machineId: first.machineId)
-            }
-        } catch {
+        } else {
             discoveredMachines = []
         }
 
-        do {
-            if let agentId = appState.agentIdentity?.agentId {
-                agentMachine = try await appState.client.machineForAgent(agentId: agentId)
-            } else {
-                agentMachine = nil
-            }
-        } catch {
+        if let agentId = appState.agentIdentity?.agentId {
+            agentMachine = try? await appState.client.machineForAgent(agentId: agentId)
+        } else {
             agentMachine = nil
         }
 
-        do {
-            if let userId = appState.agentIdentity?.userId {
-                userMachines = try await appState.client.machinesByUser(userId: userId)
-            } else {
-                userMachines = nil
-            }
-        } catch {
+        if let userId = appState.agentIdentity?.userId {
+            userMachines = try? await appState.client.machinesByUser(userId: userId)
+        } else {
             userMachines = nil
         }
 
-        do {
-            let currentPeers = try await appState.client.peers()
+        if let currentPeers = try? await appState.client.peers() {
             peers = currentPeers
-            var diagnostics: [String: PeerDiagnostic] = [:]
-            for peer in currentPeers {
-                let health: String
-                do {
-                    let snapshot = try await appState.client.peerHealth(peerId: peer.peerId)
-                    health = formatPeerHealth(snapshot)
-                } catch {
-                    health = "Unavailable: \(error.localizedDescription)"
-                }
-
-                let probe: String
-                do {
-                    let result = try await appState.client.probePeer(peerId: peer.peerId)
-                    probe = formatProbeResult(result)
-                } catch {
-                    probe = "Probe failed"
-                }
-
-                diagnostics[peer.peerId] = PeerDiagnostic(health: health, probe: probe)
-            }
-            peerDiagnostics = diagnostics
-        } catch {
+            peerDiagnostics = await diagnostics(for: currentPeers)
+        } else {
             peers = []
             peerDiagnostics = [:]
         }
 
-        do {
-            healthStatus = try await appState.client.health()
-        } catch {
-            healthStatus = nil
-        }
-
-        do {
-            daemonStatus = try await appState.client.status()
-        } catch {
-            daemonStatus = nil
-        }
-
-        do {
-            directConnections = try await appState.client.directConnections()
-        } catch {
-            directConnections = []
-        }
-
-        do {
-            bootstrapCache = try await appState.client.bootstrapCache()
-        } catch {
-            bootstrapCache = nil
-        }
-
-        do {
-            webSocketSessions = try await appState.client.wsSessions()
-        } catch {
-            webSocketSessions = nil
-        }
-
-        do {
-            gossipStats = try await appState.client.gossipStats()
-        } catch {
-            gossipStats = nil
-        }
-
-        do {
-            upgradeStatus = try await appState.client.checkUpgrade()
-        } catch {
-            upgradeStatus = nil
+        healthStatus = try? await appState.client.health()
+        daemonStatus = try? await appState.client.status()
+        directConnections = (try? await appState.client.directConnections()) ?? []
+        bootstrapCache = try? await appState.client.bootstrapCache()
+        webSocketSessions = try? await appState.client.wsSessions()
+        gossipStats = try? await appState.client.gossipStats()
+        if shouldCheckUpgradeStatus {
+            lastUpgradeCheckAt = Date()
+            upgradeStatus = try? await appState.client.checkUpgrade()
         }
     }
 
-    private func connect(machine: DiscoveredMachine) async {
-        do {
-            connectMachineResult = try await appState.client.connectMachine(machineId: machine.machineId)
-        } catch {
-            connectMachineResult = ConnectMachineResponse(ok: false, outcome: "Failed", addr: nil)
-        }
+    private var shouldCheckUpgradeStatus: Bool {
+        guard let lastUpgradeCheckAt else { return true }
+        return Date().timeIntervalSince(lastUpgradeCheckAt) >= upgradeCheckCooldown
     }
 
-    private func startPolling() {
-        Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
-                await pollData()
+    private func diagnostics(for currentPeers: [PeerInfo]) async -> [String: PeerDiagnostic] {
+        var diagnostics: [String: PeerDiagnostic] = [:]
+        for peer in currentPeers.prefix(12) {
+            let health: String
+            if let snapshot = try? await appState.client.peerHealth(peerId: peer.peerId) {
+                health = formatPeerHealth(snapshot)
+            } else {
+                health = "Unavailable"
             }
+
+            let probe: String
+            if let result = try? await appState.client.probePeer(peerId: peer.peerId) {
+                probe = formatProbeResult(result)
+            } else {
+                probe = "Probe failed"
+            }
+
+            diagnostics[peer.peerId] = PeerDiagnostic(health: health, probe: probe)
+        }
+        return diagnostics
+    }
+
+    @MainActor
+    private func connect(machine: DiscoveredMachine) async {
+        if let result = try? await appState.client.connectMachine(machineId: machine.machineId) {
+            connectMachineResult = result
+        } else {
+            connectMachineResult = ConnectMachineResponse(ok: false, outcome: "Failed", addr: nil)
         }
     }
 }

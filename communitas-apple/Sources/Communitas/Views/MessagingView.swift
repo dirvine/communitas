@@ -515,6 +515,8 @@ struct MessagingView: View {
             .clipShape(Circle())
             .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || isSending)
             .keyboardShortcut(.return, modifiers: .command)
+            .accessibilityLabel("Send message")
+            .accessibilityHint("Sends the current message to the selected channel")
         }
         .padding(12)
     }
@@ -550,6 +552,7 @@ struct MessagingView: View {
 
     // MARK: - Send
 
+    @MainActor
     private func sendMessage(manager: ChannelManager) {
         let text = draft.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
@@ -566,7 +569,7 @@ struct MessagingView: View {
         // Mention notification: if we send a message mentioning someone, no local notification needed.
         // Notification for receiving a mention is handled in handleWebSocketMessage.
 
-        Task {
+        Task { @MainActor in
             defer { isSending = false }
             do {
                 try await manager.sendMessage(text: text, replyToId: currentReplyToId)

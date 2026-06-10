@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import X0xClient
 
 /// Container view for a Space (group) with tabbed sub-views.
@@ -21,33 +22,9 @@ struct SpaceView: View {
 
     private var tabBar: some View {
         HStack(spacing: 0) {
-            ForEach(SpaceTab.allCases) { tab in
-                Button {
-                    appState.selectedSpaceTab = tab
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: tab.systemImage)
-                            .font(.caption)
-                        Text(tab.rawValue)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        appState.selectedSpaceTab == tab
-                            ? Color.accentColor.opacity(0.15)
-                            : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 6)
-                    )
-                    .foregroundStyle(
-                        appState.selectedSpaceTab == tab
-                            ? Color.accentColor
-                            : .secondary
-                    )
-                }
-                .buttonStyle(.plain)
-            }
+            SpaceTabButtonBar(selection: $appState.selectedSpaceTab)
+                .frame(width: 440, height: 28)
+
             Spacer()
             if let group = appState.selectedGroup {
                 Text(group.name)
@@ -94,5 +71,62 @@ struct SpaceView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct SpaceTabButtonBar: NSViewRepresentable {
+    @Binding var selection: SpaceTab
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    func makeNSView(context: Context) -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.distribution = .fillEqually
+        stack.spacing = 4
+
+        for (index, tab) in SpaceTab.allCases.enumerated() {
+            let button = NSButton(
+                title: tab.rawValue,
+                target: context.coordinator,
+                action: #selector(Coordinator.selectionChanged(_:))
+            )
+            button.tag = index
+            button.setButtonType(.momentaryPushIn)
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            button.setAccessibilityIdentifier("SpaceTab-\(tab.rawValue)")
+            button.setAccessibilityLabel(tab.rawValue)
+            stack.addArrangedSubview(button)
+        }
+
+        return stack
+    }
+
+    func updateNSView(_ stack: NSStackView, context: Context) {
+        context.coordinator.selection = $selection
+        for (index, view) in stack.arrangedSubviews.enumerated() {
+            guard let button = view as? NSButton else { continue }
+            let isSelected = SpaceTab.allCases[index] == selection
+            button.state = isSelected ? .on : .off
+            button.contentTintColor = isSelected ? .controlAccentColor : .labelColor
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<SpaceTab>
+
+        init(selection: Binding<SpaceTab>) {
+            self.selection = selection
+        }
+
+        @objc func selectionChanged(_ sender: NSButton) {
+            guard SpaceTab.allCases.indices.contains(sender.tag) else { return }
+            selection.wrappedValue = SpaceTab.allCases[sender.tag]
+        }
     }
 }

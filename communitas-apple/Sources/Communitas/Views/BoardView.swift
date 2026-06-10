@@ -8,10 +8,11 @@ struct BoardView: View {
 
     @State private var listId: String?
     @State private var tasks: [TaskItem] = []
-    @State private var isLoading = true
+    @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var newTaskTitle = ""
     @State private var addingToColumn: String?
+    @State private var hasStartedBoard = false
     @State private var pollTask: Task<Void, Never>?
 
     private let columns = ["todo", "in_progress", "done"]
@@ -30,11 +31,11 @@ struct BoardView: View {
                 kanbanColumns
             }
         }
-        .task {
-            await loadOrCreateBoard()
-            startPolling()
+        .onAppear {
+            scheduleBoardStartup()
         }
         .onDisappear {
+            hasStartedBoard = false
             pollTask?.cancel()
             pollTask = nil
         }
@@ -80,7 +81,7 @@ struct BoardView: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
-                let count = tasks.filter { $0.state == status }.count
+                let count = tasks.filter { taskLane($0.state) == status }.count
                 Text("\(count)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -104,7 +105,7 @@ struct BoardView: View {
 
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    ForEach(tasks.filter { $0.state == status }) { task in
+                    ForEach(tasks.filter { taskLane($0.state) == status }) { task in
                         taskCard(task: task, status: status)
                     }
 
@@ -121,7 +122,7 @@ struct BoardView: View {
 
     private func taskCard(task: TaskItem, status: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(task.description)
+            Text(taskDisplayTitle(task))
                 .font(.subheadline)
                 .lineLimit(3)
 
@@ -153,6 +154,32 @@ struct BoardView: View {
         }
         .padding(10)
         .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func taskLane(_ state: String?) -> String {
+        let normalized = state?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if normalized.isEmpty || normalized == "empty" || normalized == "todo" {
+            return "todo"
+        }
+        if normalized == "in_progress" || normalized.hasPrefix("in_progress:")
+            || normalized == "claimed" || normalized.hasPrefix("claimed:")
+        {
+            return "in_progress"
+        }
+        if normalized == "done" || normalized.hasPrefix("done:") {
+            return "done"
+        }
+        return "todo"
+    }
+
+    private func taskDisplayTitle(_ task: TaskItem) -> String {
+        if let title = task.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !title.isEmpty
+        {
+            return title
+        }
+        let description = task.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty ? "Untitled task" : description
     }
 
     private var addTaskField: some View {
@@ -205,6 +232,17 @@ struct BoardView: View {
         return "x0x-board-\(prefix)"
     }
 
+    private func scheduleBoardStartup() {
+        guard !hasStartedBoard else { return }
+        hasStartedBoard = true
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                await loadOrCreateBoard()
+                startPolling()
+            }
+        }
+    }
+
     private func ensureBoardStore() async {
         do {
             let stores = try await appState.client.listStores()
@@ -215,7 +253,6 @@ struct BoardView: View {
     }
 
     private func loadOrCreateBoard() async {
-        isLoading = true
         errorMessage = nil
         let prefix = appState.groupPrefix(for: groupId)
         let kvKey = "board.\(prefix).listId"
@@ -238,7 +275,6 @@ struct BoardView: View {
                 errorMessage = "Failed to create board: \(error.localizedDescription)"
             }
         }
-        isLoading = false
     }
 
     private func refreshTasks() async {

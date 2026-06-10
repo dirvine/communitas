@@ -11,9 +11,8 @@ struct WebPublishView: View {
     @State private var pageContent = ""
     @State private var isEditing = false
     @State private var editBuffer = ""
-    @State private var isLoading = true
-    @State private var newPath = ""
-    @State private var showCreatePage = false
+    @State private var isLoading = false
+    @State private var hasLoadedIndex = false
 
     private var prefix: String {
         appState.groupPrefix(for: groupId)
@@ -35,15 +34,15 @@ struct WebPublishView: View {
         VStack(spacing: 0) {
             webHeader
             Divider()
-            HSplitView {
+            HStack(spacing: 0) {
                 pathList
-                    .frame(minWidth: 180, maxWidth: 240)
+                    .frame(width: 220)
+                Divider()
                 pageDetail
             }
         }
-        .task {
-            await loadIndex()
-            isLoading = false
+        .onAppear {
+            scheduleInitialLoad()
         }
     }
 
@@ -54,17 +53,6 @@ struct WebPublishView: View {
             Text("Web")
                 .font(.headline)
             Spacer()
-            Button {
-                showCreatePage = true
-            } label: {
-                Label("New Page", systemImage: "plus")
-                    .font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .popover(isPresented: $showCreatePage) {
-                createPagePopover
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -74,23 +62,57 @@ struct WebPublishView: View {
     // MARK: - Path List
 
     private var pathList: some View {
-        List(pagePaths, id: \.self, selection: $selectedPath) { path in
-            HStack {
-                Image(systemName: "globe")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Pages")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            AppKitPageCreatePanel(
+                placeholder: "Path, e.g. index.html",
+                buttonTitle: "Create",
+                accessibilityPrefix: "web-create-page"
+            ) { rawPath in
+                Task { await createPage(rawPath: rawPath) }
+                return true
+            }
+            .frame(height: 58)
+
+            Divider()
+
+            if pagePaths.isEmpty {
+                Text("No pages yet")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(path)
-                    .font(.body)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(pagePaths, id: \.self) { path in
+                            Button {
+                                selectPath(path)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "globe")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(path)
+                                        .font(.body)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    selectedPath == path ? Color.accentColor.opacity(0.12) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 6)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
-            .tag(path)
         }
-        .listStyle(.sidebar)
-        .onChange(of: selectedPath) {
-            isEditing = false
-            if let path = selectedPath {
-                Task { await loadPage(path: path) }
-            }
-        }
+        .padding(12)
     }
 
     // MARK: - Page Detail
@@ -126,15 +148,15 @@ struct WebPublishView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                 Spacer()
-                Button {
+                AppKitInlineButton(
+                    title: "Edit",
+                    systemSymbolName: "pencil",
+                    accessibilityIdentifier: "web-edit-page-button"
+                ) {
                     editBuffer = pageContent
                     isEditing = true
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                        .font(.caption)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .frame(width: 74, height: 26)
             }
 
             ScrollView {
@@ -157,67 +179,39 @@ struct WebPublishView: View {
     }
 
     private func editorView(path: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Editing: \(path)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Spacer()
-                Button("Cancel") {
-                    isEditing = false
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button("Publish") {
-                    Task { await publishPage(path: path) }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-
-            TextEditor(text: $editBuffer)
-                .font(.system(.body, design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        AppKitTextEditorPanel(
+            title: "Editing: \(path)",
+            content: editBuffer,
+            saveTitle: "Publish",
+            accessibilityPrefix: "web-editor",
+            isMonospaced: true
+        ) {
+            isEditing = false
+        } onSave: { content in
+            Task { await publishPage(path: path, content: content) }
+            return true
         }
         .padding(16)
-    }
-
-    // MARK: - Create Page
-
-    private var createPagePopover: some View {
-        VStack(spacing: 12) {
-            Text("New Web Page")
-                .font(.headline)
-
-            TextField("Path (e.g. index.html)", text: $newPath)
-                .textFieldStyle(.plain)
-                .padding(8)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-
-            HStack {
-                Button("Cancel") {
-                    newPath = ""
-                    showCreatePage = false
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button("Create") {
-                    Task { await createPage() }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(newPath.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(16)
-        .frame(width: 280)
     }
 
     // MARK: - Actions
+
+    private func scheduleInitialLoad() {
+        guard !hasLoadedIndex else { return }
+        hasLoadedIndex = true
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                await loadIndex()
+                isLoading = false
+            }
+        }
+    }
+
+    private func selectPath(_ path: String) {
+        selectedPath = path
+        isEditing = false
+        Task { await loadPage(path: path) }
+    }
 
     private func ensureStore() async {
         do {
@@ -249,18 +243,19 @@ struct WebPublishView: View {
         }
     }
 
-    private func publishPage(path: String) async {
+    private func publishPage(path: String, content: String) async {
         do {
-            try await appState.client.storePut(storeId: storeName, key: webKey(path), value: editBuffer)
-            pageContent = editBuffer
+            try await appState.client.storePut(storeId: storeName, key: webKey(path), value: content)
+            pageContent = content
+            editBuffer = content
             isEditing = false
         } catch {
             appState.errorMessage = "Failed to publish: \(error.localizedDescription)"
         }
     }
 
-    private func createPage() async {
-        let path = newPath.trimmingCharacters(in: .whitespaces)
+    private func createPage(rawPath: String) async {
+        let path = rawPath.trimmingCharacters(in: .whitespaces)
         guard !path.isEmpty else { return }
 
         do {
@@ -277,8 +272,9 @@ struct WebPublishView: View {
 
             pagePaths = paths
             selectedPath = path
-            newPath = ""
-            showCreatePage = false
+            pageContent = ""
+            editBuffer = ""
+            isEditing = true
         } catch {
             appState.errorMessage = "Failed to create page: \(error.localizedDescription)"
         }

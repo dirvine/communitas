@@ -57,6 +57,7 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
     let mut thread_message = use_signal(|| Option::<models::channel::ChatMessage>::None);
     let reply_count_bump = use_signal(|| Option::<(String, u64)>::None);
     let mut channel_sidebar_refresh = use_signal(|| 0u64);
+    let mut last_space_id = use_signal(|| props.space_id.clone());
     let mut create_channel_group_id = use_signal(|| Option::<String>::None);
     let mut create_channel_name = use_signal(String::new);
     let mut create_channel_description = use_signal(String::new);
@@ -65,6 +66,19 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
 
     let current_tab = *active_tab.read();
     let space_id = props.space_id.clone();
+    {
+        let active_space_id = space_id.clone();
+        use_effect(move || {
+            if *last_space_id.peek() != active_space_id {
+                last_space_id.set(active_space_id.clone());
+                selected_channel.set(None);
+                thread_message.set(None);
+                channel_sidebar_refresh.with_mut(|version| {
+                    *version = version.saturating_add(1);
+                });
+            }
+        });
+    }
 
     let container_style = format!(
         "display: flex; flex-direction: column; height: 100%; overflow: hidden; \
@@ -104,6 +118,11 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
     };
 
     let content_style = "flex: 1; overflow: hidden; display: flex;";
+    let chat_pane_style = if current_tab == SpaceTab::Chat {
+        "flex: 1; overflow: hidden; display: flex;"
+    } else {
+        "display: none;"
+    };
 
     rsx! {
         div {
@@ -177,124 +196,126 @@ pub fn SpaceView(props: SpaceViewProps) -> Element {
                 style: "{content_style}",
                 role: "tabpanel",
 
-                match current_tab {
-                    SpaceTab::Chat => rsx! {
-                        // Channel sidebar + chat
-                        div {
-                            style: "width: 220px; flex-shrink: 0; border-right: 1px solid rgba(37, 41, 64, 0.8);",
-                            components::ChannelSidebar {
-                                refresh_key: channel_sidebar_refresh(),
-                                selected: selected_channel(),
-                                on_select: move |ch: components::channel_sidebar::SelectedChannel| {
-                                    selected_channel.set(Some(ch));
-                                    thread_message.set(None);
-                                },
-                                on_create_channel: move |group_id: String| {
-                                    create_channel_group_id.set(Some(group_id));
-                                    create_channel_name.set(String::new());
-                                    create_channel_description.set(String::new());
-                                    create_channel_error.set(None);
-                                },
-                                on_open_identity: move |_| {},
-                            }
+                div {
+                    style: "{chat_pane_style}",
+                    div {
+                        style: "width: 220px; flex-shrink: 0; border-right: 1px solid rgba(37, 41, 64, 0.8);",
+                        components::ChannelSidebar {
+                            active_space_id: Some(space_id.clone()),
+                            refresh_key: channel_sidebar_refresh(),
+                            selected: selected_channel(),
+                            on_select: move |ch: components::channel_sidebar::SelectedChannel| {
+                                selected_channel.set(Some(ch));
+                                thread_message.set(None);
+                            },
+                            on_create_channel: move |group_id: String| {
+                                create_channel_group_id.set(Some(group_id));
+                                create_channel_name.set(String::new());
+                                create_channel_description.set(String::new());
+                                create_channel_error.set(None);
+                            },
+                            on_open_identity: move |_| {},
                         }
+                    }
 
-                        div {
-                            style: "flex: 1; display: flex; overflow: hidden;",
+                    div {
+                        style: "flex: 1; display: flex; overflow: hidden;",
 
-                            if let Some(channel) = selected_channel() {
-                                div {
-                                    style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
-                                    components::ChannelChatView {
-                                        key: "{channel.group_id}:{channel.channel_name}",
-                                        channel: channel.clone(),
-                                        on_open_thread: move |msg: models::channel::ChatMessage| {
-                                            thread_message.set(Some(msg));
+                        if let Some(channel) = selected_channel() {
+                            div {
+                                style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
+                                components::ChannelChatView {
+                                    key: "{channel.group_id}:{channel.channel_name}",
+                                    channel: channel.clone(),
+                                    on_open_thread: move |msg: models::channel::ChatMessage| {
+                                        thread_message.set(Some(msg));
+                                    },
+                                    reply_count_bump: reply_count_bump,
+                                }
+                            }
+
+                            if let Some(ref parent_msg) = thread_message() {
+                                if let Some(ref ch) = selected_channel() {
+                                    components::ThreadPanel {
+                                        key: "{ch.group_id}:{ch.channel_name}:{parent_msg.id}",
+                                        parent_message: parent_msg.clone(),
+                                        channel: ch.clone(),
+                                        on_close: move |_| {
+                                            thread_message.set(None);
                                         },
                                         reply_count_bump: reply_count_bump,
                                     }
                                 }
-
-                                if let Some(ref parent_msg) = thread_message() {
-                                    if let Some(ref ch) = selected_channel() {
-                                        components::ThreadPanel {
-                                            key: "{ch.group_id}:{ch.channel_name}:{parent_msg.id}",
-                                            parent_message: parent_msg.clone(),
-                                            channel: ch.clone(),
-                                            on_close: move |_| {
-                                                thread_message.set(None);
-                                            },
-                                            reply_count_bump: reply_count_bump,
-                                        }
-                                    }
-                                }
-                            } else {
-                                div {
-                                    style: format!(
-                                        "flex: 1; display: flex; align-items: center; justify-content: center; \
-                                         color: {};",
-                                        colors::TEXT_MUTED,
-                                    ),
-                                    "Select a channel to start chatting"
-                                }
+                            }
+                        } else {
+                            div {
+                                style: format!(
+                                    "flex: 1; display: flex; align-items: center; justify-content: center; \
+                                     color: {};",
+                                    colors::TEXT_MUTED,
+                                ),
+                                "Select a channel to start chatting"
                             }
                         }
+                    }
 
-                        // Create channel modal
-                        if let Some(group_id) = create_channel_group_id() {
-                            components::CreateChannelModal {
-                                channel_name: create_channel_name(),
-                                channel_description: create_channel_description(),
-                                submitting: create_channel_submitting(),
-                                error: create_channel_error(),
-                                on_name_change: move |value: String| create_channel_name.set(value),
-                                on_description_change: move |value: String| create_channel_description.set(value),
-                                on_cancel: move |_| {
+                    if let Some(group_id) = create_channel_group_id() {
+                        components::CreateChannelModal {
+                            channel_name: create_channel_name(),
+                            channel_description: create_channel_description(),
+                            submitting: create_channel_submitting(),
+                            error: create_channel_error(),
+                            on_name_change: move |value: String| create_channel_name.set(value),
+                            on_description_change: move |value: String| create_channel_description.set(value),
+                            on_cancel: move |_| {
+                                if create_channel_submitting() { return; }
+                                create_channel_group_id.set(None);
+                                create_channel_error.set(None);
+                            },
+                            on_create: {
+                                let _space_id = space_id.clone();
+                                move |_| {
                                     if create_channel_submitting() { return; }
-                                    create_channel_group_id.set(None);
+
+                                    let group_id = group_id.clone();
+                                    let raw_name = create_channel_name();
+                                    let raw_description = create_channel_description();
+
+                                    create_channel_submitting.set(true);
                                     create_channel_error.set(None);
-                                },
-                                on_create: {
-                                    let _space_id = space_id.clone();
-                                    move |_| {
-                                        if create_channel_submitting() { return; }
 
-                                        let group_id = group_id.clone();
-                                        let raw_name = create_channel_name();
-                                        let raw_description = create_channel_description();
-
-                                        create_channel_submitting.set(true);
-                                        create_channel_error.set(None);
-
-                                        spawn(async move {
-                                            match crate::create_channel(&group_id, &raw_name, &raw_description).await {
-                                                Ok(channel) => {
-                                                    info!(
-                                                        target: "ui.space",
-                                                        "Created channel {} in group {}",
-                                                        channel.name, group_id
-                                                    );
-                                                    selected_channel.set(Some(
-                                                        components::channel_sidebar::SelectedChannel {
-                                                            group_id: group_id.clone(),
-                                                            channel_name: channel.name.clone(),
-                                                            topic: channel.topic.clone(),
-                                                            meta: Some(channel),
-                                                        },
-                                                    ));
-                                                    thread_message.set(None);
-                                                    channel_sidebar_refresh.set(channel_sidebar_refresh() + 1);
-                                                    create_channel_group_id.set(None);
-                                                }
-                                                Err(err) => create_channel_error.set(Some(err)),
+                                    spawn(async move {
+                                        match crate::create_channel(&group_id, &raw_name, &raw_description).await {
+                                            Ok(channel) => {
+                                                info!(
+                                                    target: "ui.space",
+                                                    "Created channel {} in group {}",
+                                                    channel.name, group_id
+                                                );
+                                                selected_channel.set(Some(
+                                                    components::channel_sidebar::SelectedChannel {
+                                                        group_id: group_id.clone(),
+                                                        channel_name: channel.name.clone(),
+                                                        topic: channel.topic.clone(),
+                                                        meta: Some(channel),
+                                                    },
+                                                ));
+                                                thread_message.set(None);
+                                                channel_sidebar_refresh.set(channel_sidebar_refresh() + 1);
+                                                create_channel_group_id.set(None);
                                             }
-                                            create_channel_submitting.set(false);
-                                        });
-                                    }
-                                },
-                            }
+                                            Err(err) => create_channel_error.set(Some(err)),
+                                        }
+                                        create_channel_submitting.set(false);
+                                    });
+                                }
+                            },
                         }
-                    },
+                    }
+                }
+
+                match current_tab {
+                    SpaceTab::Chat => rsx! {},
 
                     SpaceTab::Board => {
                         let gid = space_id.clone();

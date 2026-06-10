@@ -26,7 +26,8 @@ final class OnboardingViewModel: ObservableObject {
 
     func checkDaemon() async {
         state = .checking
-        let daemonState = await daemon.state()
+        let probeClient = X0xClient.fromDiscovery() ?? X0xClient()
+        let daemonState = await daemon.state(using: probeClient)
         switch daemonState {
         case .running:
             state = .ready

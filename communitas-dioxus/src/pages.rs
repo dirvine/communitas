@@ -1432,7 +1432,7 @@ fn EntityDocsContent(entity: UnifiedEntity) -> Element {
 
     use_effect(move || {
         spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            crate::ui_sleep(std::time::Duration::from_millis(300)).await;
             docs_loading.set(false);
         });
     });
@@ -3406,7 +3406,7 @@ pub fn EntityDocsPageV2(entity: UnifiedEntity) -> Element {
         // In production, this would use DriveService to list /docs directory
         spawn(async move {
             // Simulated delay
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            crate::ui_sleep(std::time::Duration::from_millis(300)).await;
             docs.set(vec![]);
             docs_loading.set(false);
         });
@@ -4551,7 +4551,7 @@ pub fn CreateEntityModal(
         // TODO: Call DirectoryService to create the entity
         // For now, simulate creation with a fake ID
         spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            crate::ui_sleep(std::time::Duration::from_millis(500)).await;
 
             // Simulate success - use timestamp for unique ID
             let fake_id = format!(
@@ -4890,7 +4890,7 @@ pub fn InviteMemberModal(
 
         // TODO: Call DirectoryService to invite member
         spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            crate::ui_sleep(std::time::Duration::from_millis(500)).await;
 
             // Simulate success
             tracing::info!("Invited member with four-words: {}", words);
@@ -5218,7 +5218,7 @@ pub fn EditEntityModal(
 
             // TODO: Call DirectoryService to update the entity
             spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                crate::ui_sleep(std::time::Duration::from_millis(500)).await;
 
                 tracing::info!("Updated entity: {} ({})", name_value, entity_id_for_spawn);
 
@@ -5248,7 +5248,7 @@ pub fn EditEntityModal(
 
         // TODO: Call DirectoryService to update the entity
         spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            crate::ui_sleep(std::time::Duration::from_millis(500)).await;
 
             tracing::info!("Updated entity: {} ({})", name_value, entity_id_for_spawn);
 

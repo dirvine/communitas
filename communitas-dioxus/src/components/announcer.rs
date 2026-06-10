@@ -185,7 +185,7 @@ pub fn Announcer() -> Element {
                 }
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                    crate::ui_sleep(std::time::Duration::from_millis(1000)).await;
                 }
                 ctx.clear_polite();
                 // Process next in queue if any
@@ -206,7 +206,7 @@ pub fn Announcer() -> Element {
                 }
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+                    crate::ui_sleep(std::time::Duration::from_millis(2000)).await;
                 }
                 ctx.clear_assertive();
                 // Process next in queue if any

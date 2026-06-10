@@ -31,6 +31,8 @@
 //! # }
 //! ```
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 pub mod client;
 pub mod config;
 pub mod daemon;
@@ -41,7 +43,7 @@ pub mod websocket;
 
 pub use client::X0xClient;
 pub use config::{X0xConfig, discover as discover_x0x_config};
-pub use daemon::{DaemonManager, DaemonState};
+pub use daemon::{DaemonManager, DaemonState, is_running_health_status};
 pub use error::{Result, X0xError};
 pub use sse::{SseFrame, X0xSseStream};
 pub use types::*;

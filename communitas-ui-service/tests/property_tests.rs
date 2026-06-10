@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Property-based tests for the Communitas UI services.
 //!
 //! These tests use proptest to verify invariants hold across random inputs.

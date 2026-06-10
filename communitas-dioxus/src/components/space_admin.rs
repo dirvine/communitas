@@ -41,6 +41,50 @@ pub struct SpaceAdminProps {
     pub space_id: String,
 }
 
+fn set_signal_if_changed<T: PartialEq + 'static>(signal: &mut Signal<T>, next: T) {
+    let changed = {
+        let current = signal.peek();
+        *current != next
+    };
+    if changed {
+        signal.set(next);
+    }
+}
+
+fn set_group_info_if_changed(signal: &mut Signal<Option<GroupInfo>>, next: GroupInfo) {
+    let changed = {
+        let current = signal.peek();
+        match &*current {
+            Some(current) => !group_info_same(current, &next),
+            None => true,
+        }
+    };
+    if changed {
+        signal.set(Some(next));
+    }
+}
+
+fn group_info_same(left: &GroupInfo, right: &GroupInfo) -> bool {
+    left.group_id == right.group_id
+        && left.name == right.name
+        && left.description == right.description
+        && left.creator == right.creator
+        && left.created_at == right.created_at
+        && left.member_count == right.member_count
+        && left.chat_topic == right.chat_topic
+        && left.metadata_topic == right.metadata_topic
+        && left.policy == right.policy
+        && left.members.len() == right.members.len()
+        && left
+            .members
+            .iter()
+            .zip(&right.members)
+            .all(|(left_member, right_member)| {
+                left_member.agent_id == right_member.agent_id
+                    && left_member.display_name == right_member.display_name
+            })
+}
+
 /// Top-level admin panel rendered under the space's Manage tab.
 #[component]
 pub fn SpaceAdminPanel(props: SpaceAdminProps) -> Element {
@@ -64,20 +108,23 @@ pub fn SpaceAdminPanel(props: SpaceAdminProps) -> Element {
             let client = X0xClient::new();
             loop {
                 match client.agent().await {
-                    Ok(a) => caller_agent_id.set(Some(a.agent_id)),
+                    Ok(a) => set_signal_if_changed(&mut caller_agent_id, Some(a.agent_id)),
                     Err(e) => warn!(target: "ui.space_admin", "agent fetch failed: {e}"),
                 }
                 match client.get_group(&space_id).await {
                     Ok(info) => {
-                        group_info.set(Some(info));
-                        last_error.set(None);
+                        set_group_info_if_changed(&mut group_info, info);
+                        set_signal_if_changed(&mut last_error, None);
                     }
                     Err(e) => {
                         warn!(target: "ui.space_admin", "get_group failed: {e}");
-                        last_error.set(Some(format!("Failed to load group: {e}")));
+                        set_signal_if_changed(
+                            &mut last_error,
+                            Some(format!("Failed to load group: {e}")),
+                        );
                     }
                 }
-                tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+                crate::poll_sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
             }
         }
     });
@@ -88,9 +135,9 @@ pub fn SpaceAdminPanel(props: SpaceAdminProps) -> Element {
             let client = X0xClient::new();
             loop {
                 if let Ok(list) = client.list_named_group_members(&space_id).await {
-                    members.set(list);
+                    set_signal_if_changed(&mut members, list);
                 }
-                tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+                crate::poll_sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
             }
         }
     });
@@ -102,10 +149,10 @@ pub fn SpaceAdminPanel(props: SpaceAdminProps) -> Element {
             loop {
                 // 403 on non-admin is expected; swallow it.
                 match client.list_join_requests(&space_id).await {
-                    Ok(list) => requests.set(list),
-                    Err(_) => requests.set(Vec::new()),
+                    Ok(list) => set_signal_if_changed(&mut requests, list),
+                    Err(_) => set_signal_if_changed(&mut requests, Vec::new()),
                 }
-                tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+                crate::poll_sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
             }
         }
     });
@@ -338,26 +385,25 @@ fn StatePanel(props: StatePanelProps) -> Element {
             async move {
                 let client = X0xClient::new();
                 loop {
-                    // chain_rev() is read to participate in reactivity;
-                    // a bump from seal/withdraw triggers the next poll
-                    // sooner via the inline re-fetch in those handlers.
-                    let _ = chain_rev();
+                    // Keep the revision marker available to action handlers without
+                    // subscribing this long-lived coroutine to signal wakes.
+                    let _ = *chain_rev.peek();
                     match client.get_group_state(&space_id).await {
                         Ok(state) => {
-                            chain.set(Some(state));
-                            chain_error.set(None);
+                            set_signal_if_changed(&mut chain, Some(state));
+                            set_signal_if_changed(&mut chain_error, None);
                         }
                         Err(e) => {
                             let msg = format!("{e}");
                             // 403 is normal for non-members; silence it.
                             if !msg.contains("not a member") {
                                 warn!(target: "ui.space_admin", "state fetch failed: {msg}");
-                                chain_error.set(Some(msg));
+                                set_signal_if_changed(&mut chain_error, Some(msg));
                             }
-                            chain.set(None);
+                            set_signal_if_changed(&mut chain, None);
                         }
                     }
-                    tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS))
+                    crate::poll_sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS))
                         .await;
                 }
             }

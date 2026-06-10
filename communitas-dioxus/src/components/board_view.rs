@@ -117,11 +117,13 @@ pub fn BoardView(props: BoardViewProps) -> Element {
     // ── Polling: refresh tasks every POLL_SECS ──
     use_coroutine(move |_: UnboundedReceiver<()>| async move {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(POLL_SECS)).await;
-            let _key = *refresh_key.read();
-            if let Some(id) = list_id.read().clone() {
+            crate::poll_sleep(tokio::time::Duration::from_secs(POLL_SECS)).await;
+            let _key = *refresh_key.peek();
+            if let Some(id) = list_id.peek().clone() {
                 let client = X0xClient::new();
-                if let Ok(t) = client.list_tasks(&id).await {
+                if let Ok(t) = client.list_tasks(&id).await
+                    && !same_tasks(tasks.peek().as_slice(), t.as_slice())
+                {
                     tasks.set(t);
                 }
             }
@@ -153,17 +155,17 @@ pub fn BoardView(props: BoardViewProps) -> Element {
 
     let todo: Vec<_> = current_tasks
         .iter()
-        .filter(|t| t.state.as_deref() == Some("todo") || t.state.is_none())
+        .filter(|t| task_lane(t.state.as_deref()) == TaskLane::Todo)
         .cloned()
         .collect();
     let in_progress: Vec<_> = current_tasks
         .iter()
-        .filter(|t| t.state.as_deref() == Some("in_progress"))
+        .filter(|t| task_lane(t.state.as_deref()) == TaskLane::InProgress)
         .cloned()
         .collect();
     let done: Vec<_> = current_tasks
         .iter()
-        .filter(|t| t.state.as_deref() == Some("done"))
+        .filter(|t| task_lane(t.state.as_deref()) == TaskLane::Done)
         .cloned()
         .collect();
 
@@ -186,11 +188,12 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                             if !title.is_empty() {
                                 new_task_title.set(String::new());
                                 spawn(async move {
-                                    if let Some(id) = list_id.read().clone() {
+                                    if let Some(id) = list_id.peek().clone() {
                                         let client = X0xClient::new();
                                         if let Err(e) = client.add_task(&id, &title, None).await {
                                             warn!(target: "ui.board", "add task failed: {e}");
                                         }
+                                        refresh_tasks(&id, tasks).await;
                                         refresh_key.set(refresh_key() + 1);
                                     }
                                 });
@@ -205,11 +208,12 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                         if !title.is_empty() {
                             new_task_title.set(String::new());
                             spawn(async move {
-                                if let Some(id) = list_id.read().clone() {
+                                if let Some(id) = list_id.peek().clone() {
                                     let client = X0xClient::new();
                                     if let Err(e) = client.add_task(&id, &title, None).await {
                                         warn!(target: "ui.board", "add task failed: {e}");
                                     }
+                                    refresh_tasks(&id, tasks).await;
                                     refresh_key.set(refresh_key() + 1);
                                 }
                             });
@@ -224,16 +228,64 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                 style: "display: flex; gap: {spacing::MD}; flex: 1; overflow: auto;",
 
                 // To Do
-                {board_column("To Do", colors::TEXT_MUTED, &todo, list_id, refresh_key, "claim")}
+                {board_column("To Do", colors::TEXT_MUTED, &todo, list_id, tasks, refresh_key, "claim")}
 
                 // In Progress
-                {board_column("In Progress", "#e67e22", &in_progress, list_id, refresh_key, "complete")}
+                {board_column("In Progress", "#e67e22", &in_progress, list_id, tasks, refresh_key, "complete")}
 
                 // Done
-                {board_column("Done", colors::SUCCESS, &done, list_id, refresh_key, "")}
+                {board_column("Done", colors::SUCCESS, &done, list_id, tasks, refresh_key, "")}
             }
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TaskLane {
+    Todo,
+    InProgress,
+    Done,
+}
+
+fn task_lane(state: Option<&str>) -> TaskLane {
+    let Some(state) = state else {
+        return TaskLane::Todo;
+    };
+    let state = state.trim();
+    if state.is_empty() || state == "empty" || state == "todo" {
+        return TaskLane::Todo;
+    }
+    if state == "in_progress"
+        || state.starts_with("in_progress:")
+        || state == "claimed"
+        || state.starts_with("claimed:")
+    {
+        return TaskLane::InProgress;
+    }
+    if state == "done" || state.starts_with("done:") {
+        return TaskLane::Done;
+    }
+    TaskLane::Todo
+}
+
+async fn refresh_tasks(list_id: &str, mut tasks: Signal<Vec<Task>>) {
+    let client = X0xClient::new();
+    match client.list_tasks(list_id).await {
+        Ok(updated) => tasks.set(updated),
+        Err(e) => warn!(target: "ui.board", "task refresh failed: {e}"),
+    }
+}
+
+fn same_tasks(left: &[Task], right: &[Task]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.id == right.id
+                && left.title == right.title
+                && left.description == right.description
+                && left.state == right.state
+                && left.assignee == right.assignee
+                && left.priority == right.priority
+        })
 }
 
 /// Render a single board column with task cards and action buttons.
@@ -242,6 +294,7 @@ fn board_column(
     accent: &str,
     tasks: &[Task],
     list_id: Signal<Option<String>>,
+    task_signal: Signal<Vec<Task>>,
     refresh_key: Signal<u64>,
     action: &str,
 ) -> Element {
@@ -282,7 +335,7 @@ fn board_column(
                     }
                 }
                 for task in tasks.iter() {
-                    {task_card(task, list_id, refresh_key, &action_str, action_label)}
+                    {task_card(task, list_id, task_signal, refresh_key, &action_str, action_label)}
                 }
             }
         }
@@ -293,6 +346,7 @@ fn board_column(
 fn task_card(
     task: &Task,
     list_id: Signal<Option<String>>,
+    task_signal: Signal<Vec<Task>>,
     mut refresh_key: Signal<u64>,
     action: &str,
     action_label: Option<&str>,
@@ -349,6 +403,7 @@ fn task_card(
                                         if let Err(e) = result {
                                             warn!(target: "ui.board", "{act} task failed: {e}");
                                         }
+                                        refresh_tasks(&lid, task_signal).await;
                                         refresh_key.set(refresh_key() + 1);
                                     }
                                 });

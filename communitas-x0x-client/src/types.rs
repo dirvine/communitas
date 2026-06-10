@@ -545,6 +545,11 @@ pub struct ConnectMachineResponse {
 pub struct DirectSendRequest {
     pub agent_id: String,
     pub payload: String, // base64
+    /// x0x 0.22+ defaults `/direct/send` to waiting for the recipient inbox
+    /// gossip ACK. Keep this explicit at app call sites so fire-and-forget
+    /// sends can opt out deliberately.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_gossip_ack: Option<bool>,
 }
 
 /// A direct connection from `GET /direct/connections`.
@@ -1625,6 +1630,16 @@ pub struct SendGroupMessageRequest {
     pub kind: Option<String>,
 }
 
+/// Response from `POST /groups/:id/send`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct GroupPublicSendResponse {
+    pub group_id: String,
+    pub topic: String,
+    #[serde(default)]
+    pub fallback_topic: Option<String>,
+    pub timestamp: u64,
+}
+
 /// Response from `GET /groups/:id/messages`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct GroupMessagesResponse {
@@ -1833,8 +1848,11 @@ pub struct SecureEncryptRequest {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SecureEncryptResponse {
     pub ciphertext_b64: String,
-    pub nonce_b64: String,
+    #[serde(default)]
+    pub nonce_b64: Option<String>,
     pub secret_epoch: u64,
+    #[serde(default)]
+    pub secure_plane: Option<String>,
 }
 
 /// Request body for `POST /groups/:id/secure/decrypt`.
@@ -1848,7 +1866,12 @@ pub struct SecureDecryptRequest {
 /// Response from `POST /groups/:id/secure/decrypt`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SecureDecryptResponse {
+    #[serde(alias = "payload_b64")]
     pub plaintext_b64: String,
+    #[serde(default)]
+    pub secret_epoch: Option<u64>,
+    #[serde(default)]
+    pub secure_plane: Option<String>,
 }
 
 /// Request body for `POST /groups/:id/secure/reseal`.

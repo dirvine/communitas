@@ -113,6 +113,10 @@ public struct SubscribeResponse: Codable, Sendable {
 public struct DirectMessageRequest: Codable, Sendable {
     public let agentId: String
     public let payload: String // base64
+    /// x0x 0.22+ defaults `/direct/send` to waiting for the recipient inbox
+    /// gossip ACK. Keep this explicit so fire-and-forget sends opt out
+    /// deliberately.
+    public let requireGossipAck: Bool?
     /// Opt-in: wait up to this many ms for an ant-quic `probe_peer` ACK
     /// after send. Omit for legacy fire-and-forget. (x0xd ≥ 0.19.6.)
     public let requireAckMs: UInt64?
@@ -120,12 +124,19 @@ public struct DirectMessageRequest: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case agentId = "agent_id"
         case payload
+        case requireGossipAck = "require_gossip_ack"
         case requireAckMs = "require_ack_ms"
     }
 
-    public init(agentId: String, payload: String, requireAckMs: UInt64? = nil) {
+    public init(
+        agentId: String,
+        payload: String,
+        requireGossipAck: Bool? = nil,
+        requireAckMs: UInt64? = nil
+    ) {
         self.agentId = agentId
         self.payload = payload
+        self.requireGossipAck = requireGossipAck
         self.requireAckMs = requireAckMs
     }
 }

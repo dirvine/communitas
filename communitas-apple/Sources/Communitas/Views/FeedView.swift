@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import X0xClient
 
@@ -26,8 +27,8 @@ struct FeedView: View {
     @EnvironmentObject var appState: AppState
 
     @State private var posts: [FeedPost] = []
-    @State private var draft = ""
     @State private var isPosting = false
+    @State private var hasStartedFeed = false
     @State private var webSocket: X0xWebSocket?
     @State private var listeningTask: Task<Void, Never>?
 
@@ -47,11 +48,11 @@ struct FeedView: View {
             Divider()
             postList
         }
-        .task {
-            await subscribeToFeed()
-            startListening()
+        .onAppear {
+            scheduleFeedStartup()
         }
         .onDisappear {
+            hasStartedFeed = false
             listeningTask?.cancel()
             webSocket?.disconnect()
         }
@@ -73,29 +74,10 @@ struct FeedView: View {
     // MARK: - Post Composer
 
     private var postComposer: some View {
-        VStack(spacing: 8) {
-            TextEditor(text: $draft)
-                .font(.body)
-                .frame(height: 60)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-
-            HStack {
-                Spacer()
-                Button {
-                    Task { await publishPost() }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "paperplane.fill")
-                        Text("Post")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || isPosting)
-            }
+        FeedPostComposerPanel(isPosting: isPosting) { text in
+            publishPost(text: text)
         }
+        .frame(height: 118)
         .padding(12)
     }
 
@@ -167,11 +149,21 @@ struct FeedView: View {
 
     // MARK: - Actions
 
-    private func publishPost() async {
-        let text = draft.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
+    private func scheduleFeedStartup() {
+        guard !hasStartedFeed else { return }
+        hasStartedFeed = true
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                await subscribeToFeed()
+                startListening()
+            }
+        }
+    }
+
+    private func publishPost(text rawText: String) -> Bool {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isPosting else { return false }
         isPosting = true
-        defer { isPosting = false }
 
         let post = FeedPost(
             id: UUID().uuidString,
@@ -181,15 +173,34 @@ struct FeedView: View {
             timestamp: Int64(Date().timeIntervalSince1970 * 1000)
         )
 
+        let payload: String
         do {
             let data = try JSONEncoder().encode(post)
-            let payload = data.base64EncodedString()
-            try await appState.client.publish(topic: feedTopic, payload: payload)
-            posts.append(post)
-            draft = ""
+            payload = data.base64EncodedString()
         } catch {
+            isPosting = false
             appState.errorMessage = "Failed to post: \(error.localizedDescription)"
+            return false
         }
+
+        let client = appState.client
+        let topic = feedTopic
+        posts.append(post)
+
+        Task {
+            do {
+                try await client.publish(topic: topic, payload: payload)
+            } catch {
+                await MainActor.run {
+                    appState.errorMessage = "Failed to post: \(error.localizedDescription)"
+                }
+            }
+            await MainActor.run {
+                isPosting = false
+            }
+        }
+
+        return true
     }
 
     private func subscribeToFeed() async {
@@ -201,18 +212,29 @@ struct FeedView: View {
     }
 
     private func startListening() {
-        let ws = X0xWebSocket(baseURL: appState.client.webSocketBaseURL, path: "/ws", token: appState.client.token)
-        self.webSocket = ws
-        ws.connect()
-
-        listeningTask = Task {
+        listeningTask?.cancel()
+        webSocket?.disconnect()
+        listeningTask = Task { @MainActor in
+            var retryDelay: UInt64 = 1_000_000_000
             while !Task.isCancelled {
+                await subscribeToFeed()
+                let ws = X0xWebSocket(baseURL: appState.client.webSocketBaseURL, path: "/ws", token: appState.client.token)
+                self.webSocket = ws
+                ws.connect()
                 do {
-                    let text = try await ws.receive()
-                    await handleWebSocketMessage(text)
+                    retryDelay = 1_000_000_000
+                    while !Task.isCancelled {
+                        let text = try await ws.receive()
+                        await handleWebSocketMessage(text)
+                    }
                 } catch {
+                    if webSocket === ws {
+                        webSocket = nil
+                    }
+                    ws.disconnect()
                     if !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        try? await Task.sleep(nanoseconds: retryDelay)
+                        retryDelay = min(retryDelay * 2, 30_000_000_000)
                     }
                 }
             }
@@ -249,5 +271,106 @@ struct FeedView: View {
         let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .mint]
         let index = abs(hash) % colors.count
         return colors[index]
+    }
+}
+
+private struct FeedPostComposerPanel: NSViewRepresentable {
+    let isPosting: Bool
+    let onSubmit: (String) -> Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSubmit: onSubmit)
+    }
+
+    func makeNSView(context: Context) -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .width
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let textView = NSTextView()
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.drawsBackground = true
+        textView.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.45)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.setAccessibilityIdentifier("feed-post-body")
+        textView.delegate = context.coordinator
+
+        let textScroll = NSScrollView()
+        textScroll.hasVerticalScroller = true
+        textScroll.borderType = .bezelBorder
+        textScroll.documentView = textView
+        textScroll.translatesAutoresizingMaskIntoConstraints = false
+        textScroll.setAccessibilityIdentifier("feed-post-body-scroll")
+        textScroll.heightAnchor.constraint(equalToConstant: 74).isActive = true
+
+        let button = NSButton(
+            title: "Post",
+            target: context.coordinator,
+            action: #selector(Coordinator.submit(_:))
+        )
+        button.bezelStyle = .rounded
+        button.controlSize = .regular
+        button.image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Post")
+        button.imagePosition = .imageLeading
+        button.setAccessibilityIdentifier("feed-post-button")
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let buttonRow = NSStackView(views: [spacer, button])
+        buttonRow.orientation = .horizontal
+        buttonRow.alignment = .centerY
+        buttonRow.distribution = .fill
+
+        stack.addArrangedSubview(textScroll)
+        stack.addArrangedSubview(buttonRow)
+
+        context.coordinator.textView = textView
+        context.coordinator.button = button
+        context.coordinator.refreshButtonState()
+
+        return stack
+    }
+
+    func updateNSView(_ stack: NSStackView, context: Context) {
+        context.coordinator.onSubmit = onSubmit
+        context.coordinator.isPosting = isPosting
+        context.coordinator.refreshButtonState()
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        weak var textView: NSTextView?
+        weak var button: NSButton?
+        var isPosting = false
+        var onSubmit: (String) -> Bool
+
+        init(onSubmit: @escaping (String) -> Bool) {
+            self.onSubmit = onSubmit
+        }
+
+        func textDidChange(_ notification: Notification) {
+            refreshButtonState()
+        }
+
+        func refreshButtonState() {
+            let hasText = !(textView?.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            button?.isEnabled = !isPosting && hasText
+        }
+
+        @objc func submit(_ sender: NSButton) {
+            guard let textView else { return }
+            if onSubmit(textView.string) {
+                textView.string = ""
+                refreshButtonState()
+            }
+        }
     }
 }

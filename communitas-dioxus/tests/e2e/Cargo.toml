@@ -21,7 +21,7 @@ anyhow = "1"
 communitas-x0x-client = { path = "../../../communitas-x0x-client" }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-x0x-test-harness = { path = "../../../../x0x/tests/harness" }
+tempfile = "3"
 
 [[test]]
 name = "e2e_identity"
@@ -34,6 +34,10 @@ path = "trust_contacts.rs"
 [[test]]
 name = "e2e_connectivity"
 path = "connectivity.rs"
+
+[[test]]
+name = "e2e_messaging"
+path = "messaging.rs"
 
 [[test]]
 name = "e2e_groups"

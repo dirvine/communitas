@@ -134,7 +134,7 @@ pub fn DiscoverView() -> Element {
         move |_: UnboundedReceiver<()>| async move {
             let client = X0xClient::new();
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+                crate::poll_sleep(tokio::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
                 let current_mode = mode();
                 let current_query = query().trim().to_string();
                 let mut seq = fetch_seq;

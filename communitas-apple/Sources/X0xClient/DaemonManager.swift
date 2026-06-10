@@ -10,6 +10,7 @@ public final class DaemonManager: Sendable {
         "/usr/local/bin/x0x",
         "/opt/homebrew/bin/x0x",
         "/opt/zerobrew/bin/x0x",
+        "\(NSHomeDirectory())/.local/bin/x0x",
         "\(NSHomeDirectory())/.cargo/bin/x0x",
         "\(NSHomeDirectory())/.x0x/bin/x0x",
     ]

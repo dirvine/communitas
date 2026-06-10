@@ -52,6 +52,76 @@ const TYPING_INBOUND_RATE_LIMIT_SECS: u64 = 1;
 /// Maximum number of messages kept in memory per channel.
 const MAX_MESSAGES: usize = 500;
 
+fn set_signal_if_changed<T: PartialEq + 'static>(signal: &mut Signal<T>, next: T) {
+    let changed = {
+        let current = signal.peek();
+        *current != next
+    };
+    if changed {
+        signal.set(next);
+    }
+}
+
+fn signed_public_key(gpm: &communitas_x0x_client::GroupPublicMessage) -> String {
+    format!(
+        "{}:{}:{}",
+        gpm.author_agent_id,
+        gpm.timestamp,
+        gpm.signature.chars().take(12).collect::<String>()
+    )
+}
+
+fn signed_public_chat_message(
+    gpm: &communitas_x0x_client::GroupPublicMessage,
+    channel_name: &str,
+    key: String,
+) -> ChatMessage {
+    ChatMessage {
+        id: key,
+        text: gpm.body.clone(),
+        sender_name: x0x_contract::fallback_sender_name(&gpm.author_agent_id),
+        sender_id: gpm.author_agent_id.clone(),
+        timestamp: gpm.timestamp,
+        channel: channel_name.to_owned(),
+        thread_root: None,
+        broadcast: false,
+        is_deleted: false,
+        reply_count: 0,
+        reactions: HashMap::new(),
+    }
+}
+
+fn insert_sorted_unique_message(messages: &mut Vec<ChatMessage>, chat: ChatMessage) -> bool {
+    if messages.iter().any(|m| m.id == chat.id) {
+        return false;
+    }
+
+    let pos = messages.partition_point(|m| m.timestamp <= chat.timestamp);
+    messages.insert(pos, chat);
+    if messages.len() > MAX_MESSAGES {
+        messages.drain(..messages.len() - MAX_MESSAGES);
+    }
+    true
+}
+
+fn insert_signal_message(messages: &mut Signal<Vec<ChatMessage>>, chat: ChatMessage) -> bool {
+    let mut inserted = false;
+    messages.with_mut(|msgs| {
+        inserted = insert_sorted_unique_message(msgs, chat);
+    });
+    inserted
+}
+
+fn chat_auto_scroll_enabled() -> bool {
+    if std::env::var_os("COMMUNITAS_DIOXUS_DISABLE_CHAT_AUTOSCROLL").is_some() {
+        return false;
+    }
+    if cfg!(target_os = "macos") {
+        return std::env::var_os("COMMUNITAS_DIOXUS_ENABLE_CHAT_AUTOSCROLL").is_some();
+    }
+    true
+}
+
 // ---------------------------------------------------------------------------
 // x0x-compatible wire payloads
 // ---------------------------------------------------------------------------
@@ -307,7 +377,7 @@ pub fn ChannelChatView(
     let mut messages = use_signal(Vec::<ChatMessage>::new);
     let mut composer_text = use_signal(String::new);
     let mut sending = use_signal(|| false);
-    let mut ws_connected = use_signal(|| false);
+    let mut ws_connected = use_signal(|| !crate::live_streams_enabled());
     let mut discovered_agent_ids = use_signal(HashSet::<String>::new);
 
     // Shared HTTP client — created once at mount, reused across all closures.
@@ -360,10 +430,13 @@ pub fn ChannelChatView(
                 if let Ok(info) = client.get_group(&policy_group_id).await
                     && let Some(policy) = info.policy
                 {
-                    is_signed_public.set(matches!(
-                        policy.confidentiality,
-                        communitas_x0x_client::GroupConfidentiality::SignedPublic
-                    ));
+                    set_signal_if_changed(
+                        &mut is_signed_public,
+                        matches!(
+                            policy.confidentiality,
+                            communitas_x0x_client::GroupConfidentiality::SignedPublic
+                        ),
+                    );
                 }
             }
         });
@@ -383,7 +456,7 @@ pub fn ChannelChatView(
     // banned-author before caching, so we just render.
     //
     // Dedup key: (author_agent_id, timestamp, signature[0..12])
-    let seen_signed: Signal<HashSet<String>> = use_signal(HashSet::new);
+    let mut seen_signed: Signal<HashSet<String>> = use_signal(HashSet::new);
 
     let push_group_id = group_id.clone();
     let push_channel_name = channel_name.clone();
@@ -392,12 +465,17 @@ pub fn ChannelChatView(
         let push_channel_name = push_channel_name.clone();
         let mut seen_signed = seen_signed;
         async move {
+            if !crate::live_streams_enabled() {
+                return;
+            }
+
             // Gate the subscription on the component actually being
             // SignedPublic. Loop on failure so a brief daemon blip
             // doesn't permanently disable the push path.
+            let mut retry_delay = std::time::Duration::from_secs(1);
             loop {
-                if !is_signed_public() {
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                if !*is_signed_public.peek() {
+                    crate::ui_sleep(std::time::Duration::from_millis(500)).await;
                     continue;
                 }
                 let client = communitas_x0x_client::X0xClient::new();
@@ -408,7 +486,8 @@ pub fn ChannelChatView(
                             target: "ui.channel_chat",
                             "get_group_state failed for public WS: {e}"
                         );
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        crate::ui_sleep(retry_delay).await;
+                        retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
                         continue;
                     }
                 };
@@ -417,16 +496,19 @@ pub fn ChannelChatView(
                     Ok(ws) => ws,
                     Err(e) => {
                         warn!(target: "ui.channel_chat", "public WS connect failed: {e}");
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        crate::ui_sleep(retry_delay).await;
+                        retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
                         continue;
                     }
                 };
                 if let Err(e) = ws.subscribe(vec![topic.clone()]) {
                     warn!(target: "ui.channel_chat", "public WS subscribe failed: {e}");
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    crate::ui_sleep(retry_delay).await;
+                    retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
                     continue;
                 }
                 info!(target: "ui.channel_chat", "Subscribed to public topic: {topic}");
+                retry_delay = std::time::Duration::from_secs(1);
 
                 while let Some(inbound) = ws.recv().await {
                     if let communitas_x0x_client::WsInbound::Message {
@@ -446,40 +528,13 @@ pub fn ChannelChatView(
                                 Ok(g) => g,
                                 Err(_) => continue,
                             };
-                        let key = format!(
-                            "{}:{}:{}",
-                            gpm.author_agent_id,
-                            gpm.timestamp,
-                            gpm.signature.chars().take(12).collect::<String>()
-                        );
+                        let key = signed_public_key(&gpm);
                         if !seen_signed.write().insert(key.clone()) {
                             continue;
                         }
-                        let chat = ChatMessage {
-                            id: key,
-                            text: gpm.body.clone(),
-                            sender_name: x0x_contract::fallback_sender_name(&gpm.author_agent_id),
-                            sender_id: gpm.author_agent_id.clone(),
-                            timestamp: gpm.timestamp,
-                            channel: push_channel_name.clone(),
-                            thread_root: None,
-                            broadcast: false,
-                            is_deleted: false,
-                            reply_count: 0,
-                            reactions: HashMap::new(),
-                        };
+                        let chat = signed_public_chat_message(&gpm, &push_channel_name, key);
                         let persist_msg = chat.clone();
-                        let mut inserted = false;
-                        messages.with_mut(|msgs| {
-                            if !msgs.iter().any(|m| m.id == chat.id) {
-                                let pos = msgs.partition_point(|m| m.timestamp <= chat.timestamp);
-                                msgs.insert(pos, chat);
-                                if msgs.len() > MAX_MESSAGES {
-                                    msgs.drain(..msgs.len() - MAX_MESSAGES);
-                                }
-                                inserted = true;
-                            }
-                        });
+                        let inserted = insert_signal_message(&mut messages, chat);
                         if inserted {
                             // Persist so a remount of the chat view
                             // replays SignedPublic messages alongside
@@ -495,7 +550,8 @@ pub fn ChannelChatView(
                 }
                 // recv returned None → reconnect.
                 warn!(target: "ui.channel_chat", "public WS closed; reconnecting");
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                crate::ui_sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
             }
         }
     });
@@ -509,44 +565,17 @@ pub fn ChannelChatView(
         async move {
             let client = communitas_x0x_client::X0xClient::new();
             loop {
-                if is_signed_public()
+                if *is_signed_public.peek()
                     && let Ok(list) = client.get_group_public_messages(&poll_group_id).await
                 {
                     for gpm in &list {
-                        let key = format!(
-                            "{}:{}:{}",
-                            gpm.author_agent_id,
-                            gpm.timestamp,
-                            gpm.signature.chars().take(12).collect::<String>()
-                        );
+                        let key = signed_public_key(gpm);
                         if !seen_signed.write().insert(key.clone()) {
                             continue;
                         }
-                        let chat = ChatMessage {
-                            id: key,
-                            text: gpm.body.clone(),
-                            sender_name: x0x_contract::fallback_sender_name(&gpm.author_agent_id),
-                            sender_id: gpm.author_agent_id.clone(),
-                            timestamp: gpm.timestamp,
-                            channel: poll_channel_name.clone(),
-                            thread_root: None,
-                            broadcast: false,
-                            is_deleted: false,
-                            reply_count: 0,
-                            reactions: HashMap::new(),
-                        };
+                        let chat = signed_public_chat_message(gpm, &poll_channel_name, key);
                         let persist_msg = chat.clone();
-                        let mut inserted = false;
-                        messages.with_mut(|msgs| {
-                            if !msgs.iter().any(|m| m.id == chat.id) {
-                                let pos = msgs.partition_point(|m| m.timestamp <= chat.timestamp);
-                                msgs.insert(pos, chat);
-                                if msgs.len() > MAX_MESSAGES {
-                                    msgs.drain(..msgs.len() - MAX_MESSAGES);
-                                }
-                                inserted = true;
-                            }
-                        });
+                        let inserted = insert_signal_message(&mut messages, chat);
                         if inserted {
                             x0x_contract::append_channel_history(
                                 &poll_group_id,
@@ -558,7 +587,7 @@ pub fn ChannelChatView(
                     }
                 }
                 // Push path covers real-time; the poll is a backstop.
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                crate::poll_sleep(std::time::Duration::from_secs(30)).await;
             }
         }
     });
@@ -573,24 +602,41 @@ pub fn ChannelChatView(
         let history_group_id = history_group_id.clone();
         let history_channel_name = history_channel_name.clone();
         async move {
-            let history =
+            let mut history =
                 x0x_contract::load_channel_history(&history_group_id, &history_channel_name).await;
-            messages.set(history);
+            let client = communitas_x0x_client::X0xClient::new();
+            if let Ok(info) = client.get_group(&history_group_id).await
+                && info.policy.is_some_and(|policy| {
+                    matches!(
+                        policy.confidentiality,
+                        communitas_x0x_client::GroupConfidentiality::SignedPublic
+                    )
+                })
+                && let Ok(list) = client.get_group_public_messages(&history_group_id).await
+            {
+                for gpm in &list {
+                    let key = signed_public_key(gpm);
+                    seen_signed.write().insert(key.clone());
+                    let chat = signed_public_chat_message(gpm, &history_channel_name, key);
+                    insert_sorted_unique_message(&mut history, chat);
+                }
+            }
+            set_signal_if_changed(&mut messages, history);
         }
     });
 
     // ----- discovered agents -----
     use_future(move || async move {
-        let client = shared_client.read().clone();
+        let client = shared_client.peek().clone();
         if let Ok(agents) = client.discovered_agents().await {
             let ids: HashSet<String> = agents.into_iter().map(|a| a.agent_id).collect();
-            discovered_agent_ids.set(ids);
+            set_signal_if_changed(&mut discovered_agent_ids, ids);
         }
     });
 
     // ----- contacts for @mention -----
     use_future(move || async move {
-        let client = shared_client.read().clone();
+        let client = shared_client.peek().clone();
         if let Ok(contacts) = client.list_contacts().await {
             let candidates = contacts
                 .into_iter()
@@ -604,7 +650,7 @@ pub fn ChannelChatView(
                         .unwrap_or_else(|| x0x_contract::fallback_sender_name(&c.agent_id)),
                 })
                 .collect::<Vec<_>>();
-            mention_candidates.set(candidates);
+            set_signal_if_changed(&mut mention_candidates, candidates);
         }
     });
 
@@ -613,9 +659,9 @@ pub fn ChannelChatView(
     use_effect(move || {
         if let Some(bump_signal) = reply_count_bump
             && let Some((parent_id, generation)) = bump_signal()
-            && generation > last_bump_gen()
+            && generation > *last_bump_gen.peek()
         {
-            last_bump_gen.set(generation);
+            set_signal_if_changed(&mut last_bump_gen, generation);
             messages.with_mut(|msgs| {
                 if let Some(msg) = msgs.iter_mut().find(|m| m.id == parent_id) {
                     msg.reply_count += 1;
@@ -629,6 +675,9 @@ pub fn ChannelChatView(
     // and re-runs this effect every time new messages arrive.
     use_effect(move || {
         let _count = messages.read().len(); // creates the signal subscription
+        if !chat_auto_scroll_enabled() {
+            return;
+        }
         let _ = document::eval(&format!(
             r#"
             var el = document.getElementById('{CHAT_MESSAGES_ID}');
@@ -650,190 +699,215 @@ pub fn ChannelChatView(
         let group_id = ws_group_id.clone();
         let channel_name = ws_channel_name.clone();
         async move {
-            let ws = match X0xWebSocket::connect().await {
-                Ok(ws) => {
-                    if let Err(e) = ws.subscribe(vec![topic.clone()]) {
-                        error!(target: "ui.channel_chat", "Failed to subscribe to {topic}: {e}");
-                        return;
-                    }
-                    info!(target: "ui.channel_chat", "Subscribed to channel topic: {topic}");
-                    ws_connected.set(true);
-                    ws
-                }
-                Err(e) => {
-                    warn!(target: "ui.channel_chat", "WebSocket connection failed: {e}");
-                    return;
-                }
-            };
+            if !crate::live_streams_enabled() {
+                return;
+            }
 
-            let mut ws = ws;
-
-            while let Some(inbound) = ws.recv().await {
-                match inbound {
-                    communitas_x0x_client::WsInbound::Message {
-                        topic: msg_topic,
-                        payload,
-                        ..
-                    } => {
-                        if msg_topic != topic {
+            let mut retry_delay = std::time::Duration::from_secs(1);
+            loop {
+                let ws = match X0xWebSocket::connect().await {
+                    Ok(ws) => {
+                        if let Err(e) = ws.subscribe(vec![topic.clone()]) {
+                            error!(target: "ui.channel_chat", "Failed to subscribe to {topic}: {e}");
+                            ws_connected.set(false);
+                            crate::ui_sleep(retry_delay).await;
+                            retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
                             continue;
                         }
-                        let decoded = match base64::engine::general_purpose::STANDARD
-                            .decode(&payload)
-                        {
-                            Ok(b) => b,
-                            Err(e) => {
-                                warn!(target: "ui.channel_chat", "Failed to decode payload: {e}");
+                        info!(target: "ui.channel_chat", "Subscribed to channel topic: {topic}");
+                        ws_connected.set(true);
+                        retry_delay = std::time::Duration::from_secs(1);
+                        ws
+                    }
+                    Err(e) => {
+                        warn!(target: "ui.channel_chat", "WebSocket connection failed: {e}");
+                        ws_connected.set(false);
+                        crate::ui_sleep(retry_delay).await;
+                        retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+                        continue;
+                    }
+                };
+
+                let mut ws = ws;
+
+                while let Some(inbound) = ws.recv().await {
+                    match inbound {
+                        communitas_x0x_client::WsInbound::Message {
+                            topic: msg_topic,
+                            payload,
+                            ..
+                        } => {
+                            if msg_topic != topic {
                                 continue;
                             }
-                        };
+                            let decoded = match base64::engine::general_purpose::STANDARD
+                                .decode(&payload)
+                            {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    warn!(target: "ui.channel_chat", "Failed to decode payload: {e}");
+                                    continue;
+                                }
+                            };
 
-                        match serde_json::from_slice::<WirePayload>(&decoded) {
-                            Ok(payload) => match payload.effective_type() {
-                                MSG_TYPE_CHAT | MSG_TYPE_MESSAGE | "" => {
-                                    if let Some(msg) = payload.into_chat_message() {
-                                        let history_msg = msg.clone();
-                                        messages.with_mut(|msgs| {
-                                            if !msgs.iter().any(|m| m.id == history_msg.id) {
-                                                let pos = msgs.partition_point(|m| {
-                                                    m.timestamp <= msg.timestamp
-                                                });
-                                                msgs.insert(pos, msg);
-                                                if msgs.len() > MAX_MESSAGES {
-                                                    msgs.drain(..msgs.len() - MAX_MESSAGES);
+                            match serde_json::from_slice::<WirePayload>(&decoded) {
+                                Ok(payload) => match payload.effective_type() {
+                                    MSG_TYPE_CHAT | MSG_TYPE_MESSAGE | "" => {
+                                        if let Some(msg) = payload.into_chat_message() {
+                                            let history_msg = msg.clone();
+                                            messages.with_mut(|msgs| {
+                                                if !msgs.iter().any(|m| m.id == history_msg.id) {
+                                                    let pos = msgs.partition_point(|m| {
+                                                        m.timestamp <= msg.timestamp
+                                                    });
+                                                    msgs.insert(pos, msg);
+                                                    if msgs.len() > MAX_MESSAGES {
+                                                        msgs.drain(..msgs.len() - MAX_MESSAGES);
+                                                    }
                                                 }
-                                            }
-                                        });
-                                        x0x_contract::append_channel_history(
-                                            &group_id,
-                                            &channel_name,
-                                            &history_msg,
-                                        )
-                                        .await;
+                                            });
+                                            x0x_contract::append_channel_history(
+                                                &group_id,
+                                                &channel_name,
+                                                &history_msg,
+                                            )
+                                            .await;
+                                        }
                                     }
-                                }
-                                MSG_TYPE_EDIT => {
-                                    if let Some((message_id, sender_id, new_text)) =
-                                        payload.edit_fields()
-                                    {
-                                        messages.with_mut(|msgs| {
-                                            if let Some(m) =
-                                                msgs.iter_mut().find(|m| m.id == message_id)
-                                                && m.sender_id == sender_id
-                                            {
-                                                m.text = new_text;
-                                            }
-                                        });
-                                    }
-                                }
-                                MSG_TYPE_DELETE => {
-                                    if let Some((message_id, sender_id)) = payload.delete_fields() {
-                                        messages.with_mut(|msgs| {
-                                            if let Some(m) =
-                                                msgs.iter_mut().find(|m| m.id == message_id)
-                                                && m.sender_id == sender_id
-                                            {
-                                                m.is_deleted = true;
-                                            }
-                                        });
-                                    }
-                                }
-                                MSG_TYPE_TYPING => {
-                                    if let Some((sender_id, sender_name)) = payload.typing_fields()
-                                    {
-                                        let now = now_secs();
-                                        let should_update = typing_users
-                                            .read()
-                                            .get(&sender_id)
-                                            .map(|entry| {
-                                                now.saturating_sub(entry.last_seen_secs)
-                                                    >= TYPING_INBOUND_RATE_LIMIT_SECS
-                                            })
-                                            .unwrap_or(true);
-                                        if should_update {
-                                            typing_users.with_mut(|map| {
-                                                map.retain(|_, entry| {
-                                                    now.saturating_sub(entry.last_seen_secs)
-                                                        <= TYPING_EXPIRY_SECS
-                                                });
-                                                map.insert(
-                                                    sender_id,
-                                                    TypingEntry {
-                                                        display_name: sender_name,
-                                                        last_seen_secs: now,
-                                                    },
-                                                );
+                                    MSG_TYPE_EDIT => {
+                                        if let Some((message_id, sender_id, new_text)) =
+                                            payload.edit_fields()
+                                        {
+                                            messages.with_mut(|msgs| {
+                                                if let Some(m) =
+                                                    msgs.iter_mut().find(|m| m.id == message_id)
+                                                    && m.sender_id == sender_id
+                                                {
+                                                    m.text = new_text;
+                                                }
                                             });
                                         }
                                     }
-                                }
-                                MSG_TYPE_REACTION => {
-                                    if let Some((message_id, emoji, action, sender_id)) =
-                                        payload.reaction_fields()
-                                    {
-                                        let own_agent_id = own_agent_id().unwrap_or_default();
-                                        if sender_id == own_agent_id {
-                                            continue;
+                                    MSG_TYPE_DELETE => {
+                                        if let Some((message_id, sender_id)) =
+                                            payload.delete_fields()
+                                        {
+                                            messages.with_mut(|msgs| {
+                                                if let Some(m) =
+                                                    msgs.iter_mut().find(|m| m.id == message_id)
+                                                    && m.sender_id == sender_id
+                                                {
+                                                    m.is_deleted = true;
+                                                }
+                                            });
                                         }
-                                        messages.with_mut(|msgs| {
-                                            if let Some(m) =
-                                                msgs.iter_mut().find(|m| m.id == message_id)
-                                            {
-                                                match action.as_str() {
-                                                    "add" => {
-                                                        *m.reactions.entry(emoji).or_insert(0) += 1;
-                                                    }
-                                                    "remove" => {
-                                                        let current = m
-                                                            .reactions
-                                                            .get(&emoji)
-                                                            .copied()
-                                                            .unwrap_or(0);
-                                                        if current <= 1 {
-                                                            m.reactions.remove(&emoji);
-                                                        } else {
-                                                            m.reactions.insert(emoji, current - 1);
+                                    }
+                                    MSG_TYPE_TYPING => {
+                                        if let Some((sender_id, sender_name)) =
+                                            payload.typing_fields()
+                                        {
+                                            let now = now_secs();
+                                            let should_update = typing_users
+                                                .read()
+                                                .get(&sender_id)
+                                                .map(|entry| {
+                                                    now.saturating_sub(entry.last_seen_secs)
+                                                        >= TYPING_INBOUND_RATE_LIMIT_SECS
+                                                })
+                                                .unwrap_or(true);
+                                            if should_update {
+                                                typing_users.with_mut(|map| {
+                                                    map.retain(|_, entry| {
+                                                        now.saturating_sub(entry.last_seen_secs)
+                                                            <= TYPING_EXPIRY_SECS
+                                                    });
+                                                    map.insert(
+                                                        sender_id,
+                                                        TypingEntry {
+                                                            display_name: sender_name,
+                                                            last_seen_secs: now,
+                                                        },
+                                                    );
+                                                });
+                                            }
+                                        }
+                                    }
+                                    MSG_TYPE_REACTION => {
+                                        if let Some((message_id, emoji, action, sender_id)) =
+                                            payload.reaction_fields()
+                                        {
+                                            let own_agent_id = own_agent_id().unwrap_or_default();
+                                            if sender_id == own_agent_id {
+                                                continue;
+                                            }
+                                            messages.with_mut(|msgs| {
+                                                if let Some(m) =
+                                                    msgs.iter_mut().find(|m| m.id == message_id)
+                                                {
+                                                    match action.as_str() {
+                                                        "add" => {
+                                                            *m.reactions
+                                                                .entry(emoji)
+                                                                .or_insert(0) += 1;
                                                         }
+                                                        "remove" => {
+                                                            let current = m
+                                                                .reactions
+                                                                .get(&emoji)
+                                                                .copied()
+                                                                .unwrap_or(0);
+                                                            if current <= 1 {
+                                                                m.reactions.remove(&emoji);
+                                                            } else {
+                                                                m.reactions
+                                                                    .insert(emoji, current - 1);
+                                                            }
+                                                        }
+                                                        _ => {}
                                                     }
+                                                }
+                                            });
+                                        }
+                                    }
+                                    MSG_TYPE_PIN => {
+                                        if let Some((message_id, action)) = payload.pin_fields() {
+                                            pinned_message_ids.with_mut(|pins| {
+                                                match action.as_str() {
+                                                    "pin" if !pins.contains(&message_id) => {
+                                                        pins.push(message_id);
+                                                    }
+                                                    "unpin" => pins.retain(|id| id != &message_id),
                                                     _ => {}
                                                 }
-                                            }
-                                        });
+                                            });
+                                        }
                                     }
-                                }
-                                MSG_TYPE_PIN => {
-                                    if let Some((message_id, action)) = payload.pin_fields() {
-                                        pinned_message_ids.with_mut(|pins| match action.as_str() {
-                                            "pin" if !pins.contains(&message_id) => {
-                                                pins.push(message_id);
-                                            }
-                                            "unpin" => pins.retain(|id| id != &message_id),
-                                            _ => {}
-                                        });
+                                    other => {
+                                        warn!(target: "ui.channel_chat", "Unknown inbound channel event type: {other}");
                                     }
+                                },
+                                Err(e) => {
+                                    warn!(target: "ui.channel_chat", "Failed to parse inbound message: {e}");
                                 }
-                                other => {
-                                    warn!(target: "ui.channel_chat", "Unknown inbound channel event type: {other}");
-                                }
-                            },
-                            Err(e) => {
-                                warn!(target: "ui.channel_chat", "Failed to parse inbound message: {e}");
                             }
                         }
+                        communitas_x0x_client::WsInbound::Error { message } => {
+                            error!(target: "ui.channel_chat", "WebSocket error: {message}");
+                        }
+                        _ => {}
                     }
-                    communitas_x0x_client::WsInbound::Error { message } => {
-                        error!(target: "ui.channel_chat", "WebSocket error: {message}");
-                    }
-                    _ => {}
                 }
-            }
 
-            ws_connected.set(false);
+                ws_connected.set(false);
+                warn!(target: "ui.channel_chat", "WebSocket closed; reconnecting");
+                crate::ui_sleep(retry_delay).await;
+                retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(30));
+            }
         }
     });
 
     use_future(move || async move {
-        let client = shared_client.read().clone();
+        let client = shared_client.peek().clone();
         if let Ok(agent) = client.agent().await {
             let fallback_name = agent
                 .user_id
@@ -848,8 +922,8 @@ pub fn ChannelChatView(
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or(fallback_name);
 
-            own_agent_id.set(Some(agent.agent_id));
-            own_sender_name.set(Some(display_name));
+            set_signal_if_changed(&mut own_agent_id, Some(agent.agent_id));
+            set_signal_if_changed(&mut own_sender_name, Some(display_name));
         }
     });
 
@@ -949,17 +1023,25 @@ pub fn ChannelChatView(
                         // be authoritative.
                         if !is_signed_public() {
                             messages.with_mut(|msgs| {
-                                if !msgs.iter().any(|m| m.id == msg.id) {
-                                    let pos =
-                                        msgs.partition_point(|m| m.timestamp <= msg.timestamp);
-                                    msgs.insert(pos, msg.clone());
-                                    if msgs.len() > MAX_MESSAGES {
-                                        msgs.drain(..msgs.len() - MAX_MESSAGES);
-                                    }
-                                }
+                                insert_sorted_unique_message(msgs, msg.clone());
                             });
                             x0x_contract::append_channel_history(&group_id, &channel_name, &msg)
                                 .await;
+                        } else if let Ok(list) = client.get_group_public_messages(&group_id).await {
+                            for gpm in &list {
+                                let key = signed_public_key(gpm);
+                                seen_signed.write().insert(key.clone());
+                                let chat = signed_public_chat_message(gpm, &channel_name, key);
+                                let persist_msg = chat.clone();
+                                if insert_signal_message(&mut messages, chat) {
+                                    x0x_contract::append_channel_history(
+                                        &group_id,
+                                        &channel_name,
+                                        &persist_msg,
+                                    )
+                                    .await;
+                                }
+                            }
                         }
                     }
                     Err(e) => {

@@ -586,7 +586,11 @@ struct ComposeDirectMessageSheet: View {
         sendError = nil
         sentConfirmation = false
         do {
-            try await appState.client.sendDirect(agentId: rcpt, payload: payload)
+            try await appState.client.sendDirect(
+                agentId: rcpt,
+                payload: payload,
+                requireGossipAck: true
+            )
             sentConfirmation = true
         } catch {
             sendError = "Send failed: \(error.localizedDescription)"

@@ -17,6 +17,12 @@ let package = Package(
             dependencies: [
                 "X0xClient",
                 .product(name: "Sparkle", package: "Sparkle"),
+            ],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-rpath",
+                    "-Xlinker", "@executable_path/../Frameworks",
+                ]),
             ]
         ),
         .target(name: "X0xClient"),

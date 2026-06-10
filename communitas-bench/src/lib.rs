@@ -4,6 +4,8 @@
 //!
 //! This library exists to expose dependencies to benchmark targets.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 // Re-export dependencies for benchmarks
 // Note: communitas-core has lib name = "communitas_bindings"
 pub use communitas_bindings as communitas_core;

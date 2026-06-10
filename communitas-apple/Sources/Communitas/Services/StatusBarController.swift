@@ -139,7 +139,7 @@ final class StatusBarController {
 
     @objc private func handleShowWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first {
+        if let window = NSApp.windows.first(where: { $0.isCommunitasContentWindow }) {
             window.makeKeyAndOrderFront(nil)
         }
     }

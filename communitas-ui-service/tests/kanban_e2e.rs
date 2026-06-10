@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! End-to-end tests for kanban board workflows.
 //!
 //! These tests verify complete kanban board workflows through the KanbanService layer,

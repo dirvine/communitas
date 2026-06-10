@@ -181,17 +181,25 @@ public final class X0xClient: Sendable {
     /// - Parameters:
     ///   - displayName: Display name to include in the card.
     ///   - includeGroups: Whether to include group invites in the card.
+    ///   - includeLocalAddresses: Whether to include LAN/private addresses for nearby app pairing.
     public func agentSign(payloadB64: String) async throws -> AgentSignResponse {
         try await post("/agent/sign", body: AgentSignRequest(payloadB64: payloadB64))
     }
 
-    public func agentCard(displayName: String? = nil, includeGroups: Bool? = nil) async throws -> AgentCardResponse {
+    public func agentCard(
+        displayName: String? = nil,
+        includeGroups: Bool? = nil,
+        includeLocalAddresses: Bool? = nil
+    ) async throws -> AgentCardResponse {
         var queryItems: [URLQueryItem] = []
         if let displayName {
             queryItems.append(URLQueryItem(name: "display_name", value: displayName))
         }
         if let includeGroups {
             queryItems.append(URLQueryItem(name: "include_groups", value: includeGroups ? "true" : "false"))
+        }
+        if let includeLocalAddresses {
+            queryItems.append(URLQueryItem(name: "include_local_addresses", value: includeLocalAddresses ? "true" : "false"))
         }
         return try await get("/agent/card", queryItems: queryItems)
     }
@@ -246,9 +254,10 @@ public final class X0xClient: Sendable {
 
     /// Send a direct message to an agent. `POST /direct/send`
     ///
-    /// Fire-and-forget: returns when the daemon has accepted the message
-    /// for transmission, with no delivery confirmation. For ACK-confirmed
-    /// delivery use `sendDirect(agentId:payload:requireAckMs:)`.
+    /// User-facing Communitas DMs require the x0x 0.22 recipient inbox gossip
+    /// ACK by default so send failures surface instead of silently dropping
+    /// receive paths. Pass `requireGossipAck: false` only for deliberate
+    /// fire-and-forget sends.
     public func execRun(_ request: ExecRunRequest) async throws -> ExecRunResponse {
         try await post("/exec/run", body: request)
     }
@@ -261,8 +270,16 @@ public final class X0xClient: Sendable {
         try await get("/exec/sessions")
     }
 
-    public func sendDirect(agentId: String, payload: String) async throws {
-        let body = DirectMessageRequest(agentId: agentId, payload: payload)
+    public func sendDirect(
+        agentId: String,
+        payload: String,
+        requireGossipAck: Bool = true
+    ) async throws {
+        let body = DirectMessageRequest(
+            agentId: agentId,
+            payload: payload,
+            requireGossipAck: requireGossipAck
+        )
         let _: Empty = try await post("/direct/send", body: body)
     }
 
@@ -282,6 +299,7 @@ public final class X0xClient: Sendable {
         let body = DirectMessageRequest(
             agentId: agentId,
             payload: payload,
+            requireGossipAck: true,
             requireAckMs: requireAckMs
         )
         let resp: DirectSendResponse = try await post("/direct/send", body: body)
@@ -461,9 +479,14 @@ public final class X0xClient: Sendable {
     public func addNamedGroupMember(
         groupId: String,
         agentId: String,
-        displayName: String? = nil
+        displayName: String? = nil,
+        treekemKeyPackageB64: String? = nil
     ) async throws {
-        let body = AddNamedGroupMemberRequest(agentId: agentId, displayName: displayName)
+        let body = AddNamedGroupMemberRequest(
+            agentId: agentId,
+            displayName: displayName,
+            treekemKeyPackageB64: treekemKeyPackageB64
+        )
         let _: Empty = try await post("/groups/\(groupId)/members", body: body)
     }
 
@@ -573,7 +596,7 @@ public final class X0xClient: Sendable {
         groupId: String,
         body: String,
         kind: String? = nil
-    ) async throws -> GroupPublicMessage {
+    ) async throws -> GroupPublicSendResponse {
         let req = SendGroupMessageRequest(body: body, kind: kind)
         return try await post("/groups/\(groupId)/send", body: req)
     }
@@ -844,27 +867,33 @@ public final class X0xClient: Sendable {
     /// List tasks in a task list. `GET /task-lists/:id/tasks`
     /// Returns wrapped: `{"ok":true,"tasks":[...]}`
     public func listTasks(listId: String) async throws -> [TaskItem] {
-        let resp: TaskList = try await get("/task-lists/\(listId)/tasks")
+        let encodedListId = pathComponent(listId)
+        let resp: TaskList = try await get("/task-lists/\(encodedListId)/tasks")
         return resp.tasks
     }
 
     /// Add a task to a task list. `POST /task-lists/:id/tasks`
     public func addTask(listId: String, title: String, description: String? = nil) async throws -> String {
         let body = AddTaskRequest(title: title, description: description)
-        let resp: AddTaskResponse = try await post("/task-lists/\(listId)/tasks", body: body)
+        let encodedListId = pathComponent(listId)
+        let resp: AddTaskResponse = try await post("/task-lists/\(encodedListId)/tasks", body: body)
         return resp.taskId
     }
 
     /// Claim a task. `PATCH /task-lists/:id/tasks/:tid`
     public func claimTask(listId: String, taskId: String) async throws {
         let body = ["action": "claim"]
-        let _: Empty = try await patch("/task-lists/\(listId)/tasks/\(taskId)", body: body)
+        let encodedListId = pathComponent(listId)
+        let encodedTaskId = pathComponent(taskId)
+        let _: Empty = try await patch("/task-lists/\(encodedListId)/tasks/\(encodedTaskId)", body: body)
     }
 
     /// Complete a task. `PATCH /task-lists/:id/tasks/:tid`
     public func completeTask(listId: String, taskId: String) async throws {
         let body = ["action": "complete"]
-        let _: Empty = try await patch("/task-lists/\(listId)/tasks/\(taskId)", body: body)
+        let encodedListId = pathComponent(listId)
+        let encodedTaskId = pathComponent(taskId)
+        let _: Empty = try await patch("/task-lists/\(encodedListId)/tasks/\(encodedTaskId)", body: body)
     }
 
     // MARK: - Agent Connection
@@ -892,7 +921,8 @@ public final class X0xClient: Sendable {
 
     /// Join a store. `POST /stores/:id/join`
     public func joinStore(storeId: String) async throws {
-        let _: Empty = try await post("/stores/\(storeId)/join", body: Empty())
+        let encodedStoreId = pathComponent(storeId)
+        let _: Empty = try await post("/stores/\(encodedStoreId)/join", body: Empty())
     }
 
     /// List keys in a store. `GET /stores/:id/keys`
@@ -903,13 +933,16 @@ public final class X0xClient: Sendable {
 
     /// List detailed key metadata in a store. `GET /stores/:id/keys`
     public func storeKeyEntries(storeId: String) async throws -> [StoreKeyEntry] {
-        let resp: StoreKeysResponse = try await get("/stores/\(storeId)/keys")
+        let encodedStoreId = pathComponent(storeId)
+        let resp: StoreKeysResponse = try await get("/stores/\(encodedStoreId)/keys")
         return resp.keys
     }
 
     /// Fetch the raw store entry from `GET /stores/:id/:key`.
     public func storeEntry(storeId: String, key: String) async throws -> StoreGetResponse {
-        try await get("/stores/\(storeId)/\(key)")
+        let encodedStoreId = pathComponent(storeId)
+        let encodedKey = pathComponent(key)
+        return try await get("/stores/\(encodedStoreId)/\(encodedKey)")
     }
 
     /// Get a value from a store. `GET /stores/:id/:key`
@@ -932,7 +965,9 @@ public final class X0xClient: Sendable {
     /// Put a raw base64-encoded value in a store. `PUT /stores/:id/:key`
     public func putStoreValue(storeId: String, key: String, base64Value: String, contentType: String? = nil) async throws {
         let body = StorePutRequest(value: base64Value, contentType: contentType)
-        let _: Empty = try await put("/stores/\(storeId)/\(key)", body: body)
+        let encodedStoreId = pathComponent(storeId)
+        let encodedKey = pathComponent(key)
+        let _: Empty = try await put("/stores/\(encodedStoreId)/\(encodedKey)", body: body)
     }
 
     /// Put a UTF-8 string value in a store. `PUT /stores/:id/:key`
@@ -944,7 +979,9 @@ public final class X0xClient: Sendable {
 
     /// Delete a key from a store. `DELETE /stores/:id/:key`
     public func storeDelete(storeId: String, key: String) async throws {
-        let _: Empty = try await delete("/stores/\(storeId)/\(key)")
+        let encodedStoreId = pathComponent(storeId)
+        let encodedKey = pathComponent(key)
+        let _: Empty = try await delete("/stores/\(encodedStoreId)/\(encodedKey)")
     }
 
     // MARK: - MLS Groups (Encrypted)
@@ -1101,6 +1138,12 @@ public final class X0xClient: Sendable {
     }
 
     // MARK: - Private Helpers
+
+    private func pathComponent(_ value: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/%?#[]@!$&'()*+,;=")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL) else {

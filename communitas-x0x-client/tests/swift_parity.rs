@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Verifies Rust↔Swift client method parity.
 //!
 //! Every Rust client method should have a corresponding Swift method.
@@ -56,6 +58,7 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("exec_cancel", "execCancel"),
     ("exec_sessions", "execSessions"),
     ("send_direct", "sendDirect"),
+    ("send_direct_with_gossip_ack", "sendDirect"),
     ("direct_connections", "directConnections"),
     // Contacts
     ("list_contacts", "listContacts"),
@@ -96,6 +99,10 @@ const RUST_TO_SWIFT: &[(&str, &str)] = &[
     ("update_group_policy", "updateGroupPolicy"),
     ("list_named_group_members", "listNamedGroupMembers"),
     ("add_named_group_member", "addNamedGroupMember"),
+    (
+        "add_named_group_member_with_treekem_key_package",
+        "addNamedGroupMember",
+    ),
     ("remove_named_group_member", "removeNamedGroupMember"),
     ("set_named_group_member_role", "setNamedGroupMemberRole"),
     ("ban_group_member", "banGroupMember"),

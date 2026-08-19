@@ -48,12 +48,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 log = "0.4"
 
-# OpenTelemetry (optional, enabled via "metrics" feature)
-opentelemetry = { workspace = true, optional = true }
-opentelemetry_sdk = { workspace = true, optional = true }
-opentelemetry-otlp = { workspace = true, optional = true }
-tracing-opentelemetry = { workspace = true, optional = true }
-
 # Cryptography and security
 blake3 = "1.0"
 bip39 = { version = "2", default-features = false, features = ["std", "zeroize"] }
@@ -98,7 +92,10 @@ communitas-kanban = { version = "=0.12.4", path = "../communitas-kanban" }
 
 [features]
 default = []
-metrics = ["opentelemetry", "opentelemetry_sdk", "opentelemetry-otlp", "tracing-opentelemetry"]
+# OTLP/OpenTelemetry is not a workspace-locked feature: the 0.22/0.15 stack
+# pulls tonic 0.11 → hyper 0.14 → h2 0.3.27 (RUSTSEC-2026-0258, no 0.3 patch).
+# In-memory metrics remain. Re-enable OTLP after an otel/tonic upgrade that
+# depends on h2 >=0.4.16.
 
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]

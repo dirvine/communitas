@@ -22,7 +22,7 @@ yrs = { version = "0.19", features = ["sync"] }
 
 # Markdown rendering and sanitization
 pulldown-cmark = "0.12"
-ammonia = "4.1.3"  # >=4.1.3 required: fixes RUSTSEC-2026-0193 (mXSS in MathML annotation-xml)
+ammonia = "4.1.4"  # >=4.1.4 required: fixes RUSTSEC-2026-0213 (XSS via SVG animate/set)
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }

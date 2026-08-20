@@ -9,6 +9,9 @@ members = [
     "communitas-bench",
     "communitas-x0x-client",
 ]
+# Vendored patch of crates.io 6.0.0 (lru 0.18.2). Not a workspace member so
+# clippy deny-unwrap does not apply to upstream sources.
+exclude = ["third_party/reed-solomon-erasure"]
 
 [workspace.package]
 version = "0.12.4"
@@ -72,3 +75,9 @@ strip = true
 
 [profile.dev]
 opt-level = 0
+
+# reed-solomon-erasure 6.0.0 is the latest crates.io release and still depends
+# on lru 0.7.8 (RUSTSEC-2026-0253, patched only in lru >= 0.18.2). No upstream
+# upgrade exists. This path crate is 6.0.0 plus the lru 0.18.2 bump.
+[patch.crates-io]
+reed-solomon-erasure = { path = "third_party/reed-solomon-erasure" }

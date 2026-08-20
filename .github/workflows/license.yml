@@ -26,7 +26,7 @@ jobs:
             if ! head -5 "$file" | grep -qF "SPDX-License-Identifier"; then
               MISSING+=("$file")
             fi
-          done < <(find . -name '*.rs' -not -path '*/target/*' -not -path '*/workspace-hack/*')
+          done < <(find . -name '*.rs' -not -path '*/target/*' -not -path '*/workspace-hack/*' -not -path '*/third_party/*')
 
           if [ ${#MISSING[@]} -gt 0 ]; then
             echo "::error::${#MISSING[@]} file(s) missing SPDX license header"
@@ -40,7 +40,7 @@ jobs:
             done
             exit 1
           fi
-          echo "All ${count:-$(find . -name '*.rs' -not -path '*/target/*' -not -path '*/workspace-hack/*' | wc -l)} Rust files have SPDX headers"
+          echo "All ${count:-$(find . -name '*.rs' -not -path '*/target/*' -not -path '*/workspace-hack/*' -not -path '*/third_party/*' | wc -l)} Rust files have SPDX headers"
 
   dependency-licenses:
     name: Dependency License Audit

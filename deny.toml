@@ -65,6 +65,9 @@ ignore = [
     # custom logger reentrantly calling rand::rng(), which communitas does not
     # install. rand 0.9 path already patched to 0.9.4.
     "RUSTSEC-2026-0097",
+    # yrs still depends on smallstr 0.3 (unmaintained). No safe upgrade —
+    # latest yrs still pins smallstr ^0.3. Revisit when yrs drops smallstr.
+    "RUSTSEC-2026-0215",
 ]
 
 [sources]

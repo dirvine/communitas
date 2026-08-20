@@ -24,8 +24,8 @@ anyhow = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 
-# LRU cache for document eviction
-lru = "0.16"
+# LRU cache for document eviction (0.18.2+ patches RUSTSEC-2026-0253 UAF in pop())
+lru = "0.18.2"
 
 # Logging
 tracing = { workspace = true }
